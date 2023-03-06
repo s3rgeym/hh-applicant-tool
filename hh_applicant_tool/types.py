@@ -1,4 +1,11 @@
-from typing import TypedDict
+from typing import TypedDict, Literal
+
+
+class AccessToken(TypedDict):
+    access_token: str
+    refresh_token: str
+    expires_in: int
+    token_type: Literal["bearer"]
 
 
 class ApiListResponse(TypedDict):

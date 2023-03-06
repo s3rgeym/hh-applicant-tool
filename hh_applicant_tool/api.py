@@ -9,13 +9,19 @@ from copy import deepcopy
 from dataclasses import dataclass
 from functools import partialmethod
 from threading import Lock
-from typing import Any, Literal, TypedDict
+from typing import (
+    Any,
+    Literal,
+)
 from urllib.parse import urlencode
 
 import requests
 from requests import Response, Session
-
-from .contsants import HHANDROID_CLIENT_ID, HHANDROID_CLIENT_SECRET
+from .types import AccessToken
+from .contsants import (
+    HHANDROID_CLIENT_ID,
+    HHANDROID_CLIENT_SECRET,
+)
 
 logger = logging.getLogger(__package__)
 
@@ -54,12 +60,14 @@ class BadGateaway(BaseException):
     pass
 
 
+ALLOWED_METHODS = Literal["GET", "POST", "PUT", "DELETE"]
+
+
 # Thread-safe
 @dataclass
 class BaseClient:
-    _: dataclasses.KW_ONLY
     base_url: str
-    request_body_json: bool = False
+    _: dataclasses.KW_ONLY
     # TODO: сделать генерацию User-Agent'а как в приложении
     user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
     session: Session | None = None
@@ -76,56 +84,60 @@ class BaseClient:
                 }
             )
 
-    def additional_headers(self) -> dict[str, str]:
+    def additional_headers(
+        self,
+    ) -> dict[str, str]:
         return {}
 
     def request(
         self,
-        method: Literal["GET", "POST", "PUT", "DELETE"],
+        method: ALLOWED_METHODS,
         endpoint: str,
         params: dict | None = None,
-        delay: float = 0.3,
+        delay: float = 0.34,
         **kwargs: Any,
     ) -> dict:
-        assert method == method.upper()
+        # Не знаю насколько это "правильно"
+        assert method in ALLOWED_METHODS.__args__
         params = dict(params or {})
         params.update(kwargs)
         url = self.resolve_url(endpoint)
         with self.lock:
             # На серваке какая-то анти-DDOS система
-            if (delay := delay - time.monotonic() + self.previous_request_time) > 0:
+            if (
+                delay := delay - time.monotonic() + self.previous_request_time
+            ) > 0:
                 logger.debug("wait %fs", delay)
                 time.sleep(delay)
+            has_body = method in ["POST", "PUT"]
             response = self.session.request(
                 method,
                 url,
-                **{["data", "json"][self.request_body_json]: params}
-                if method in ["POST", "PUT"]
-                else dict(params=params),
+                **{"data" if has_body else "params": params},
                 allow_redirects=False,
             )
             try:
-                # У этих лошков сервер не отдает Content-Length, а кривое API отдает пустые ответы, например, при отклике на вакансии
+                # У этих лошков сервер не отдает Content-Length, а кривое API отдает пустые ответы, например, при отклике на вакансии, и мы не можем узнать
                 # 'Server': 'ddos-guard'
                 # ...
                 # 'Transfer-Encoding': 'chunked'
                 try:
-                    data = response.json()
+                    rv = response.json()
                 except json.decoder.JSONDecodeError:
-                    if response.status_code in [201, 204]:
-                        data = {}
-                    else:
+                    if response.status_code not in [201, 204]:
                         raise
+                    rv = {}
             finally:
                 logger.debug(
-                    "%s %.88s %d",
+                    "%s %.40s %d",
                     method,
-                    url + ("?" + urlencode(params) if params else ""),
+                    url
+                    + ("?" + urlencode(params) if has_body and params else ""),
                     response.status_code,
                 )
                 self.previous_request_time = time.monotonic()
-        self.raise_for_status(response, data)
-        return data
+        self.raise_for_status(response, rv)
+        return rv
 
     get = partialmethod(request, "GET")
     post = partialmethod(request, "POST")
@@ -133,7 +145,11 @@ class BaseClient:
     delete = partialmethod(request, "DELETE")
 
     def resolve_url(self, url: str) -> str:
-        return url if "://" in url else f"{self.base_url.rstrip('/')}/{url.lstrip('/')}"
+        return (
+            url
+            if "://" in url
+            else f"{self.base_url.rstrip('/')}/{url.lstrip('/')}"
+        )
 
     @staticmethod
     def raise_for_status(response: Response, data: dict) -> None:
@@ -148,19 +164,12 @@ class BaseClient:
                 raise BadGateaway(data)
 
 
-class AccessToken(TypedDict):
-    access_token: str
-    refresh_token: str
-    expires_in: int
-    token_type: Literal["bearer"]
-
-
 @dataclass
 class OAuthClient(BaseClient):
-    _: dataclasses.KW_ONLY
-    base_url: str = "https://hh.ru/oauth"
     client_id: str = HHANDROID_CLIENT_ID
     client_secret: str = HHANDROID_CLIENT_SECRET
+    _: dataclasses.KW_ONLY
+    base_url: str = "https://hh.ru/oauth"
     state: str = ""
     scope: str = ""
     redirect_uri: str = ""
@@ -191,29 +200,39 @@ class OAuthClient(BaseClient):
         return self.request(
             "POST",
             "/token",
-            {"grant_type": "refresh_token", "refresh_token": refresh_token},
+            {
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            },
         )
 
 
 @dataclass
 class ApiClient(BaseClient):
-    _: dataclasses.KW_ONLY
-    access_token: str | None = None
+    access_token: str
     refresh_token: str | None = None
+    _: dataclasses.KW_ONLY
     base_url: str = "https://api.hh.ru/"
     # request_body_json: bool = True
     oauth_client: OAuthClient | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        self.oauth_client = self.oauth_client or OAuthClient(session=self.session)
+        self.oauth_client = self.oauth_client or OAuthClient(
+            session=self.session
+        )
 
-    def additional_headers(self) -> dict[str, str]:
+    def additional_headers(
+        self,
+    ) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.access_token}"}
 
     def refresh_access(self) -> None:
         tok = self.oauth_client.refresh_access(self.refresh_token)
-        self.access_token, self.refresh_access = (
+        (
+            self.access_token,
+            self.refresh_access,
+        ) = (
             tok["access_token"],
             tok["refresh_token"],
         )

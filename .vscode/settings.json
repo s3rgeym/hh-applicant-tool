@@ -1,0 +1,6 @@
+{
+  "python.formatting.provider": "black",
+  "python.formatting.blackArgs": ["--line-length", "79"],
+  "editor.wordWrap": "on",
+  "rewrap.wrappingColumn": 72
+}

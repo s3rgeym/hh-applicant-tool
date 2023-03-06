@@ -32,7 +32,9 @@ class Operation(BaseOperation):
     def run(self, args: Namespace) -> None:
         assert args.config["access_token"]
         if args.message_list:
-            application_messages = list(filter(None, map(str.strip, args.message_list)))
+            application_messages = list(
+                filter(None, map(str.strip, args.message_list))
+            )
         else:
             application_messages = [
                 "Меня заинтересовала Ваша вакансия %(name)s",
@@ -49,47 +51,51 @@ class Operation(BaseOperation):
         self._apply_jobs(api, resume_id, application_messages)
         print("📝 Отклики на вакансии разосланы!")
 
+    def _get_vacancies(
+        self, api: ApiClient, resume_id: str
+    ) -> list[VacancyItem]:
+        rv = []
+        # работает ограничение: глубина возвращаемых результатов не может быть больше 2000
+        # Номер страницы (считается от 0, по умолчанию - 0)
+        per_page = 100
+        for page in range(20):
+            res: ApiListResponse = api.get(
+                f"/resumes/{resume_id}/similar_vacancies",
+                page=page,
+                per_page=per_page,
+            )
+            rv.extend(res["items"])
+            if rv % per_page:
+                break
+        return rv
+
     def _apply_jobs(
         self, api: ApiClient, resume_id: str, application_messages: list[str]
     ) -> None:
         # Получаем список рекомендованных вакансий и отправляем заявки
-        # Проблема тут в том, что вакансии на которые мы отклимкались должны исчезать из поиска, но ОНИ ТАМ ПРИСУТСТВУЮТ. Так же есть вакансии с ебучими тестами, которые всегда вверху.
-
-        # Я пробовал сортировать по дате, НО date_from обраьатывается правильно, а если в date_to подставить значение published_at, то все свалится, ПОТОМУ ЧТО НЕПРАВИЛЬНЫЙ ФОРМАТ. ПИДОРЫ ВЫ КРИВОРУКИЕ!
-
-        # Там на сервере НЕ МОСКОВСКОЕ ВРЕМЯ, а какое-то свое пидорское
-        # date_to = datetime.strftime(datetime.now(), INVALID_ISO8601_FORMAT)
-        date_max = ""
-        while True:
-            vacancies: ApiListResponse = api.get(
-                f"/resumes/{resume_id}/similar_vacancies",
-                per_page=100,
-                order_by="publication_time",
-            )
-            item: VacancyItem
-            for item in vacancies["items"]:
-                # В рот я ебал вас и ваши тесты, пидоры
-                if item["has_test"]:
-                    continue
-                # Откликаемся на ваканчию
-                params = {
-                    "resume_id": resume_id,
-                    "vacancy_id": item["id"],
-                    "message": random.choice(application_messages) % item
-                    if item["response_letter_required"]
-                    else "",
-                }
-                try:
-                    # res = api.post("/negotiations", params)
-                    # assert res == {}
-                    logger.debug(
-                        "Отправлен отклик на вакансию #%s %s", item["id"], item["name"]
-                    )
-                except (BadGateaway, BadRequest) as ex:
-                    logger.warning(ex)
-                    if isinstance(ex, BadRequest) and ex.limit_exceeded:
-                        return
-            if vacancies["pages"] == 1:
-                break
-            # published = datetime.strptime(item["published_at"], INVALID_ISO8601_FORMAT)
-            date_max = item["published_at"]
+        # Проблема тут в том, что вакансии на которые мы отклимкались должны исчезать из поиска, но ОНИ ТАМ ПРИСУТСТВУЮТ. Так же есть вакансии с ебучими тестами, которые всегда вверху. Вроде можно отсортировать по дате, а потом постепенно уменьшать диапазон, но он не точный и округляется до 5 минут, а потому там повторы
+        item: VacancyItem
+        for item in self._get_vacancies(api, resume_id):
+            # В рот я ебал вас и ваши тесты, пидоры
+            if item["has_test"]:
+                continue
+            # Откликаемся на ваканчию
+            params = {
+                "resume_id": resume_id,
+                "vacancy_id": item["id"],
+                "message": random.choice(application_messages) % item
+                if item["response_letter_required"]
+                else "",
+            }
+            try:
+                # res = api.post("/negotiations", params)
+                # assert res == {}
+                logger.debug(
+                    "Отправлен отклик на вакансию #%s %s",
+                    item["id"],
+                    item["name"],
+                )
+            except (BadGateaway, BadRequest) as ex:
+                logger.warning(ex)
+                if isinstance(ex, BadRequest) and ex.limit_exceeded:
+                    return
