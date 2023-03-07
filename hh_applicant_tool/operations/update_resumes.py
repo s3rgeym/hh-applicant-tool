@@ -2,9 +2,7 @@
 import argparse
 import logging
 
-from prettytable import PrettyTable
-
-from ..api import ApiClient
+from ..api import ApiClient, ApiError
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse
@@ -17,7 +15,7 @@ class Namespace(BaseNamespace):
 
 
 class Operation(BaseOperation):
-    """Список резюме"""
+    """Обновить все резюме"""
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
@@ -28,17 +26,10 @@ class Operation(BaseOperation):
             access_token=args.config["token"]["access_token"],
         )
         resumes: ApiListResponse = api.get("/resumes/mine")
-        t = PrettyTable(
-            field_names=["ID", "Название", "Статус"], align="l", valign="t"
-        )
-        t.add_rows(
-            [
-                (
-                    x["id"],
-                    x["title"],
-                    x["status"]["name"].title(),
-                )
-                for x in resumes["items"]
-            ]
-        )
-        print(t)
+        for resume in resumes["items"]:
+            try:
+                res = api.post(f"/resumes/{resume['id']}/publish")
+                assert res == {}
+                print("👍 Обновлено:", resume["title"])
+            except ApiError as ex:
+                logger.warning(ex)

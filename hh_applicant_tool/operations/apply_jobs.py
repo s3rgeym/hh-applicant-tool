@@ -4,8 +4,7 @@ import logging
 import random
 from typing import TextIO
 
-from ..api import ApiClient, ApiError, BadGateaway, BadRequest, Forbidden
-from ..contsants import INVALID_ISO8601_FORMAT
+from ..api import ApiClient, ApiError, BadRequest
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse, VacancyItem
