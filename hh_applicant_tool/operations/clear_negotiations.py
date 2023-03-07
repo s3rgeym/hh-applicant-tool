@@ -17,7 +17,7 @@ class Namespace(BaseNamespace):
 
 
 class Operation(BaseOperation):
-    """Очистить зяавки. Удалит заявки с отказами и/либо все заявки старше N дней."""
+    """Отменяет старые заявки и скрывает отказы."""
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
