@@ -34,8 +34,6 @@ class Operation(BaseOperation):
         while True:
             r: ApiListResponse = api.get(
                 "/negotiations",
-                order_by="created_at",
-                order="desc",
                 page=page,
                 per_page=per_page,
             )
@@ -65,7 +63,7 @@ class Operation(BaseOperation):
                         datetime.utcnow() - timedelta(days=args.older_than)
                     ).replace(tzinfo=timezone.utc)
                     > datetime.strptime(
-                        item["created_at"], INVALID_ISO8601_FORMAT
+                        item["updated_at"], INVALID_ISO8601_FORMAT
                     )
                 )
             )
