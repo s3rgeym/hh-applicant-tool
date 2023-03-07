@@ -39,6 +39,7 @@ class Operation(BaseOperation):
                 "Меня заинтересовала Ваша вакансия %(name)s",
                 "Прошу рассмотреть мою кандидатуру на вакансию %(name)s",
             ]
+        assert args.config["token"]
         api = ApiClient(
             access_token=args.config["token"]["access_token"],
         )

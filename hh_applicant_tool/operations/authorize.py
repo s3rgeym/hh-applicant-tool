@@ -2,6 +2,7 @@ import argparse
 import logging
 import socketserver
 import subprocess
+import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -15,7 +16,10 @@ logger = logging.getLogger(__package__)
 
 class HHAndroidProtocolServer(socketserver.ThreadingUnixStreamServer):
     def __init__(
-        self, socket_path: Path | str, oauth_client: OAuthClient, config: Config
+        self,
+        socket_path: Path | str,
+        oauth_client: OAuthClient,
+        config: Config,
     ) -> None:
         self._socket_path = Path(socket_path)
         self._oauth_client = oauth_client
@@ -39,7 +43,9 @@ class HHAndroidProtocolServer(socketserver.ThreadingUnixStreamServer):
         code = parse_qs(sp.query)["code"][0]
         token = self._oauth_client.authenticate(code)
         logger.debug("Сохраняем токен")
-        self._config.save(token)
+        # токен не содержит каких-то меток о времени создания
+        token["created_at"] = int(time.time())
+        self._config.save(token=token)
         self.shutdown()
 
 
@@ -59,7 +65,9 @@ class Operation(BaseOperation):
         print("Пробуем открыть в браузере:", oauth.authorize_url)
         subprocess.Popen(["xdg-open", oauth.authorize_url])
         print("Авторизуйтесь и нажмите <<Подтвердить>>")
-        logger.info("🚀 Стартуем TCP-сервер по адресу unix://%s", HHANDROID_SOCKET_PATH)
+        logger.info(
+            "🚀 Стартуем TCP-сервер по адресу unix://%s", HHANDROID_SOCKET_PATH
+        )
         server = HHAndroidProtocolServer(
             HHANDROID_SOCKET_PATH, oauth_client=oauth, config=args.config
         )
