@@ -123,11 +123,10 @@ class BaseClient:
                         raise
                     rv = {}
             finally:
-                # printf 'DELETE . 666' | wc -c
-                # 12
                 # 100 символов максимум
                 logger.debug(
-                    "%s %.89s %d",
+                    "%d %-6s %.89s",
+                    response.status_code,
                     method,
                     url
                     + (
@@ -135,7 +134,6 @@ class BaseClient:
                         if not has_body and params
                         else ""
                     ),
-                    response.status_code,
                 )
                 self.previous_request_time = time.monotonic()
         self.raise_for_status(response, rv)

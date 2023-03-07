@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import logging
+import sys
 from abc import ABCMeta, abstractmethod
 from importlib import import_module
 from os import getenv
@@ -23,7 +23,7 @@ logger = logging.getLogger(__package__)
 
 
 class BaseOperation(metaclass=ABCMeta):
-    def add_parser_arguments(self, parser: argparse.ArgumentParser) -> None:
+    def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         ...
 
     @abstractmethod
@@ -44,8 +44,8 @@ class HHApplicantTool:
     Описание, исходники и предложения: <https://github.com/s3rgeym/hh-applicant-tool>.
     """
 
-    def parse_args(self, argv: Sequence[str] | None) -> Namespace:
-        self._parser = parser = argparse.ArgumentParser(
+    def create_parser(self) -> argparse.ArgumentParser:
+        parser = argparse.ArgumentParser(
             description=self.__doc__,
         )
         parser.add_argument(
@@ -71,17 +71,20 @@ class HHApplicantTool:
                 module_name.replace("_", "-"), description=op.__doc__
             )
             op_parser.set_defaults(run=op.run)
-            op.add_parser_arguments(op_parser)
+            op.setup_parser(op_parser)
         parser.set_defaults(run=None)
-        return parser.parse_args(argv)
+        return parser
 
     def run(self, argv: Sequence[str] | None) -> None | int:
-        args = self.parse_args(argv)
+        parser = self.create_parser()
+        args = parser.parse_args(argv, namespace=Namespace())
         log_level = max(logging.DEBUG, logging.WARNING - args.verbosity * 10)
         logger.setLevel(log_level)
         handler = ColorHandler()
         # [C] Critical Error Occurred
-        handler.setFormatter(logging.Formatter("[%(levelname).1s] %(message)s"))
+        handler.setFormatter(
+            logging.Formatter("[%(levelname).1s] %(message)s")
+        )
         logger.addHandler(handler)
         if args.run:
             try:
@@ -89,7 +92,7 @@ class HHApplicantTool:
             except Exception as e:
                 logger.exception(e)
                 return 1
-        self._parser.print_help()
+        parser.print_help(file=sys.stderr)
         return 2
 
 

@@ -2,10 +2,12 @@
 import argparse
 import logging
 
+from prettytable import PrettyTable
+
 from ..api import ApiClient
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
-from ..utils import dumps
+from ..types import ApiListResponse
 
 logger = logging.getLogger(__package__)
 
@@ -15,7 +17,7 @@ class Namespace(BaseNamespace):
 
 
 class Operation(BaseOperation):
-    """Выведет текущего пользователя"""
+    """Список резюме"""
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
@@ -25,5 +27,18 @@ class Operation(BaseOperation):
         api = ApiClient(
             access_token=args.config["token"]["access_token"],
         )
-        result = api.get("/me")
-        print(dumps(result))
+        resumes: ApiListResponse = api.get("/resumes/mine")
+        t = PrettyTable(
+            field_names=["ID", "Заголовок", "Статус"], align="l", valign="t"
+        )
+        t.add_rows(
+            [
+                (
+                    x["id"],
+                    x["title"],
+                    ["Доступно", "Заблокировано"][x["blocked"]],
+                )
+                for x in resumes["items"]
+            ]
+        )
+        print(t)

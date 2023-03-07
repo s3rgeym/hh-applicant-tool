@@ -21,7 +21,7 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Откликнуться на все подходящие вакансии"""
 
-    def add_parser_arguments(self, parser: argparse.ArgumentParser) -> None:
+    def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
         parser.add_argument(
             "--message-list",

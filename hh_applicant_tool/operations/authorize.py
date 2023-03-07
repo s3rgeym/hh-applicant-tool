@@ -56,14 +56,14 @@ class HHAndroidProtocolHandler(socketserver.BaseRequestHandler):
 class Operation(BaseOperation):
     """Авторизоваться на сайте"""
 
-    def add_parser_arguments(self, parser: argparse.ArgumentParser) -> None:
+    def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
     def run(self, args: Namespace) -> None:
         oauth = OAuthClient()
         print("Пробуем открыть в браузере:", oauth.authorize_url)
         subprocess.Popen(["xdg-open", oauth.authorize_url])
-        print("Авторизуйтесь и нажмите <<Подтвердить>>")
+        print("Авторизуйтесь и нажмите <Подтвердить>")
         logger.info(
             "🚀 Стартуем TCP-сервер по адресу unix://%s", HHANDROID_SOCKET_PATH
         )
