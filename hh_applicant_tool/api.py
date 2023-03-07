@@ -14,6 +14,7 @@ from urllib.parse import urlencode
 
 import requests
 from requests import Response, Session
+from requests.adapters import CaseInsensitiveDict
 
 from .contsants import HHANDROID_CLIENT_ID, HHANDROID_CLIENT_SECRET
 from .types import AccessToken
@@ -22,8 +23,18 @@ logger = logging.getLogger(__package__)
 
 
 class ApiError(Exception):
-    def __init__(self, data: dict[str, Any]) -> None:
+    def __init__(self, response: Response, data: dict[str, Any]) -> None:
+        self._response = response
         self._raw = deepcopy(data)
+
+    @property
+    def status_code(self) -> int:
+        return self._response.status_code
+
+    # Могут понадобиться если API вернет Redirect
+    @property
+    def response_headers(self) -> CaseInsensitiveDict:
+        return self._response.headers.copy()
 
     def __getattr__(self, name: str) -> Any:
         try:
@@ -33,6 +44,10 @@ class ApiError(Exception):
 
     def __str__(self) -> str:
         return str(self._raw)
+
+
+class Redirect(ApiError):
+    pass
 
 
 class BadRequest(ApiError):
@@ -112,7 +127,7 @@ class BaseClient:
                 allow_redirects=False,
             )
             try:
-                # У этих лошков сервер не отдает Content-Length, а кривое API отдает пустые ответы, например, при отклике на вакансии, и мы не можем узнать
+                # У этих лошков сервер не отдает Content-Length, а кривое API отдает пустые ответы, например, при отклике на вакансии, и мы не можем узнать содержит ли ответ тело
                 # 'Server': 'ddos-guard'
                 # ...
                 # 'Transfer-Encoding': 'chunked'
@@ -154,14 +169,16 @@ class BaseClient:
     @staticmethod
     def raise_for_status(response: Response, data: dict) -> None:
         match response.status_code:
+            case 301 | 302:
+                raise Redirect(response, data)
             case 403:
-                raise Forbidden(data)
+                raise Forbidden(response, data)
             case 404:
-                raise ResourceNotFound(data)
+                raise ResourceNotFound(response, data)
             case status if 500 > status >= 400:
-                raise BadRequest(data)
+                raise BadRequest(response, data)
             case status if status >= 500:
-                raise InternalServerError(data)
+                raise InternalServerError(response, data)
 
 
 @dataclass
@@ -227,7 +244,7 @@ class ApiClient(BaseClient):
     ) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.access_token}"}
 
-    def refresh_access(self) -> None:
+    def refresh_access(self) -> AccessToken:
         tok = self.oauth_client.refresh_access(self.refresh_token)
         (
             self.access_token,
@@ -236,3 +253,4 @@ class ApiClient(BaseClient):
             tok["access_token"],
             tok["refresh_token"],
         )
+        return tok
