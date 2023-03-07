@@ -30,6 +30,6 @@ class Operation(BaseOperation):
             try:
                 res = api.post(f"/resumes/{resume['id']}/publish")
                 assert res == {}
-                print("👍 Обновлено:", resume["title"])
+                print("✅ Обновлено", resume["title"])
             except ApiError as ex:
                 logger.warning(ex)
