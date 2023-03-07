@@ -21,9 +21,9 @@ class Operation(BaseOperation):
         pass
 
     def run(self, args: Namespace) -> None:
-        assert args.config["access_token"]
+        assert args.config["token"]
         api = ApiClient(
-            access_token=args.config["access_token"],
+            access_token=args.config["token"]["access_token"],
         )
         result = api.get("/me")
         print(dumps(result))
