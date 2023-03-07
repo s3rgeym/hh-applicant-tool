@@ -4,7 +4,7 @@ import logging
 import random
 from typing import TextIO
 
-from ..api import ApiClient, BadGateaway, BadRequest
+from ..api import ApiClient, ApiError, BadGateaway, BadRequest, Forbidden
 from ..contsants import INVALID_ISO8601_FORMAT
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
@@ -65,7 +65,7 @@ class Operation(BaseOperation):
                 per_page=per_page,
             )
             rv.extend(res["items"])
-            if rv % per_page:
+            if len(rv) % per_page:
                 break
         return rv
 
@@ -88,14 +88,14 @@ class Operation(BaseOperation):
                 else "",
             }
             try:
-                # res = api.post("/negotiations", params)
-                # assert res == {}
+                res = api.post("/negotiations", params)
+                assert res == {}
                 logger.debug(
                     "Отправлен отклик на вакансию #%s %s",
                     item["id"],
                     item["name"],
                 )
-            except (BadGateaway, BadRequest) as ex:
+            except ApiError as ex:
                 logger.warning(ex)
                 if isinstance(ex, BadRequest) and ex.limit_exceeded:
                     return
