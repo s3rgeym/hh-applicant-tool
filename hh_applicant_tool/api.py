@@ -9,24 +9,19 @@ from copy import deepcopy
 from dataclasses import dataclass
 from functools import partialmethod
 from threading import Lock
-from typing import (
-    Any,
-    Literal,
-)
+from typing import Any, Literal
 from urllib.parse import urlencode
 
 import requests
 from requests import Response, Session
+
+from .contsants import HHANDROID_CLIENT_ID, HHANDROID_CLIENT_SECRET
 from .types import AccessToken
-from .contsants import (
-    HHANDROID_CLIENT_ID,
-    HHANDROID_CLIENT_SECRET,
-)
 
 logger = logging.getLogger(__package__)
 
 
-class BaseException(Exception):
+class ApiError(Exception):
     def __init__(self, data: dict[str, Any]) -> None:
         self._raw = deepcopy(data)
 
@@ -40,23 +35,23 @@ class BaseException(Exception):
         return str(self._raw)
 
 
-class BadRequest(BaseException):
+class BadRequest(ApiError):
     @property
     def limit_exceeded(self) -> bool:
         return any(x["value"] == "limit_exceeded" for x in self.errors)
 
 
-class Forbidden(BaseException):
+class Forbidden(ApiError):
     pass
 
 
-class ResourceNotFound(BaseException):
+class ResourceNotFound(ApiError):
     pass
 
 
 # По всей видимости, прокси возвращает, когда их бекенд на Java падает
 # {'description': 'Bad Gateway', 'errors': [{'type': 'bad_gateway'}], 'request_id': '<md5 хеш>'}
-class BadGateaway(BaseException):
+class BadGateaway(ApiError):
     pass
 
 
@@ -128,11 +123,18 @@ class BaseClient:
                         raise
                     rv = {}
             finally:
+                # printf 'DELETE . 666' | wc -c
+                # 12
+                # 100 символов максимум
                 logger.debug(
-                    "%s %.40s %d",
+                    "%s %.89s %d",
                     method,
                     url
-                    + ("?" + urlencode(params) if has_body and params else ""),
+                    + (
+                        "?" + urlencode(params)
+                        if not has_body and params
+                        else ""
+                    ),
                     response.status_code,
                 )
                 self.previous_request_time = time.monotonic()
