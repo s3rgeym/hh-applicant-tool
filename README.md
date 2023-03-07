@@ -88,6 +88,20 @@ Opening in existing browser session.
 
 После смотрим в консоль и если видим сообщение об успехе, закрываем вкладку.
 
+В случае успешной авторизации токены будут сохранены `~/.config/hh-applicant-tool/config.json`:
+
+```json
+{
+  "token": {
+    "access_token": "...",
+    "created_at": 1678151427,
+    "expires_in": 1209599,
+    "refresh_token": "...",
+    "token_type": "bearer"
+  }
+}
+```
+
 ![](https://user-images.githubusercontent.com/12753171/222870516-b29f2417-d11a-4122-8291-7d440a422a31.png)
 
 При авторизации можно указать `redirect_uri`, но любые адреса кроме того, что с протоколом `hhandroid`, будут приводить к ошибке. Поэтому и нужно добавление обработчика кастомного протокола. При котором создается desktop-файл, где в секции `Exec` всего пару команд для того чтобы записать полученный uri в сокет. TCP-сервер, который запускается при авторизации, как раз слушает этот сокет... Использование АВТОРИЗАЦИИ ДЛЯ САЙТОВ в мобильном приложении выглядит странной, так как десктопные и мобильные приложения обычно авторизуются напрямую, но у чуваков свое понимание не только протокола OAuth...
@@ -125,6 +139,13 @@ $ hh-applicant-tool whoami
   },
   "resumes_url": "https://api.hh.ru/resumes/mine"
 }
+```
+
+Полное удаление:
+
+```bash
+rm -rf ~/.config/hh-applicant-tool
+rm -f ~/.local/share/applications/hhandroid.desktop
 ```
 
 Утилита использует систему плагинов. Все они лежат в [operations](https://github.com/s3rgeym/hh-applicant-tool/tree/main/hh_applicant_tool/operations). Модули расположенные там автоматически добавляются как доступные операции. За основу для своего плагина можно взять [whoami.py](https://github.com/s3rgeym/hh-applicant-tool/tree/main/hh_applicant_tool/operations/whoami.py).
