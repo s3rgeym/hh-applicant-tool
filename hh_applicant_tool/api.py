@@ -51,7 +51,7 @@ class ResourceNotFound(ApiError):
 
 # По всей видимости, прокси возвращает, когда их бекенд на Java падает
 # {'description': 'Bad Gateway', 'errors': [{'type': 'bad_gateway'}], 'request_id': '<md5 хеш>'}
-class BadGateaway(ApiError):
+class InternalServerError(ApiError):
     pass
 
 
@@ -154,14 +154,14 @@ class BaseClient:
     @staticmethod
     def raise_for_status(response: Response, data: dict) -> None:
         match response.status_code:
-            case 400:
-                raise BadRequest(data)
             case 403:
                 raise Forbidden(data)
             case 404:
                 raise ResourceNotFound(data)
-            case 502:
-                raise BadGateaway(data)
+            case status if 500 > status >= 400:
+                raise BadRequest(data)
+            case status if status >= 500:
+                raise InternalServerError(data)
 
 
 @dataclass
