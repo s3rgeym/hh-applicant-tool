@@ -54,12 +54,20 @@ class Operation(BaseOperation):
         logger.info("Всего заявок и предложений: %d", len(negotiations))
         for item in negotiations:
             state = item["state"]
-            do_delete = state["id"] == "discard" or (
-                state["id"] == "response"
-                and (
-                    datetime.utcnow() - timedelta(days=args.older_than)
-                ).replace(tzinfo=timezone.utc)
-                > datetime.strptime(item["created_at"], INVALID_ISO8601_FORMAT)
+            # messaging_status archived
+            # decline_allowed False
+            # hidden True
+            do_delete = not item["hidden"] and (
+                state["id"] == "discard"
+                or (
+                    state["id"] == "response"
+                    and (
+                        datetime.utcnow() - timedelta(days=args.older_than)
+                    ).replace(tzinfo=timezone.utc)
+                    > datetime.strptime(
+                        item["created_at"], INVALID_ISO8601_FORMAT
+                    )
+                )
             )
             if do_delete:
                 logger.debug(
