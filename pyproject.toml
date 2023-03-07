@@ -8,9 +8,7 @@ packages = [{include = "hh_applicant_tool"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-python-dotenv = "^1.0.0"
 requests = "^2.28.2"
-cchardet = "^2.1.7"
 
 
 [tool.poetry.group.dev.dependencies]
