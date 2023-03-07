@@ -30,7 +30,6 @@ class Operation(BaseOperation):
         )
 
     def run(self, args: Namespace) -> None:
-        assert args.config["access_token"]
         if args.message_list:
             application_messages = list(
                 filter(None, map(str.strip, args.message_list))
@@ -41,7 +40,7 @@ class Operation(BaseOperation):
                 "Прошу рассмотреть мою кандидатуру на вакансию %(name)s",
             ]
         api = ApiClient(
-            access_token=args.config["access_token"],
+            access_token=args.config["token"]["access_token"],
         )
         if not (resume_id := args.resume_id):
             resumes: ApiListResponse = api.get("/resumes/mine")
