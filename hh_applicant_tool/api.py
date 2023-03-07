@@ -230,7 +230,6 @@ class ApiClient(BaseClient):
     refresh_token: str | None = None
     _: dataclasses.KW_ONLY
     base_url: str = "https://api.hh.ru/"
-    # request_body_json: bool = True
     oauth_client: OAuthClient | None = None
 
     def __post_init__(self) -> None:
