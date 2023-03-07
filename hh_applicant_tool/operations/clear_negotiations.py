@@ -27,7 +27,7 @@ class Operation(BaseOperation):
             help="Удалить заявки старше опр. кол-ва дней. По умолчанию: %(default)d",
         )
 
-    def _get_negotiations(self, api: ApiClient) -> list[dict]:
+    def _get_active_negotiations(self, api: ApiClient) -> list[dict]:
         rv = []
         page = 0
         per_page = 100
@@ -36,6 +36,7 @@ class Operation(BaseOperation):
                 "/negotiations",
                 page=page,
                 per_page=per_page,
+                status='active'
             )
             rv.extend(r["items"])
             if len(rv) % per_page:
@@ -48,8 +49,8 @@ class Operation(BaseOperation):
         api = ApiClient(
             access_token=args.config["token"]["access_token"],
         )
-        negotiations = self._get_negotiations(api)
-        logger.info("Всего заявок и предложений: %d", len(negotiations))
+        negotiations = self._get_active_negotiations(api)
+        logger.info("Всего активных: %d", len(negotiations))
         for item in negotiations:
             state = item["state"]
             # messaging_status archived
