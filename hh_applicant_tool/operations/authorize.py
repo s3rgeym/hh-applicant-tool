@@ -44,8 +44,7 @@ class HHAndroidProtocolServer(socketserver.ThreadingUnixStreamServer):
         token = self._oauth_client.authenticate(code)
         logger.debug("Сохраняем токен")
         # токен не содержит каких-то меток о времени создания
-        token["created_at"] = int(time.time())
-        self._config.save(token=token)
+        self._config.save(token=dict(token, created_at=int(time.time())))
         self.shutdown()
 
 
