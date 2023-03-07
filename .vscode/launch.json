@@ -13,11 +13,11 @@
       "justMyCode": true
     },
     {
-      "name": "Apply Jobs",
+      "name": "Apply Similar Vaciancies",
       "type": "python",
       "request": "launch",
       "module": "hh_applicant_tool",
-      "args": ["-vv", "apply-jobs"],
+      "args": ["-vv", "apply-similar"],
       "justMyCode": true
     },
     {

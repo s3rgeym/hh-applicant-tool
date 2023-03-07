@@ -47,7 +47,7 @@ class Operation(BaseOperation):
             # Используем id первого резюме
             # TODO: создать 10 резюме и рассылать по 2000 откликов в сутки
             resume_id = resumes["items"][0]["id"]
-        self._apply_jobs(api, resume_id, application_messages)
+        self._apply_similar(api, resume_id, application_messages)
         print("📝 Отклики на вакансии разосланы!")
 
     def _get_vacancies(
@@ -68,7 +68,7 @@ class Operation(BaseOperation):
                 break
         return rv
 
-    def _apply_jobs(
+    def _apply_similar(
         self, api: ApiClient, resume_id: str, application_messages: list[str]
     ) -> None:
         # Получаем список рекомендованных вакансий и отправляем заявки
