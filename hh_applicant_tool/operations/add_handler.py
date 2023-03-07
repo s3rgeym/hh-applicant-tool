@@ -17,7 +17,7 @@ MimeType=x-scheme-handler/hhandroid
 class Operation(BaseOperation):
     """Добавляет обработчик для протокола hhandroid, используемого Android-приложением при авторизации"""
 
-    def add_parser_arguments(self, parser: argparse.ArgumentParser) -> None:
+    def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
     def run(self, args: argparse.Namespace) -> None:

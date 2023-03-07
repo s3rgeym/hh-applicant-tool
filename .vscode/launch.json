@@ -19,6 +19,14 @@
       "module": "hh_applicant_tool",
       "args": ["-vv", "apply-jobs"],
       "justMyCode": true
+    },
+    {
+      "name": "Clear Negotiations",
+      "type": "python",
+      "request": "launch",
+      "module": "hh_applicant_tool",
+      "args": ["-vv", "clear-negotiations"],
+      "justMyCode": true
     }
   ]
 }
