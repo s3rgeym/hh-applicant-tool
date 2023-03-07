@@ -98,4 +98,4 @@ class Operation(BaseOperation):
             except ApiError as ex:
                 logger.warning(ex)
                 if isinstance(ex, BadRequest) and ex.limit_exceeded:
-                    return
+                    break
