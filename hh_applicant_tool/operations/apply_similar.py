@@ -48,7 +48,6 @@ class Operation(BaseOperation):
             # TODO: создать 10 резюме и рассылать по 2000 откликов в сутки
             resume_id = resumes["items"][0]["id"]
         self._apply_similar(api, resume_id, application_messages)
-        print("📝 Отклики на вакансии разосланы!")
 
     def _get_vacancies(
         self, api: ApiClient, resume_id: str
@@ -62,6 +61,8 @@ class Operation(BaseOperation):
                 f"/resumes/{resume_id}/similar_vacancies",
                 page=page,
                 per_page=per_page,
+                # по умолчанию исп-ся relevance
+                # order_by="publication_time",
             )
             rv.extend(res["items"])
             if page >= res["pages"] - 1:
@@ -98,3 +99,4 @@ class Operation(BaseOperation):
                 logger.warning(ex)
                 if isinstance(ex, BadRequest) and ex.limit_exceeded:
                     break
+        print("📝 Отклики на вакансии разосланы!")
