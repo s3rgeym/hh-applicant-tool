@@ -64,7 +64,7 @@ class Operation(BaseOperation):
                 per_page=per_page,
             )
             rv.extend(res["items"])
-            if rv['pages'] - 1 == page:
+            if res['pages'] - 1 == page:
                 break
         return rv
 
