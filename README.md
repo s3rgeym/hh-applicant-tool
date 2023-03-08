@@ -75,7 +75,7 @@ $ hh-applicant-tool -vv add-handler
 $ hh_applicant_tool -vv authorize
 Пробуем открыть в браузере: https://hh.ru/oauth/authorize?client_id=HIOMIAS39CA9DICTA7JIO64LQKQJF5AGIK74G9ITJKLNEDAOH5FHS5G1JI7FOEGD&response_type=code
 Авторизуйтесь и нажмите <Подтвердить>
-[I] 🚀 Стартуем TCP-сервер по адресу unix:///tmp/hhandroid.sock
+[I] 🚀 Запускаем TCP-сервер и слушаем unix:///tmp/hhandroid.sock
 Gtk-Message: 20:52:59.280: Failed to load module "canberra-gtk-module"
 Gtk-Message: 20:52:59.975: Failed to load module "canberra-gtk-module"
 [54:54:0305/205300.038812:ERROR:gl_factory.cc(128)] Requested GL implementation (gl=desktop-gl,angle=none) not found in allowed implementations: [(gl=egl-angle,angle=default),(gl=egl-gles2,angle=none),(gl=egl-angle,angle=swiftshader)].
