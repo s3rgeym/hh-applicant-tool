@@ -39,7 +39,7 @@ class Operation(BaseOperation):
                 status='active'
             )
             rv.extend(r["items"])
-            if len(rv) % per_page:
+            if rv['pages'] == page + 1:
                 break
             page += 1
         return rv
