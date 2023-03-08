@@ -36,9 +36,9 @@ class Operation(BaseOperation):
                 "/negotiations", page=page, per_page=per_page, status="active"
             )
             rv.extend(r["items"])
-            if page + 1 >= r["pages"]:
-                break
             page += 1
+            if page >= r["pages"]:
+                break
         return rv
 
     def run(self, args: Namespace) -> None:

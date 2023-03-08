@@ -152,6 +152,7 @@ class BaseClient:
                 )
                 self.previous_request_time = time.monotonic()
         self.raise_for_status(response, rv)
+        assert 300 > response.status_code >= 200
         return rv
 
     get = partialmethod(request, "GET")
@@ -210,17 +211,13 @@ class OAuthClient(BaseClient):
             "code": code,
             "grant_type": "authorization_code",
         }
-        return self.request("POST", "/token", params)
+        return self.post("/token", params)
 
     def refresh_access(self, refresh_token: str) -> AccessToken:
         # refresh_token можно использовать только один раз и только по истечению срока действия access_token.
-        return self.request(
-            "POST",
+        return self.post(
             "/token",
-            {
-                "grant_type": "refresh_token",
-                "refresh_token": refresh_token,
-            },
+            {"grant_type": "refresh_token", "refresh_token": refresh_token},
         )
 
 
@@ -230,26 +227,26 @@ class ApiClient(BaseClient):
     refresh_token: str | None = None
     _: dataclasses.KW_ONLY
     base_url: str = "https://api.hh.ru/"
-    oauth_client: OAuthClient | None = None
+    # oauth_client: OAuthClient | None = None
 
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        self.oauth_client = self.oauth_client or OAuthClient(
-            session=self.session
-        )
+    # def __post_init__(self) -> None:
+    #     super().__post_init__()
+    #     self.oauth_client = self.oauth_client or OAuthClient(
+    #         session=self.session
+    #     )
 
     def additional_headers(
         self,
     ) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.access_token}"}
 
-    def refresh_access(self) -> AccessToken:
-        tok = self.oauth_client.refresh_access(self.refresh_token)
-        (
-            self.access_token,
-            self.refresh_access,
-        ) = (
-            tok["access_token"],
-            tok["refresh_token"],
-        )
-        return tok
+    # def refresh_access(self) -> AccessToken:
+    #     tok = self.oauth_client.refresh_access(self.refresh_token)
+    #     (
+    #         self.access_token,
+    #         self.refresh_access,
+    #     ) = (
+    #         tok["access_token"],
+    #         tok["refresh_token"],
+    #     )
+    #     return tok
