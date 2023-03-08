@@ -66,7 +66,7 @@ class Operation(BaseOperation):
         subprocess.Popen(["xdg-open", oauth.authorize_url])
         print("Авторизуйтесь и нажмите <Подтвердить>")
         logger.info(
-            "🚀 Стартуем TCP-сервер по адресу unix://%s", HHANDROID_SOCKET_PATH
+            "🚀 Запускаем TCP-сервер и слушаем unix://%s", HHANDROID_SOCKET_PATH
         )
         server = HHAndroidProtocolServer(
             HHANDROID_SOCKET_PATH, oauth_client=oauth, config=args.config
