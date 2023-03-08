@@ -138,9 +138,9 @@ class BaseClient:
                         raise
                     rv = {}
             finally:
-                # 100 символов максимум
+                # 128 символов максимум
                 logger.debug(
-                    "%d %-6s %.89s",
+                    "%d %-6s %.117s",
                     response.status_code,
                     method,
                     url
