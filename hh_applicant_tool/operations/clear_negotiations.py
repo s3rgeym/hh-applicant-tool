@@ -33,13 +33,10 @@ class Operation(BaseOperation):
         per_page = 100
         while True:
             r: ApiListResponse = api.get(
-                "/negotiations",
-                page=page,
-                per_page=per_page,
-                status='active'
+                "/negotiations", page=page, per_page=per_page, status="active"
             )
             rv.extend(r["items"])
-            if rv['pages'] == page + 1:
+            if page + 1 >= r["pages"]:
                 break
             page += 1
         return rv
