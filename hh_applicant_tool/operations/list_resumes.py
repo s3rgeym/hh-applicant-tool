@@ -27,6 +27,7 @@ class Operation(BaseOperation):
         assert args.config["token"]
         api = ApiClient(
             access_token=args.config["token"]["access_token"],
+            user_agent=args.config["user_agent"],
         )
         resumes: ApiListResponse = api.get("/resumes/mine")
         t = PrettyTable(

@@ -13,7 +13,11 @@ from urllib.parse import urlencode
 import requests
 from requests import Response, Session
 
-from ..constants import HHANDROID_CLIENT_ID, HHANDROID_CLIENT_SECRET
+from ..constants import (
+    HHANDROID_CLIENT_ID,
+    HHANDROID_CLIENT_SECRET,
+    DEFAULT_USER_AGENT,
+)
 from ..types import AccessToken
 from ..utils import truncate_string
 from . import errors
@@ -32,7 +36,7 @@ class BaseClient:
     base_url: str
     _: dataclasses.KW_ONLY
     # TODO: сделать генерацию User-Agent'а как в приложении
-    user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+    user_agent: str | None = None
     session: Session | None = None
     previous_request_time: float = 0.0
 
@@ -43,7 +47,7 @@ class BaseClient:
             session.headers.update(
                 {
                     **self.additional_headers(),
-                    "User-Agent": self.user_agent,
+                    "User-Agent": self.user_agent or DEFAULT_USER_AGENT,
                 }
             )
 
@@ -102,7 +106,7 @@ class BaseClient:
                             if not has_body and params
                             else ""
                         ),
-                        116
+                        116,
                     ),
                 )
                 self.previous_request_time = time.monotonic()
