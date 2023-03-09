@@ -83,6 +83,7 @@ class Operation(BaseOperation):
                     vacancy["alternate_url"],
                 )
                 res = api.delete(f"/negotiations/active/{item['id']}")
+                print("Скрыто", vacancy["alternate_url"])
                 assert {} == res
                 # https://api.hh.ru/openapi/redoc#tag/Skrytye-vakansii/operation/delete-vacancy-from-blacklisted
                 if is_discard and args.blacklist_discard:
@@ -94,6 +95,7 @@ class Operation(BaseOperation):
                             truncate_string(employer["name"]),
                             employer["url"],
                         )
+                        print("Заблокирован", employer["url"])
                     except ClientError as ex:
                         logger.warning(ex)
 
