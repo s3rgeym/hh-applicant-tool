@@ -92,7 +92,7 @@ class Operation(BaseOperation):
                         api.put(f"/employers/blacklisted/{employer['id']}")
                         print(
                             "🚫 Заблокировали",
-                            employer["url"],
+                            employer["alternate_url"],
                             "(",
                             truncate_string(employer["name"]),
                             ")",
