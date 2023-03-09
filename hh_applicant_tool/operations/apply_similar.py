@@ -62,8 +62,8 @@ class Operation(BaseOperation):
                 f"/resumes/{resume_id}/similar_vacancies",
                 page=page,
                 per_page=per_page,
-                # по умолчанию исп-ся relevance
                 # order_by="publication_time",
+                order_by="relevance",
             )
             rv.extend(res["items"])
             if page >= res["pages"] - 1:
