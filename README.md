@@ -1,6 +1,6 @@
 # HH Applicant Tool
 
-![Publish to PyPI](https://github.com/s3rgeym/hh-applicant-tool/actions/workflows/publish.yml/badge.svg) [![PyPi Version](https://img.shields.io/pypi/v/hh-applicant-tool)]() [![Python Versions](https://img.shields.io/pypi/pyversions/hh-applicant-tool.svg)]()
+![Publish to PyPI](https://github.com/s3rgeym/hh-applicant-tool/actions/workflows/publish.yml/badge.svg) [![PyPi Version](https://img.shields.io/pypi/v/hh-applicant-tool)]() [![Python Versions](https://img.shields.io/pypi/pyversions/hh-applicant-tool.svg)]() [![PyPI - Downloads](https://img.shields.io/pypi/dm/hh-applicant-tool)]()
 
 Утилита для автоматизации действий на HH таких как отклик на подходящие вакансии.
 
