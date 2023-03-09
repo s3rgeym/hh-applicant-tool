@@ -1,4 +1,4 @@
-from copy import deepcopy
+#from copy import deepcopy
 from typing import Any
 
 from requests import Response, Request
@@ -19,7 +19,7 @@ __all__ = (
 class ApiError(Exception):
     def __init__(self, response: Response, data: dict[str, Any]) -> None:
         self._response = response
-        self._raw = deepcopy(data)
+        self._raw = data
     
     @property
     def request(self) -> Request:
