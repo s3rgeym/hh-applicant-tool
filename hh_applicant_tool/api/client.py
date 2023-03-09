@@ -13,7 +13,7 @@ from urllib.parse import urlencode
 import requests
 from requests import Response, Session
 
-from ..contsants import HHANDROID_CLIENT_ID, HHANDROID_CLIENT_SECRET
+from ..constants import HHANDROID_CLIENT_ID, HHANDROID_CLIENT_SECRET
 from ..types import AccessToken
 from ..utils import truncate_string
 from . import errors

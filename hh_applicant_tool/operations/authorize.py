@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from ..api import OAuthClient
-from ..contsants import HHANDROID_SOCKET_PATH
+from ..constants import HHANDROID_SOCKET_PATH
 from ..main import BaseOperation, Namespace
 from ..utils import Config
 

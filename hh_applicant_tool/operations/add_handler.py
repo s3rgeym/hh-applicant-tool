@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 from subprocess import check_call
 
-from ..contsants import HHANDROID_SOCKET_PATH
+from ..constants import HHANDROID_SOCKET_PATH
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..utils import print_err
