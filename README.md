@@ -91,7 +91,7 @@ Opening in existing browser session.
 
 Тут надо выбирать `Open xdg-open`.
 
-После смотрим в консоль и если видим сообщение об успехе, закрываем вкладку.
+После смотрим в терминал и если видим сообщение об успехе, закрываем вкладку.
 
 В случае успешной авторизации токены будут сохранены `~/.config/hh-applicant-tool/config.json`:
 
@@ -142,9 +142,11 @@ $ hh-applicant-tool whoami
 }
 ```
 
+Далее идут заметки для разработчиков...
+
 Токен выдается на две недели:
 
-```python                                 
+```python
 Python 3.10.9 (main, Dec 19 2022, 17:35:49) [GCC 12.2.0] on linux
 Type "help", "copyright", "credits" or "license" for more information.
 >>> from datetime import datetime, timedelta

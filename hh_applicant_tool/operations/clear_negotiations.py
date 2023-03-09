@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from ..api import ApiClient, ClientError
-from ..contsants import INVALID_ISO8601_FORMAT
+from ..constants import INVALID_ISO8601_FORMAT
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse
