@@ -50,6 +50,7 @@ class BaseClient:
                     "User-Agent": self.user_agent or DEFAULT_USER_AGENT,
                 }
             )
+            logger.debug("Additional Headers: %r", session.headers)
 
     def additional_headers(
         self,
