@@ -6,6 +6,7 @@ from ..api import ApiClient, ApiError
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse
+from ..utils import truncate_string
 
 logger = logging.getLogger(__package__)
 
@@ -30,6 +31,6 @@ class Operation(BaseOperation):
             try:
                 res = api.post(f"/resumes/{resume['id']}/publish")
                 assert res == {}
-                print("✅ Обновлено", resume["title"])
+                print("✅ Обновлено", truncate_string(resume["title"]))
             except ApiError as ex:
                 logger.warning(ex)

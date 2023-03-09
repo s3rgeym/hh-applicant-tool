@@ -45,8 +45,8 @@ class HHAndroidProtocolServer(socketserver.ThreadingUnixStreamServer):
         logger.debug("Сохраняем токен")
         # токен не содержит каких-то меток о времени создания
         self._config.save(token=dict(token, created_at=int(time.time())))
-        self.shutdown()
         print("🔓 Авторизация прошла успешно!")
+        self.shutdown()
 
 
 class HHAndroidProtocolHandler(socketserver.BaseRequestHandler):

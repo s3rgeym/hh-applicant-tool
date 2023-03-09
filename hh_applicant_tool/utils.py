@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import json
+import sys
 from functools import partial
 from pathlib import Path
 from threading import Lock
 from typing import Any
 
-json_dump_kwargs = dict(indent=2, ensure_ascii=False, sort_keys=True, default=str)
+print_err = partial(print, file=sys.stderr)
+
+json_dump_kwargs = dict(
+    indent=2, ensure_ascii=False, sort_keys=True, default=str
+)
+
 dump = partial(json.dump, **json_dump_kwargs)
 dumps = partial(json.dumps, **json_dump_kwargs)
 
@@ -41,3 +47,7 @@ class Config(dict):
                 dump(self, f)
 
     __getitem__ = dict.get
+
+
+def truncate_string(s: str, limit: int = 75, ellipsis: str = "…") -> str:
+    return s[:limit] + bool(s[limit:]) * ellipsis
