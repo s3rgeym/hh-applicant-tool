@@ -93,11 +93,7 @@ class Operation(BaseOperation):
             try:
                 res = api.post("/negotiations", params)
                 assert res == {}
-                logger.debug(
-                    "Отправлен отклик на вакансию #%s (%s)",
-                    item["id"],
-                    truncate_string(item["name"]),
-                )
+                print(f"Отправлен отклик: {item['url']} ({truncate_string(item['name'])})")
             except ApiError as ex:
                 logger.warning(ex)
                 if isinstance(ex, BadRequest) and ex.limit_exceeded:
