@@ -101,7 +101,8 @@ class BaseClient:
                             "?" + urlencode(params)
                             if not has_body and params
                             else ""
-                        )
+                        ),
+                        116
                     ),
                 )
                 self.previous_request_time = time.monotonic()
