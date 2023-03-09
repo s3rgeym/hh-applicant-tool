@@ -107,6 +107,14 @@ Opening in existing browser session.
 }
 ```
 
+Через этот файл можно задать кастомный `user_agent`:
+
+```json
+{
+  "user_agent": "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/110.0"
+}
+```
+
 Проверка авторизации:
 
 ```bash
