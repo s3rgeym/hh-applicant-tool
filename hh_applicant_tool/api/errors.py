@@ -1,7 +1,7 @@
 from copy import deepcopy
 from typing import Any
 
-from requests import Response
+from requests import Response, Request
 from requests.adapters import CaseInsensitiveDict
 
 __all__ = (
@@ -20,15 +20,18 @@ class ApiError(Exception):
     def __init__(self, response: Response, data: dict[str, Any]) -> None:
         self._response = response
         self._raw = deepcopy(data)
+    
+    @property
+    def request(self) -> Request:
+        return self._response.request
 
     @property
     def status_code(self) -> int:
         return self._response.status_code
 
-    # Могут понадобиться если API вернет Redirect
     @property
     def response_headers(self) -> CaseInsensitiveDict:
-        return self._response.headers.copy()
+        return self._response.headers
 
     def __getattr__(self, name: str) -> Any:
         try:
