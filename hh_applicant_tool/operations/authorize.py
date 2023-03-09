@@ -62,7 +62,9 @@ class Operation(BaseOperation):
 
     def run(self, args: Namespace) -> None:
         oauth = OAuthClient(
-            user_agent=args.config["user_agent"],
+            user_agent=(
+                args.config["oauth_user_agent"] or args.config["user_agent"]
+            ),
         )
         print("Пробуем открыть в браузере:", oauth.authorize_url)
         subprocess.Popen(["xdg-open", oauth.authorize_url])
