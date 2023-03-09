@@ -19,7 +19,6 @@ from ..constants import (
     DEFAULT_USER_AGENT,
 )
 from ..types import AccessToken
-from ..utils import truncate_string
 from . import errors
 
 __all__ = ("ApiClient", "OAuthClient")
@@ -100,15 +99,11 @@ class BaseClient:
                     "%d %-6s %s",
                     response.status_code,
                     method,
-                    truncate_string(
-                        url
-                        + (
-                            "?" + urlencode(params)
-                            if not has_body and params
-                            else ""
-                        ),
-                        116,
-                    ),
+                    url + (
+                        "?" + urlencode(params)
+                        if not has_body and params
+                        else ""
+                    )
                 )
                 self.previous_request_time = time.monotonic()
         self.raise_for_status(response, rv)
