@@ -30,6 +30,6 @@ class Operation(BaseOperation):
             access_token=args.config["token"]["access_token"],
             user_agent=args.config["user_agent"],
         )
-        params = dict(para.split("=", 1) for para in args.params)
+        params = dict(x.split("=", 1) for x in args.param)
         result = api.request(args.method, args.endpoint, params=params)
         print(dumps(result))
