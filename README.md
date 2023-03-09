@@ -72,7 +72,7 @@ $ hh-applicant-tool -vv add-handler
 Авторизуемся:
 
 ```bash
-$ hh_applicant_tool -vv authorize
+$ hh-applicant-tool -vv authorize
 Пробуем открыть в браузере: https://hh.ru/oauth/authorize?client_id=HIOMIAS39CA9DICTA7JIO64LQKQJF5AGIK74G9ITJKLNEDAOH5FHS5G1JI7FOEGD&response_type=code
 Авторизуйтесь и нажмите <Подтвердить>
 [I] 🚀 Запускаем TCP-сервер и слушаем unix:///tmp/hhandroid.sock
