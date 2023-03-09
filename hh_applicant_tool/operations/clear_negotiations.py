@@ -78,12 +78,25 @@ class Operation(BaseOperation):
                 res = api.delete(f"/negotiations/active/{item['id']}")
                 assert {} == res
                 vacancy = item["vacancy"]
-                print("Удалили", state["name"].lower(), vacancy["alternate_url"], "(", truncate_string(vacancy["name"]), ")")
+                print(
+                    "❌ Удалили",
+                    state["name"].lower(),
+                    vacancy["alternate_url"],
+                    "(",
+                    truncate_string(vacancy["name"]),
+                    ")",
+                )
                 if is_discard and args.blacklist_discard:
                     employer = vacancy["employer"]
                     try:
                         api.put(f"/employers/blacklisted/{employer['id']}")
-                        print("Заблокировали", employer['url'], "(", truncate_string(employer["name"]), ")")
+                        print(
+                            "🚫 Заблокировали",
+                            employer["url"],
+                            "(",
+                            truncate_string(employer["name"]),
+                            ")",
+                        )
                     except ClientError as ex:
                         logger.warning(ex)
 
