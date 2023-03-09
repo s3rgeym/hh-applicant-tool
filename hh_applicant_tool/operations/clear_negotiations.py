@@ -19,7 +19,7 @@ class Namespace(BaseNamespace):
 
 
 class Operation(BaseOperation):
-    """Отменяет старые заявки и скрывает отказы."""
+    """Отменяет старые заявки, скрывает отказы с опциональной блокировкой работодателя."""
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
