@@ -75,27 +75,15 @@ class Operation(BaseOperation):
                     )
                 )
             ):
-                vacancy = item["vacancy"]
-                logger.debug(
-                    "Удаляем %s на вакансию %r <%s>",
-                    state["name"].lower(),
-                    truncate_string(vacancy["name"]),
-                    vacancy["alternate_url"],
-                )
                 res = api.delete(f"/negotiations/active/{item['id']}")
-                print("Скрыто", vacancy["alternate_url"])
                 assert {} == res
-                # https://api.hh.ru/openapi/redoc#tag/Skrytye-vakansii/operation/delete-vacancy-from-blacklisted
+                vacancy = item["vacancy"]
+                print("Удалили", state["name"].lower(), vacancy["alternate_url"], "(", truncate_string(vacancy["name"]), ")")
                 if is_discard and args.blacklist_discard:
                     employer = vacancy["employer"]
                     try:
                         api.put(f"/employers/blacklisted/{employer['id']}")
-                        logger.debug(
-                            "n-listed: %r <%s>",
-                            truncate_string(employer["name"]),
-                            employer["url"],
-                        )
-                        print("Заблокирован", employer["url"])
+                        print("Заблокировали", employer['url'], "(", truncate_string(employer["name"]), ")")
                     except ClientError as ex:
                         logger.warning(ex)
 
