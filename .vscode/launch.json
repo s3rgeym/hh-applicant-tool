@@ -25,7 +25,7 @@
       "type": "python",
       "request": "launch",
       "module": "hh_applicant_tool",
-      "args": ["-vv", "clear-negotiations"],
+      "args": ["-vv", "clear-negotiations", "--blacklist-discard"],
       "justMyCode": true
     }
   ]

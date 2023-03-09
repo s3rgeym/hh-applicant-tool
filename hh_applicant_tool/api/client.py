@@ -1,11 +1,9 @@
-"""https://api.hh.ru/openapi/redoc"""
 from __future__ import annotations
 
 import dataclasses
 import json
 import logging
 import time
-from copy import deepcopy
 from dataclasses import dataclass
 from functools import partialmethod
 from threading import Lock
@@ -14,60 +12,15 @@ from urllib.parse import urlencode
 
 import requests
 from requests import Response, Session
-from requests.adapters import CaseInsensitiveDict
 
-from .contsants import HHANDROID_CLIENT_ID, HHANDROID_CLIENT_SECRET
-from .types import AccessToken
+from ..contsants import HHANDROID_CLIENT_ID, HHANDROID_CLIENT_SECRET
+from ..types import AccessToken
+from ..utils import truncate_string
+from . import errors
+
+__all__ = ("ApiClient", "OAuthClient")
 
 logger = logging.getLogger(__package__)
-
-
-class ApiError(Exception):
-    def __init__(self, response: Response, data: dict[str, Any]) -> None:
-        self._response = response
-        self._raw = deepcopy(data)
-
-    @property
-    def status_code(self) -> int:
-        return self._response.status_code
-
-    # Могут понадобиться если API вернет Redirect
-    @property
-    def response_headers(self) -> CaseInsensitiveDict:
-        return self._response.headers.copy()
-
-    def __getattr__(self, name: str) -> Any:
-        try:
-            return self._raw[name]
-        except KeyError as ex:
-            raise AttributeError(name) from ex
-
-    def __str__(self) -> str:
-        return str(self._raw)
-
-
-class Redirect(ApiError):
-    pass
-
-
-class BadRequest(ApiError):
-    @property
-    def limit_exceeded(self) -> bool:
-        return any(x["value"] == "limit_exceeded" for x in self.errors)
-
-
-class Forbidden(ApiError):
-    pass
-
-
-class ResourceNotFound(ApiError):
-    pass
-
-
-# По всей видимости, прокси возвращает, когда их бекенд на Java падает
-# {'description': 'Bad Gateway', 'errors': [{'type': 'bad_gateway'}], 'request_id': '<md5 хеш>'}
-class InternalServerError(ApiError):
-    pass
 
 
 ALLOWED_METHODS = Literal["GET", "POST", "PUT", "DELETE"]
@@ -117,7 +70,7 @@ class BaseClient:
             if (
                 delay := delay - time.monotonic() + self.previous_request_time
             ) > 0:
-                logger.debug("wait %fs", delay)
+                logger.debug("wait %fs before request", delay)
                 time.sleep(delay)
             has_body = method in ["POST", "PUT"]
             response = self.session.request(
@@ -138,16 +91,17 @@ class BaseClient:
                         raise
                     rv = {}
             finally:
-                # 127 символов максимум
                 logger.debug(
-                    "%d %-6s %.116s",
+                    "%d %-6s %s",
                     response.status_code,
                     method,
-                    url
-                    + (
-                        "?" + urlencode(params)
-                        if not has_body and params
-                        else ""
+                    truncate_string(
+                        url
+                        + (
+                            "?" + urlencode(params)
+                            if not has_body and params
+                            else ""
+                        )
                     ),
                 )
                 self.previous_request_time = time.monotonic()
@@ -171,15 +125,19 @@ class BaseClient:
     def raise_for_status(response: Response, data: dict) -> None:
         match response.status_code:
             case 301 | 302:
-                raise Redirect(response, data)
+                raise errors.Redirect(response, data)
+            case 400:
+                raise errors.BadRequest(response, data)
             case 403:
-                raise Forbidden(response, data)
+                raise errors.Forbidden(response, data)
             case 404:
-                raise ResourceNotFound(response, data)
+                raise errors.ResourceNotFound(response, data)
             case status if 500 > status >= 400:
-                raise BadRequest(response, data)
+                raise errors.ClientError(response, data)
+            case 502:
+                raise errors.BadGateway(response, data)
             case status if status >= 500:
-                raise InternalServerError(response, data)
+                raise errors.InternalServerError(response, data)
 
 
 @dataclass
@@ -216,8 +174,7 @@ class OAuthClient(BaseClient):
     def refresh_access(self, refresh_token: str) -> AccessToken:
         # refresh_token можно использовать только один раз и только по истечению срока действия access_token.
         return self.post(
-            "/token",
-            {"grant_type": "refresh_token", "refresh_token": refresh_token},
+            "/token", grant_type="refresh_token", refresh_token=refresh_token
         )
 
 

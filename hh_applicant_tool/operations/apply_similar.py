@@ -8,6 +8,7 @@ from ..api import ApiClient, ApiError, BadRequest
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse, VacancyItem
+from ..utils import truncate_string
 
 logger = logging.getLogger(__package__)
 
@@ -83,17 +84,19 @@ class Operation(BaseOperation):
             params = {
                 "resume_id": resume_id,
                 "vacancy_id": item["id"],
-                "message": random.choice(application_messages) % item
-                if item["response_letter_required"]
-                else "",
+                "message": (
+                    random.choice(application_messages) % item
+                    if item["response_letter_required"]
+                    else ""
+                ),
             }
             try:
                 res = api.post("/negotiations", params)
                 assert res == {}
                 logger.debug(
-                    "Отправлен отклик на вакансию #%s %s",
+                    "Отправлен отклик на вакансию #%s (%s)",
                     item["id"],
-                    item["name"],
+                    truncate_string(item["name"]),
                 )
             except ApiError as ex:
                 logger.warning(ex)

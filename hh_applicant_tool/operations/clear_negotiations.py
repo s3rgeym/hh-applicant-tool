@@ -3,17 +3,19 @@ import argparse
 import logging
 from datetime import datetime, timedelta, timezone
 
-from ..api import ApiClient
+from ..api import ApiClient, ClientError
 from ..contsants import INVALID_ISO8601_FORMAT
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse
+from ..utils import truncate_string
 
 logger = logging.getLogger(__package__)
 
 
 class Namespace(BaseNamespace):
     older_than: int | None
+    blacklist_discard: bool
 
 
 class Operation(BaseOperation):
@@ -25,6 +27,13 @@ class Operation(BaseOperation):
             type=int,
             default=30,
             help="Удалить заявки старше опр. кол-ва дней. По умолчанию: %(default)d",
+        )
+        parser.add_argument(
+            "--blacklist-discard",
+            help="Если установлен, то заблокирует работодателя в случае отказа, чтобы его вакансии не отображались в возможных",
+            type=bool,
+            default=False,
+            action=argparse.BooleanOptionalAction,
         )
 
     def _get_active_negotiations(self, api: ApiClient) -> list[dict]:
@@ -53,8 +62,9 @@ class Operation(BaseOperation):
             # messaging_status archived
             # decline_allowed False
             # hidden True
-            do_delete = not item["hidden"] and (
-                state["id"] == "discard"
+            is_discard = state["id"] == "discard"
+            if not item["hidden"] and (
+                is_discard
                 or (
                     state["id"] == "response"
                     and (
@@ -64,15 +74,27 @@ class Operation(BaseOperation):
                         item["updated_at"], INVALID_ISO8601_FORMAT
                     )
                 )
-            )
-            if do_delete:
+            ):
+                vacancy = item["vacancy"]
                 logger.debug(
-                    "Удаляем %s на вакансию %r: %s",
+                    "Удаляем %s на вакансию %r <%s>",
                     state["name"].lower(),
-                    item["vacancy"]["name"][:40],
-                    item["vacancy"]["alternate_url"],
+                    truncate_string(vacancy["name"]),
+                    vacancy["alternate_url"],
                 )
                 res = api.delete(f"/negotiations/active/{item['id']}")
                 assert {} == res
+                # https://api.hh.ru/openapi/redoc#tag/Skrytye-vakansii/operation/delete-vacancy-from-blacklisted
+                if is_discard and args.blacklist_discard:
+                    employer = vacancy["employer"]
+                    try:
+                        api.put(f"/employers/blacklisted/{employer['id']}")
+                        logger.debug(
+                            "n-listed: %r <%s>",
+                            truncate_string(employer["name"]),
+                            employer["url"],
+                        )
+                    except ClientError as ex:
+                        logger.warning(ex)
 
         print("🧹 Чистка заявок завершена!")
