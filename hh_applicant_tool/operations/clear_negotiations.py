@@ -56,7 +56,7 @@ class Operation(BaseOperation):
             access_token=args.config["token"]["access_token"],
         )
         negotiations = self._get_active_negotiations(api)
-        logger.info("Всего активных: %d", len(negotiations))
+        print("Всего активных:", len(negotiations))
         for item in negotiations:
             state = item["state"]
             # messaging_status archived
