@@ -95,7 +95,7 @@ class Operation(BaseOperation):
                 assert res == {}
                 print(
                     "📨 Отправили отклик",
-                    item["url"],
+                    item["alternate_url"],
                     "(",
                     truncate_string(item["name"]),
                     ")",
