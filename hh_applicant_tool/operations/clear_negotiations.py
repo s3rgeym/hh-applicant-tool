@@ -75,8 +75,8 @@ class Operation(BaseOperation):
                     )
                 )
             ):
-                res = api.delete(f"/negotiations/active/{item['id']}")
-                assert {} == res
+                r = api.delete(f"/negotiations/active/{item['id']}")
+                assert {} == r
                 vacancy = item["vacancy"]
                 print(
                     "❌ Удалили",
@@ -89,7 +89,8 @@ class Operation(BaseOperation):
                 if is_discard and args.blacklist_discard:
                     employer = vacancy["employer"]
                     try:
-                        api.put(f"/employers/blacklisted/{employer['id']}")
+                        r = api.put(f"/employers/blacklisted/{employer['id']}")
+                        assert not r
                         print(
                             "🚫 Заблокировали",
                             employer["alternate_url"],
