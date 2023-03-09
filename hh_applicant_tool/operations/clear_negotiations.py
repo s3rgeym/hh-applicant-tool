@@ -14,7 +14,7 @@ logger = logging.getLogger(__package__)
 
 
 class Namespace(BaseNamespace):
-    older_than: int | None
+    older_than: int
     blacklist_discard: bool
 
 
