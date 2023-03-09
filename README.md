@@ -63,6 +63,34 @@ $ hh-applicant-tool update-resumes
 $ hh-applicant-tool clear-negotiations --blacklist-discard
 ```
 
+Можно вызвать любой метод API:
+
+```bash
+$ hh-applicant-tool call-api /employers text="IT" only_with_vacancies=true | jq -r '.items[].alternate_url'
+https://hh.ru/employer/1966364
+https://hh.ru/employer/4679771
+https://hh.ru/employer/8932785
+https://hh.ru/employer/9451699
+https://hh.ru/employer/766478
+https://hh.ru/employer/4168187
+https://hh.ru/employer/9274777
+https://hh.ru/employer/1763330
+https://hh.ru/employer/5926815
+https://hh.ru/employer/1592535
+https://hh.ru/employer/9627641
+https://hh.ru/employer/4073857
+https://hh.ru/employer/2667859
+https://hh.ru/employer/4053700
+https://hh.ru/employer/5190600
+https://hh.ru/employer/607484
+https://hh.ru/employer/9386615
+https://hh.ru/employer/80660
+https://hh.ru/employer/6078902
+https://hh.ru/employer/1918903
+```
+
+Данная возможность полезна для написания Bash-скриптов.
+
 Глобальные флаги:
 
 - `-v` используется для вывода отладочной информации. Два таких флага, например, выводят запросы к **API**.
@@ -197,9 +225,3 @@ rm -f ~/.local/share/applications/hhandroid.desktop
 Утилита использует систему плагинов. Все они лежат в [operations](https://github.com/s3rgeym/hh-applicant-tool/tree/main/hh_applicant_tool/operations). Модули расположенные там автоматически добавляются как доступные операции. За основу для своего плагина можно взять [whoami.py](https://github.com/s3rgeym/hh-applicant-tool/tree/main/hh_applicant_tool/operations/whoami.py).
 
 Отдельные замечания у меня к API HH. Оно пиздец какое кривое. Например, при создании заявки возвращается пустой ответ либо редирект, хотя по логике должен возвраться созданный объект. Так же в ответах сервера нет `Content-Length`. Из-за этого нельзя узнать есть тело у ответа сервера нужно его пробовать прочитать. Я так понял там какой-то прокси оборачивает все запросы и отдает всегда `Transfer-Encoding: Chunked`. А еще он возвращает 502 ошибку, когда бекенд на Java падает либо долго отвечает (таймаут)? А вот [язык запросов](https://hh.ru/article/1175) мне понравился. Можно что-то типа этого использовать `NOT (!ID:123 OR !ID:456 OR !ID:789)` что бы отсеить какие-то вакансии.
-
-Bash Scripting:
-
-```bash
-hh-applicant-tool call-api -m METHOD endpoint param1="value1" param2="value2" | jq ...
-```

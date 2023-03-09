@@ -21,7 +21,12 @@ class Operation(BaseOperation):
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("endpoint")
-        parser.add_argument("param", nargs="*", help="PARAM=VALUE", default=[])
+        parser.add_argument(
+            "param",
+            nargs="*",
+            help="PARAM=VALUE. Значения можно оборачивать в кавычки.",
+            default=[],
+        )
         parser.add_argument(
             "-m", "--method", "--meth", default="GET", help="HTTP Метод"
         )
