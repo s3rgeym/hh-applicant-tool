@@ -3,6 +3,7 @@
 # yay -S httpx-bin
 # httpx -l sites.txt -json -o output.json -mr '\[branch "[^"]+"\]' -mc 200 -path /.git/config
 # И кучу такого найдет https://sudo.team/.git/config
+# Еще часто корень сайта в ХОМЯКЕ, БЛЕАТЬ, https://kub3.ru/.bash_history
 cd "$(dirname "$0")"
 . .venv/bin/activate
 
