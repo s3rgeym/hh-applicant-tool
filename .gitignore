@@ -2,3 +2,4 @@ __pycache__
 /.venv
 /dist
 employers.txt
+sites.txt
