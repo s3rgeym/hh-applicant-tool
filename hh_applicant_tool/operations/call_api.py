@@ -2,7 +2,7 @@
 import argparse
 import logging
 
-from ..api import ApiClient
+from ..api import ApiClient, ApiError
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..utils import dumps
@@ -38,5 +38,9 @@ class Operation(BaseOperation):
             user_agent=args.config["user_agent"],
         )
         params = dict(x.split("=", 1) for x in args.param)
-        result = api.request(args.method, args.endpoint, params=params)
-        print(dumps(result))
+        try:
+            result = api.request(args.method, args.endpoint, params=params)
+            print(dumps(result))
+        except ApiError as ex:
+            logger.warning(ex)
+            return 1
