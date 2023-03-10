@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hh-applicant-tool"
-version = "0.1.9"
+version = "0.2.0"
 description = ""
 authors = ["Senior YAML Developer <yamldeveloper@proton.me>"]
 readme = "README.md"
