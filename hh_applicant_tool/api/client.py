@@ -14,8 +14,8 @@ import requests
 from requests import Response, Session
 
 from ..constants import (
-    HHANDROID_CLIENT_ID,
-    HHANDROID_CLIENT_SECRET,
+    ANDROID_CLIENT_ID,
+    ANDROID_CLIENT_SECRET,
     DEFAULT_USER_AGENT,
 )
 from ..types import AccessToken
@@ -99,11 +99,12 @@ class BaseClient:
                     "%d %-6s %s",
                     response.status_code,
                     method,
-                    url + (
+                    url
+                    + (
                         "?" + urlencode(params)
                         if not has_body and params
                         else ""
-                    )
+                    ),
                 )
                 self.previous_request_time = time.monotonic()
         self.raise_for_status(response, rv)
@@ -143,8 +144,8 @@ class BaseClient:
 
 @dataclass
 class OAuthClient(BaseClient):
-    client_id: str = HHANDROID_CLIENT_ID
-    client_secret: str = HHANDROID_CLIENT_SECRET
+    client_id: str = ANDROID_CLIENT_ID
+    client_secret: str = ANDROID_CLIENT_SECRET
     _: dataclasses.KW_ONLY
     base_url: str = "https://hh.ru/oauth"
     state: str = ""
@@ -181,7 +182,8 @@ class OAuthClient(BaseClient):
 
 @dataclass
 class ApiClient(BaseClient):
-    access_token: str
+    # Например, для просмотра информации о компании токен не нужен
+    access_token: str | None = None
     refresh_token: str | None = None
     _: dataclasses.KW_ONLY
     base_url: str = "https://api.hh.ru/"
@@ -196,7 +198,11 @@ class ApiClient(BaseClient):
     def additional_headers(
         self,
     ) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.access_token}"}
+        return (
+            {"Authorization": f"Bearer {self.access_token}"}
+            if self.access_token
+            else {}
+        )
 
     # def refresh_access(self) -> AccessToken:
     #     tok = self.oauth_client.refresh_access(self.refresh_token)

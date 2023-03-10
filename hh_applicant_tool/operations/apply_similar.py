@@ -74,8 +74,9 @@ class Operation(BaseOperation):
                 page=page,
                 per_page=per_page,
                 # Мне кажется, что так поисковая выдача можно забиться неадекватами, которые по полгода кого-то ищут
-                # order_by="relevance",
-                order_by="publication_time",
+                # Но так откликается на что-то уж совсем нерелевантное
+                # order_by="publication_time",
+                order_by="relevance",
             )
             rv.extend(res["items"])
             if page >= res["pages"] - 1:
