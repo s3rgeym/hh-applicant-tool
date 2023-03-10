@@ -2,6 +2,7 @@
 # ./get-negotiations-employer-site-urls.sh | grep -v '^$' | sort | uniq > sites.txt
 # yay -S httpx-bin
 # httpx -l sites.txt -json -o output.json -mr '\[branch "[^"]+"\]' -mc 200 -path /.git/config
+# И кучу такого найдет https://sudo.team/.git/config
 cd "$(dirname "$0")"
 . .venv/bin/activate
 
