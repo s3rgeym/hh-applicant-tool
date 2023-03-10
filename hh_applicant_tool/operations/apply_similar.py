@@ -8,7 +8,7 @@ from ..api import ApiClient, ApiError, BadRequest
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse, VacancyItem
-from ..utils import truncate_string
+from ..utils import print_err, truncate_string
 
 logger = logging.getLogger(__package__)
 
@@ -118,7 +118,7 @@ class Operation(BaseOperation):
                     ")",
                 )
             except ApiError as ex:
-                logger.warning(ex)
+                print_err("❗ Ошибка:", ex)
                 if isinstance(ex, BadRequest) and ex.limit_exceeded:
                     break
         print("📝 Отклики на вакансии разосланы!")

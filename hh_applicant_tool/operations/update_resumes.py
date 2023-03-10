@@ -6,7 +6,7 @@ from ..api import ApiClient, ApiError
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse
-from ..utils import truncate_string
+from ..utils import print_err, truncate_string
 
 logger = logging.getLogger(__package__)
 
@@ -34,4 +34,4 @@ class Operation(BaseOperation):
                 assert res == {}
                 print("✅ Обновлено", truncate_string(resume["title"]))
             except ApiError as ex:
-                logger.warning(ex)
+                print_err("❗ Ошибка:", ex)

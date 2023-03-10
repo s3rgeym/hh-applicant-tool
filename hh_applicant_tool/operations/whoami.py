@@ -1,11 +1,11 @@
 # Этот модуль можно использовать как образец для других
 import argparse
+import json
 import logging
 
 from ..api import ApiClient
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
-from ..utils import dumps
 
 logger = logging.getLogger(__package__)
 
@@ -27,4 +27,4 @@ class Operation(BaseOperation):
             user_agent=args.config["user_agent"],
         )
         result = api.get("/me")
-        print(dumps(result))
+        print(json.dumps(result, ensure_ascii=True, indent=2, sort_keys=True))
