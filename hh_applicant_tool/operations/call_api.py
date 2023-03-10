@@ -1,11 +1,12 @@
 # Этот модуль можно использовать как образец для других
 import argparse
+import json
 import logging
+import sys
 
 from ..api import ApiClient, ApiError
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
-from ..utils import dumps
 
 logger = logging.getLogger(__package__)
 
@@ -25,20 +26,11 @@ class Operation(BaseOperation):
         parser.add_argument(
             "param",
             nargs="*",
-            help="PARAM=VALUE. Значения можно оборачивать в кавычки.",
+            help="PARAM=VALUE",
             default=[],
         )
         parser.add_argument(
             "-m", "--method", "--meth", default="GET", help="HTTP Метод"
-        )
-        parser.add_argument(
-            "-p",
-            "--pretty-print",
-            "--pretty",
-            help="Если передан, то выведет JSON с отступами",
-            type=bool,
-            default=False,
-            action=argparse.BooleanOptionalAction,
         )
 
     def run(self, args: Namespace) -> None:
@@ -50,9 +42,7 @@ class Operation(BaseOperation):
         params = dict(x.split("=", 1) for x in args.param)
         try:
             result = api.request(args.method, args.endpoint, params=params)
-            print(
-                dumps(result, **{} if args.pretty_print else {"indent": None})
-            )
+            print(json.dumps(result, ensure_ascii=True))
         except ApiError as ex:
-            logger.warning(ex)
+            json.dump(ex.data, sys.stderr, ensure_ascii=True)
             return 1

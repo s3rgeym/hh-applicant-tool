@@ -1,7 +1,7 @@
-#from copy import deepcopy
+# from copy import deepcopy
 from typing import Any
 
-from requests import Response, Request
+from requests import Request, Response
 from requests.adapters import CaseInsensitiveDict
 
 __all__ = (
@@ -20,7 +20,11 @@ class ApiError(Exception):
     def __init__(self, response: Response, data: dict[str, Any]) -> None:
         self._response = response
         self._raw = data
-    
+
+    @property
+    def data(self) -> dict:
+        return self._raw
+
     @property
     def request(self) -> Request:
         return self._response.request

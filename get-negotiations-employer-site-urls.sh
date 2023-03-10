@@ -5,19 +5,20 @@
 # И кучу такого найдет https://sudo.team/.git/config
 # Еще часто корень сайта в ХОМЯКЕ, БЛЕАТЬ, https://kub3.ru/.bash_history
 cd "$(dirname "$0")"
-. .venv/bin/activate
 
 page=0
 per_page=100
+
 while true; do
-  output=$(python -m hh_applicant_tool -vv call-api /negotiations "page=$page" "per_page=$per_page")
+  output=$(poetry run hh-applicant-tool -vv call-api /negotiations \
+    "page=$page" \
+    "per_page=$per_page")
   urls=($(jq -r '.items[].vacancy.employer.url' <<< "$output"))
+  total_pages=$(jq .pages <<< "$output")
   for url in "${urls[@]}"; do
     curl -s "$url" | jq -r .site_url
   done
-  pages=$(jq .pages <<< "$output")
-  ((++page))
-  if [ $page -ge $pages ]; then
+  if ((++page >= total_pages)); then
     break
   fi
 done

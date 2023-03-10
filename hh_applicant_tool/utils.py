@@ -9,13 +9,6 @@ from typing import Any
 
 print_err = partial(print, file=sys.stderr)
 
-json_dump_kwargs = dict(
-    indent=2, ensure_ascii=False, sort_keys=True, default=str
-)
-
-dump = partial(json.dump, **json_dump_kwargs)
-dumps = partial(json.dumps, **json_dump_kwargs)
-
 
 class AttrDict(dict):
     __getattr__ = dict.get
@@ -43,8 +36,10 @@ class Config(dict):
         self.update(*args, **kwargs)
         self._config_path.parent.mkdir(exist_ok=True, parents=True)
         with self._lock:
-            with self._config_path.open("w+") as f:
-                dump(self, f)
+            with self._config_path.open("w+") as fp:
+                json.dump(
+                    self, fp, ensure_ascii=True, indent=2, sort_keys=True
+                )
 
     __getitem__ = dict.get
 
