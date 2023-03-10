@@ -14,6 +14,7 @@ class Namespace(BaseNamespace):
     method: str
     endpoint: str
     params: list[str]
+    pretty_print: bool
 
 
 class Operation(BaseOperation):
@@ -30,6 +31,15 @@ class Operation(BaseOperation):
         parser.add_argument(
             "-m", "--method", "--meth", default="GET", help="HTTP Метод"
         )
+        parser.add_argument(
+            "-p",
+            "--pretty-print",
+            "--pretty",
+            help="Если передан, то выведет JSON с отступами",
+            type=bool,
+            default=False,
+            action=argparse.BooleanOptionalAction,
+        )
 
     def run(self, args: Namespace) -> None:
         assert args.config["token"]
@@ -40,7 +50,9 @@ class Operation(BaseOperation):
         params = dict(x.split("=", 1) for x in args.param)
         try:
             result = api.request(args.method, args.endpoint, params=params)
-            print(dumps(result))
+            print(
+                dumps(result, **{} if args.pretty_print else {"indent": None})
+            )
         except ApiError as ex:
             logger.warning(ex)
             return 1
