@@ -2,9 +2,12 @@
 
 > ! Наложен мораторий на доработки/переработки
 
-![Publish to PyPI](https://github.com/s3rgeym/hh-applicant-tool/actions/workflows/publish.yml/badge.svg) [![PyPi Version](https://img.shields.io/pypi/v/hh-applicant-tool)](https://img.shields.io/pypi/v/hh-applicant-tool) [![Python Versions](https://img.shields.io/pypi/pyversions/hh-applicant-tool.svg)](https://img.shields.io/pypi/pyversions/hh-applicant-tool.svg) 
-[![LOC](https://tokei.rs/b1/github/s3rgeym/hh-applicant-tool?category=code)](https://github.com/Aaronepower/tokei)
-[![PyPI - Downloads](https://img.shields.io/pypi/dm/hh-applicant-tool)](https://img.shields.io/pypi/dm/hh-applicant-tool)
+![Publish to PyPI](https://github.com/s3rgeym/hh-applicant-tool/actions/workflows/publish.yml/badge.svg) 
+[![PyPi Version](https://img.shields.io/pypi/v/hh-applicant-tool)]() 
+[![Python Versions](https://img.shields.io/pypi/pyversions/hh-applicant-tool.svg)]() 
+[![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/s3rgeym/hh-applicant-tool)]()
+[![Lines of code](https://img.shields.io/tokei/lines/github/s3rgeym/hh-applicant-tool)]()
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/hh-applicant-tool)]()
 
 Утилита для автоматизации действий на HH.RU таких как рассылка откликов на подходящие вакансии и обновление всех резюме.
 
