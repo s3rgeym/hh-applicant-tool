@@ -7,7 +7,7 @@
 [![Python Versions](https://img.shields.io/pypi/pyversions/hh-applicant-tool.svg)]() 
 [![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/s3rgeym/hh-applicant-tool)]()
 [![Lines of code](https://img.shields.io/tokei/lines/github/s3rgeym/hh-applicant-tool)]()
-[![PyPI - Downloads](https://img.shields.io/pypi/dm/hh-applicant-tool)]()
+[![PyPI - Downloads](https://img.shields.io/pypi/dy/hh-applicant-tool)]()
 
 Утилита для автоматизации действий на HH.RU таких как рассылка откликов на подходящие вакансии и обновление всех резюме.
 
