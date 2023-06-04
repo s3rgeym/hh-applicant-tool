@@ -1,6 +1,6 @@
 # HH Applicant Tool
 
-> ! Наложен мораторий на доработки/переработки. Разработка будет возобновлена после 10 звезд
+> ! Наложен мораторий на доработки/переработки. Разработка будет возобновлена после 10 звезд 💫
 
 ![Publish to PyPI](https://github.com/s3rgeym/hh-applicant-tool/actions/workflows/publish.yml/badge.svg) 
 [![PyPi Version](https://img.shields.io/pypi/v/hh-applicant-tool)]() 
