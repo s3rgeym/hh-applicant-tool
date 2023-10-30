@@ -6,7 +6,6 @@
 [![PyPi Version](https://img.shields.io/pypi/v/hh-applicant-tool)]() 
 [![Python Versions](https://img.shields.io/pypi/pyversions/hh-applicant-tool.svg)]() 
 [![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/s3rgeym/hh-applicant-tool)]()
-[![Lines of code](https://img.shields.io/tokei/lines/github/s3rgeym/hh-applicant-tool)]()
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/hh-applicant-tool)]()
 [![Total Downloads](https://static.pepy.tech/badge/hh-applicant-tool)]()
 
