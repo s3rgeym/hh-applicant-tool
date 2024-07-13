@@ -7,7 +7,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
-print_err = partial(print, file=sys.stderr)
+print_err = partial(print, file=sys.stderr, flush=True)
 
 
 class AttrDict(dict):
