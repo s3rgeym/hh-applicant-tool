@@ -10,7 +10,7 @@ page=0
 per_page=100
 
 while true; do
-  output=$(poetry run hh-applicant-tool -vv call-api /negotiations \
+  output=$(hh-applicant-tool -vv call-api /negotiations \
     "page=$page" \
     "per_page=$per_page")
   urls=($(jq -r '.items[].vacancy.employer.url' <<< "$output"))
