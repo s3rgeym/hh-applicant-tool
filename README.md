@@ -17,7 +17,17 @@
 - socat
 - python >= 3.10
 
-Нужную версию можно поставить через asdf/pyenv, а вот socat придется доставить.
+Нужную версию можно поставить через asdf/pyenv, а вот socat придется доставить. В Arch-based:
+
+```bash
+yay -S socat
+```
+
+Пример работы:
+
+![image](https://github.com/user-attachments/assets/4936a8dd-f671-4788-8106-0470d5ce1dd6)
+![image](https://github.com/user-attachments/assets/55ab24ba-5325-40b4-9bd9-69ebcbc011c4)
+
 
 Данная утилита не может работать от root. Я не планирую добавлять поддержку Windows, но никто не мешает вам ее реализовать.
 
