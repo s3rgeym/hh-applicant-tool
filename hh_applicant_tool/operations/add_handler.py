@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 from pathlib import Path
 from subprocess import check_call
 
@@ -36,6 +37,12 @@ class Operation(BaseOperation):
         )
 
     def run(self, args: Namespace) -> None:
+        # Проверка, запущен ли скрипт в WSL
+        if self.is_wsl():
+            print_err("⚠️ Предупреждение: Скрипт запущен в WSL 💩. Функциональность может быть ограничена или не работать вовсе.")
+            print_err("Рекомендуется запуск на нативных Linux-системах.")
+            return 1
+
         # TODO: с root не будет работать
         desktop_path = Path(
             "~/.local/share/applications/hhandroid.desktop"
@@ -48,3 +55,7 @@ class Operation(BaseOperation):
         else:
             print_err("⛔ Обработчик уже существует!")
             return 1
+
+    def is_wsl(self) -> bool:
+        """Проверяет, запущен ли скрипт в WSL."""
+        return "WSL_DISTRO_NAME" in os.environ
