@@ -61,6 +61,17 @@ class Operation(BaseOperation):
         pass
 
     def run(self, args: Namespace) -> None:
+        # Проверяем, установлен ли socat
+        if not self.is_socat_installed():
+            print("⚠️ Предупреждение: socat не установлен. Для работы с unix-сокетами рекомендуется установить socat.")
+            print()
+            print("Вы можете установить socat с помощью вашего пакетного менеджера, например:")
+            print()
+            print("  - Debian/Ubuntu: sudo apt-get install socat")
+            print("  - Fedora: sudo dnf install socat")
+            print("  - Arch/Manjaro: sudo pacman -S socat")
+            print()
+
         oauth = OAuthClient(
             user_agent=(
                 args.config["oauth_user_agent"] or args.config["user_agent"]
@@ -76,3 +87,11 @@ class Operation(BaseOperation):
             HHANDROID_SOCKET_PATH, oauth_client=oauth, config=args.config
         )
         server.serve_forever()
+
+    def is_socat_installed(self) -> bool:
+        """Проверяет, установлен ли socat в системе."""
+        try:
+            subprocess.run(["socat", "-h"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except FileNotFoundError:
+            return False
