@@ -1,8 +1,8 @@
-# Этот модуль можно использовать как образец для других
 import argparse
 import logging
 import random
-from typing import TextIO
+import time
+from typing import TextIO, Tuple
 
 from ..api import ApiClient, ApiError, BadRequest
 from ..main import BaseOperation
@@ -16,6 +16,9 @@ logger = logging.getLogger(__package__)
 class Namespace(BaseNamespace):
     resume_id: str | None
     message_list: TextIO
+    force_message: bool
+    apply_interval: Tuple[float, float]
+    page_interval: Tuple[float, float]
 
 
 class Operation(BaseOperation):
@@ -34,6 +37,27 @@ class Operation(BaseOperation):
             default=False,
             action=argparse.BooleanOptionalAction,
         )
+        parser.add_argument(
+            "--apply-interval",
+            help="Интервал между отправкой откликов в формате X сек или X-Y, где X и Y — секунды",
+            default="1-5",
+            type=self._parse_interval,
+        )
+        parser.add_argument(
+            "--page-interval",
+            help="Интервал между получением следующей страницы рекомендованных вакансий в формате X сек или X-Y, где X и Y — секунды",
+            default="3-7",
+            type=self._parse_interval,
+        )
+
+    @staticmethod
+    def _parse_interval(interval: str) -> Tuple[float, float]:
+        """Парсит строку интервала и возвращает кортеж с минимальным и максимальным значениями."""
+        if "-" in interval:
+            min_interval, max_interval = map(float, interval.split("-"))
+        else:
+            min_interval = max_interval = float(interval)
+        return min_interval, max_interval
 
     def run(self, args: Namespace) -> None:
         assert args.config["token"]
@@ -45,8 +69,6 @@ class Operation(BaseOperation):
             resume_id := args.resume_id or args.config["default_resume_id"]
         ):
             resumes: ApiListResponse = api.get("/resumes/mine")
-            # Используем id первого резюме
-            # TODO: создать 10 резюме и рассылать по 2000 откликов в сутки
             resume_id = resumes["items"][0]["id"]
         if args.message_list:
             application_messages = list(
@@ -56,31 +78,38 @@ class Operation(BaseOperation):
             application_messages = [
                 "Меня заинтересовала Ваша вакансия %(name)s",
                 "Прошу рассмотреть мою кандидатуру на вакансию %(name)s",
+                "Ваша вакансия %(name)s соответствует моим навыкам и опыту",
+                "Хочу присоединиться к вашей команде в качестве %(name)s",
             ]
+
+        apply_min_interval, apply_max_interval = args.apply_interval
+        page_min_interval, page_max_interval = args.page_interval
+
         self._apply_similar(
-            api, resume_id, args.force_message, application_messages
+            api, resume_id, args.force_message, application_messages, apply_min_interval, apply_max_interval, page_min_interval, page_max_interval
         )
 
     def _get_vacancies(
-        self, api: ApiClient, resume_id: str
+        self, api: ApiClient, resume_id: str, page_min_interval: float, page_max_interval: float
     ) -> list[VacancyItem]:
         rv = []
-        # работает ограничение: глубина возвращаемых результатов не может быть больше 2000
-        # Номер страницы (считается от 0, по умолчанию - 0)
         per_page = 100
         for page in range(20):
             res: ApiListResponse = api.get(
                 f"/resumes/{resume_id}/similar_vacancies",
                 page=page,
                 per_page=per_page,
-                # Мне кажется, что так поисковая выдача можно забиться неадекватами, которые по полгода кого-то ищут
-                # Но так откликается на что-то уж совсем нерелевантное
-                # order_by="publication_time",
                 order_by="relevance",
             )
             rv.extend(res["items"])
             if page >= res["pages"] - 1:
                 break
+
+            # Задержка перед получением следующей страницы
+            if page > 0:
+                interval = random.uniform(page_min_interval, page_max_interval)
+                time.sleep(interval)
+
         return rv
 
     def _apply_similar(
@@ -89,15 +118,20 @@ class Operation(BaseOperation):
         resume_id: str,
         force_message: bool,
         application_messages: list[str],
+        apply_min_interval: float,
+        apply_max_interval: float,
+        page_min_interval: float,
+        page_max_interval: float,
     ) -> None:
-        # Получаем список рекомендованных вакансий и отправляем заявки
-        # Проблема тут в том, что вакансии на которые мы отклимкались должны исчезать из поиска, но ОНИ ТАМ ПРИСУТСТВУЮТ. Так же есть вакансии с ебучими тестами, которые всегда вверху. Вроде можно отсортировать по дате, а потом постепенно уменьшать диапазон, но он не точный и округляется до 5 минут, а потому там повторы
         item: VacancyItem
-        for item in self._get_vacancies(api, resume_id):
-            # В рот я ебал вас и ваши тесты, пидоры
+        for item in self._get_vacancies(api, resume_id, page_min_interval, page_max_interval):
             if item["has_test"]:
                 continue
-            # Откликаемся на ваканчию
+
+            # Задержка перед отправкой отклика
+            interval = random.uniform(apply_min_interval, apply_max_interval)
+            time.sleep(interval)
+
             params = {
                 "resume_id": resume_id,
                 "vacancy_id": item["id"],
@@ -121,4 +155,5 @@ class Operation(BaseOperation):
                 print_err("❗ Ошибка:", ex)
                 if isinstance(ex, BadRequest) and ex.limit_exceeded:
                     break
+
         print("📝 Отклики на вакансии разосланы!")
