@@ -39,14 +39,14 @@ class Operation(BaseOperation):
         )
         parser.add_argument(
             "--apply-interval",
-            help="Интервал между отправкой откликов в формате X сек или X-Y, где X и Y — секунды",
+            help="Интервал между отправкой откликов в секундах (X, X-Y)",
             default="1-5",
             type=self._parse_interval,
         )
         parser.add_argument(
             "--page-interval",
-            help="Интервал между получением следующей страницы рекомендованных вакансий в формате X сек или X-Y, где X и Y — секунды",
-            default="3-7",
+            help="Интервал между получением следующей страницы рекомендованных вакансий в секундах (X, X-Y)",
+            default="1-3",
             type=self._parse_interval,
         )
 
@@ -57,7 +57,7 @@ class Operation(BaseOperation):
             min_interval, max_interval = map(float, interval.split("-"))
         else:
             min_interval = max_interval = float(interval)
-        return min_interval, max_interval
+        return min(min_interval, max_interval), max(min_interval, max_interval)
 
     def run(self, args: Namespace) -> None:
         assert args.config["token"]
@@ -76,10 +76,11 @@ class Operation(BaseOperation):
             )
         else:
             application_messages = [
-                "Меня заинтересовала Ваша вакансия %(name)s",
-                "Прошу рассмотреть мою кандидатуру на вакансию %(name)s",
+                "Меня заинтересовала ваша вакансия %(name)s",
+                "Прошу рассмотреть мою жалкую кандидатуру на вакансию %(name)s",
                 "Ваша вакансия %(name)s соответствует моим навыкам и опыту",
-                "Хочу присоединиться к вашей команде в качестве %(name)s",
+                "Хочу присоединиться к вашей успешной команде лидеров рынка в качестве %(name)s",
+                "Мое резюме содержит все баззворды, указанные в вашей вакансии %(name)s",
             ]
 
         apply_min_interval, apply_max_interval = args.apply_interval
