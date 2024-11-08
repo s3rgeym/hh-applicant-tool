@@ -129,6 +129,8 @@ class Operation(BaseOperation):
             if item["has_test"]:
                 continue
 
+            # r = api.delete(f"/negotiations/active/{item['id']}")
+
             # Задержка перед отправкой отклика
             interval = random.uniform(apply_min_interval, apply_max_interval)
             time.sleep(interval)
