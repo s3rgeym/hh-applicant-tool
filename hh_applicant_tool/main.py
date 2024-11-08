@@ -14,7 +14,7 @@ from .color_log import ColorHandler
 from .utils import Config
 
 DEFAULT_CONFIG_PATH = (
-    Path(getenv("XDG_CONFIG_PATH", Path.home() / ".config"))
+    Path(getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
     / __package__.replace("_", "-")
     / "config.json"
 )
