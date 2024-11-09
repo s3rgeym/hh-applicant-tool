@@ -87,11 +87,22 @@ class Operation(BaseOperation):
         page_min_interval, page_max_interval = args.page_interval
 
         self._apply_similar(
-            api, resume_id, args.force_message, application_messages, apply_min_interval, apply_max_interval, page_min_interval, page_max_interval
+            api,
+            resume_id,
+            args.force_message,
+            application_messages,
+            apply_min_interval,
+            apply_max_interval,
+            page_min_interval,
+            page_max_interval,
         )
 
     def _get_vacancies(
-        self, api: ApiClient, resume_id: str, page_min_interval: float, page_max_interval: float
+        self,
+        api: ApiClient,
+        resume_id: str,
+        page_min_interval: float,
+        page_max_interval: float,
     ) -> list[VacancyItem]:
         rv = []
         per_page = 100
@@ -125,26 +136,35 @@ class Operation(BaseOperation):
         page_max_interval: float,
     ) -> None:
         item: VacancyItem
-        for item in self._get_vacancies(api, resume_id, page_min_interval, page_max_interval):
+        for item in self._get_vacancies(
+            api, resume_id, page_min_interval, page_max_interval
+        ):
             try:
                 if item["has_test"]:
-                    print('Пропускаем тест', item["alternate_url"])
+                    print("Пропускаем тест", item["alternate_url"])
                     continue
 
-                relations = item.get('relations', [])
-    
-                if 'got_response' in relations:
-                    # Тупая пизда ее даже не рассматривала
-                    print('Отменяем заявку чтобы отправить ее снова', item["alternate_url"])
-                    api.delete(f"/negotiations/active/{item['id']}")
-                else relations:
-                    print('Пропускаем ответ на зяавку', item["alternate_url"]) 
-                    continue           
-    
+                relations = item.get("relations", [])
+
+                # Там черезжопно нужно хеш отклика получать чтобы его отменить
+                # if "got_response" in relations:
+                #     # Тупая пизда ее даже не рассматривала
+                #     print(
+                #         "Отменяем заявку чтобы отправить ее снова",
+                #         item["alternate_url"],
+                #     )
+                #     api.delete(f"/negotiations/active/{item['id']}")
+                # elif relations:
+                if relations:
+                    print("Пропускаем ответ на заявку", item["alternate_url"])
+                    continue
+
                 # Задержка перед отправкой отклика
-                interval = random.uniform(apply_min_interval, apply_max_interval)
+                interval = random.uniform(
+                    apply_min_interval, apply_max_interval
+                )
                 time.sleep(interval)
-    
+
                 params = {
                     "resume_id": resume_id,
                     "vacancy_id": item["id"],
@@ -154,7 +174,7 @@ class Operation(BaseOperation):
                         else ""
                     ),
                 }
-                
+
                 res = api.post("/negotiations", params)
                 assert res == {}
                 print(
