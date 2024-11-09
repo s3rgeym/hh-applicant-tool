@@ -4,3 +4,4 @@ __pycache__
 employers.txt
 sites.txt
 output.json
+/docker/config.json
