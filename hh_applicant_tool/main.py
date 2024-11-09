@@ -23,12 +23,10 @@ logger = logging.getLogger(__package__)
 
 
 class BaseOperation(metaclass=ABCMeta):
-    def setup_parser(self, parser: argparse.ArgumentParser) -> None:
-        ...
+    def setup_parser(self, parser: argparse.ArgumentParser) -> None: ...
 
     @abstractmethod
-    def run(self, args: argparse.Namespace) -> None | int:
-        ...
+    def run(self, args: argparse.Namespace) -> None | int: ...
 
 
 OPERATIONS = "operations"
@@ -41,12 +39,16 @@ class Namespace(argparse.Namespace):
 
 class HHApplicantTool:
     """Утилита для автоматизации действий соискателя на сайте hh.ru.
-    Описание, исходники и предложения: <https://github.com/s3rgeym/hh-applicant-tool>.
+
+    Исходники и предложения: <https://github.com/s3rgeym/hh-applicant-tool>
+
+    Группа поддержки: <https://t.me/vaitishniki>
     """
 
     def create_parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
             description=self.__doc__,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
         )
         parser.add_argument(
             "-c",
@@ -82,9 +84,7 @@ class HHApplicantTool:
         logger.setLevel(log_level)
         handler = ColorHandler()
         # [C] Critical Error Occurred
-        handler.setFormatter(
-            logging.Formatter("[%(levelname).1s] %(message)s")
-        )
+        handler.setFormatter(logging.Formatter("[%(levelname).1s] %(message)s"))
         logger.addHandler(handler)
         if args.run:
             try:
