@@ -126,25 +126,35 @@ class Operation(BaseOperation):
     ) -> None:
         item: VacancyItem
         for item in self._get_vacancies(api, resume_id, page_min_interval, page_max_interval):
-            if item["has_test"]:
-                continue
-
-            # r = api.delete(f"/negotiations/active/{item['id']}")
-
-            # Задержка перед отправкой отклика
-            interval = random.uniform(apply_min_interval, apply_max_interval)
-            time.sleep(interval)
-
-            params = {
-                "resume_id": resume_id,
-                "vacancy_id": item["id"],
-                "message": (
-                    random.choice(application_messages) % item
-                    if force_message or item["response_letter_required"]
-                    else ""
-                ),
-            }
             try:
+                if item["has_test"]:
+                    print('Пропускаем тест', item["alternate_url"])
+                    continue
+
+                relations = item.get('relations', [])
+    
+                if 'got_response' in relations:
+                    # Тупая пизда ее даже не рассматривала
+                    print('Отменяем заявку чтобы отправить ее снова', item["alternate_url"])
+                    api.delete(f"/negotiations/active/{item['id']}")
+                else relations:
+                    print('Пропускаем ответ на зяавку', item["alternate_url"]) 
+                    continue           
+    
+                # Задержка перед отправкой отклика
+                interval = random.uniform(apply_min_interval, apply_max_interval)
+                time.sleep(interval)
+    
+                params = {
+                    "resume_id": resume_id,
+                    "vacancy_id": item["id"],
+                    "message": (
+                        random.choice(application_messages) % item
+                        if force_message or item["response_letter_required"]
+                        else ""
+                    ),
+                }
+                
                 res = api.post("/negotiations", params)
                 assert res == {}
                 print(
