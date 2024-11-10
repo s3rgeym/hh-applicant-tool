@@ -25,7 +25,7 @@ COPY . /app
 COPY crontab /etc/crontabs/docker
 
 # Переключаемся на пользователя с указанными UID и GID
-USER docker
+#USER docker
 
 # Команда, которая будет выполнена при запуске контейнера
-CMD ["crond", "-f"]
+CMD ["crond", "-f", "-d", "0"]

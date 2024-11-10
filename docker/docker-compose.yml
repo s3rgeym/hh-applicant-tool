@@ -5,8 +5,4 @@ services:
       dockerfile: Dockerfile
     volumes:
       - .:/app
-    user: "${UID}:${GID}"
-    environment:
-      - UID=${UID}
-      - GID=${GID}
     restart: always
