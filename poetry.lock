@@ -453,7 +453,7 @@ testutils = ["gitpython (>3)"]
 name = "pyqt6"
 version = "6.7.1"
 description = "Python bindings for the Qt cross platform application toolkit"
-optional = false
+optional = true
 python-versions = ">=3.8"
 files = [
     {file = "PyQt6-6.7.1-1-cp38-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:7f397f4b38b23b5588eb2c0933510deb953d96b1f0323a916c4839c2a66ccccc"},
@@ -473,7 +473,7 @@ PyQt6-sip = ">=13.8,<14"
 name = "pyqt6-qt6"
 version = "6.7.3"
 description = "The subset of a Qt installation needed by PyQt6."
-optional = false
+optional = true
 python-versions = "*"
 files = [
     {file = "PyQt6_Qt6-6.7.3-py3-none-macosx_10_14_x86_64.whl", hash = "sha256:f517a93b6b1a814d4aa6587adc312e812ebaf4d70415bb15cfb44268c5ad3f5f"},
@@ -487,7 +487,7 @@ files = [
 name = "pyqt6-sip"
 version = "13.8.0"
 description = "The sip module support for PyQt6"
-optional = false
+optional = true
 python-versions = ">=3.8"
 files = [
     {file = "PyQt6_sip-13.8.0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:cedd554c643e54c4c2e12b5874781a87441a1b405acf3650a4a2e1df42aae231"},
@@ -517,7 +517,7 @@ files = [
 name = "pyqt6-webengine"
 version = "6.7.0"
 description = "Python bindings for the Qt WebEngine framework"
-optional = false
+optional = true
 python-versions = ">=3.8"
 files = [
     {file = "PyQt6_WebEngine-6.7.0-cp38-abi3-macosx_10_14_universal2.whl", hash = "sha256:1a3df9d6ac2dfa1bb3b826f3926c13db5b6d427e96e8d574c5aa5445a8b13db8"},
@@ -536,7 +536,7 @@ PyQt6-WebEngine-Qt6 = ">=6.7.0,<6.8.0"
 name = "pyqt6-webengine-qt6"
 version = "6.7.3"
 description = "The subset of a Qt installation needed by PyQt6-WebEngine."
-optional = false
+optional = true
 python-versions = "*"
 files = [
     {file = "PyQt6_WebEngine_Qt6-6.7.3-py3-none-macosx_10_14_x86_64.whl", hash = "sha256:68812b2a5d0d417ce32dc4d11a304e7838e02c51013712e7533faf03448672d9"},
@@ -553,7 +553,7 @@ PyQt6-WebEngineSubwheel-Qt6 = "6.7.3"
 name = "pyqt6-webenginesubwheel-qt6"
 version = "6.7.3"
 description = "The subset of a Qt installation needed by PyQt6-WebEngine."
-optional = false
+optional = true
 python-versions = "*"
 files = [
     {file = "PyQt6_WebEngineSubwheel_Qt6-6.7.3-py3-none-macosx_10_14_x86_64.whl", hash = "sha256:60a82726a5f87d788455fe7609df2c791507da64a9b6cefd5e9b590978da184b"},
@@ -746,7 +746,10 @@ files = [
     {file = "wrapt-1.16.0.tar.gz", hash = "sha256:5f370f952971e7d17c7d1ead40e49f32345a7f7a5373571ef44d800d06b1899d"},
 ]
 
+[extras]
+qt = ["pyqt6", "pyqt6-webengine"]
+
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "98d7d296e71b1b1bee2b26b2df8fb8636de1aa4d609f0e9b156a09e0869d68bf"
+content-hash = "bcedf3ec880f68130da203180f42339fdd9b45651c2fdfa387c71cf556985dd6"
