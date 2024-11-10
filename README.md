@@ -118,7 +118,7 @@ https://hh.ru/employer/1918903
 $ hh-applicant-tool -vv authorize
 ```
 
-![Screenshot_20241111_003952](https://gist.github.com/user-attachments/assets/50432a70-eeb1-47db-a992-76ada2f74f8e)
+![image](https://github.com/user-attachments/assets/88961e31-4ea3-478f-8c43-914d6785bc3b)
 
 В случае успешной авторизации токены будут сохранены `~/.config/hh-applicant-tool/config.json`:
 
