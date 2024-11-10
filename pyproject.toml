@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hh-applicant-tool"
-version = "0.2.5"
+version = "0.3.0"
 description = ""
 authors = ["Senior YAML Developer <yamldeveloper@proton.me>"]
 readme = "README.md"
@@ -11,6 +11,9 @@ python = "^3.10"
 requests = "^2.28.2"
 prettytable = "^3.6.0"
 
+[tool.poetry.group.qt.dependencies]
+pyqt6 = "^6.7.1"
+pyqt6-webengine = "^6.7.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.1.0"
