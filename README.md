@@ -16,7 +16,6 @@ asdf/pyenv/conda и что-то еще...
 
 Пример работы:
 
-![image](https://github.com/user-attachments/assets/4936a8dd-f671-4788-8106-0470d5ce1dd6)
 ![image](https://github.com/user-attachments/assets/55ab24ba-5325-40b4-9bd9-69ebcbc011c4)
 
 
