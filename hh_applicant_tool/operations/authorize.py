@@ -1,57 +1,81 @@
 import argparse
 import logging
-import socketserver
-import subprocess
 import time
-from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
+import sys
+from typing import Any
+
+try:
+    from PyQt6.QtCore import QUrl
+    from PyQt6.QtWidgets import QApplication, QMainWindow
+    from PyQt6.QtWebEngineCore import QWebEngineUrlSchemeHandler
+    from PyQt6.QtWebEngineWidgets import QWebEngineView
+except ImportError:
+    # Заглушки чтобы на сервере не нужно было ставить сотни мегабайт qt-говна
+
+    class QUrl:
+        pass
+
+    class QApplication:
+        pass
+
+    class QMainWindow:
+        pass
+
+    class QWebEngineUrlSchemeHandler:
+        pass
+
+    class QWebEngineView:
+        pass
+
 
 from ..api import OAuthClient
-from ..constants import HHANDROID_SOCKET_PATH
 from ..main import BaseOperation, Namespace
 from ..utils import Config
 
 logger = logging.getLogger(__package__)
 
 
-class HHAndroidProtocolServer(socketserver.ThreadingUnixStreamServer):
+class HHAndroidUrlSchemeHandler(QWebEngineUrlSchemeHandler):
+    def __init__(self, parent: "WebViewWindow") -> None:
+        super().__init__()
+        self.parent = parent
+
+    def requestStarted(self, info: Any) -> None:
+        url = info.requestUrl().toString()
+        if url.startswith("hhandroid://"):
+            self.parent.handle_redirect_uri(url)
+
+
+class WebViewWindow(QMainWindow):
     def __init__(
-        self,
-        socket_path: Path | str,
-        oauth_client: OAuthClient,
-        config: Config,
+        self, url: str, oauth_client: OAuthClient, config: Config
     ) -> None:
-        self._socket_path = Path(socket_path)
-        self._oauth_client = oauth_client
-        self._config = config
-        super().__init__(str(self._socket_path), HHAndroidProtocolHandler)
-
-    def server_bind(self) -> None:
-        self._socket_path.parent.mkdir(parents=True, exist_ok=True)
-        self._socket_path.unlink(missing_ok=True)
-        return super().server_bind()
-
-    def server_close(self) -> None:
-        self._socket_path.unlink()
-        return super().server_close()
+        super().__init__()
+        self.oauth_client = oauth_client
+        self.config = config
+        # Настройка WebEngineView
+        self.web_view = QWebEngineView()
+        self.setCentralWidget(self.web_view)
+        self.setWindowTitle("Авторизация на HH.RU")
+        self.hhandroid_handler = HHAndroidUrlSchemeHandler(self)
+        # Установка перехватчика запросов и обработчика кастомной схемы
+        profile = self.web_view.page().profile()
+        profile.installUrlSchemeHandler(b"hhandroid", self.hhandroid_handler)
+        # Настройки окна для мобильного вида
+        self.resize(480, 800)
+        self.web_view.setUrl(QUrl(url))
 
     def handle_redirect_uri(self, redirect_uri: str) -> None:
-        logger.debug(redirect_uri)
+        logger.debug(f"handle redirect uri: {redirect_uri}")
         sp = urlsplit(redirect_uri)
-        assert sp.scheme == "hhandroid"
-        assert sp.netloc == "oauthresponse"
-        code = parse_qs(sp.query)["code"][0]
-        token = self._oauth_client.authenticate(code)
-        logger.debug("Сохраняем токен")
-        # токен не содержит каких-то меток о времени создания
-        self._config.save(token=dict(token, created_at=int(time.time())))
-        print("🔓 Авторизация прошла успешно!")
-        self.shutdown()
-
-
-class HHAndroidProtocolHandler(socketserver.BaseRequestHandler):
-    def handle(self) -> None:
-        self.server.handle_redirect_uri(self.request.recv(1024).decode())
+        code = parse_qs(sp.query).get("code", [None])[0]
+        if code:
+            token = self.oauth_client.authenticate(code)
+            logger.debug("Сохраняем токен")
+            self.config.save(token=dict(token, created_at=int(time.time())))
+            print("🔓 Авторизация прошла успешно!")
+            self.close()
 
 
 class Operation(BaseOperation):
@@ -61,37 +85,16 @@ class Operation(BaseOperation):
         pass
 
     def run(self, args: Namespace) -> None:
-        # Проверяем, установлен ли socat
-        if not self.is_socat_installed():
-            print("⚠️ Предупреждение: socat не установлен. Для работы с unix-сокетами рекомендуется установить socat.")
-            print()
-            print("Вы можете установить socat с помощью вашего пакетного менеджера, например:")
-            print()
-            print("  - Debian/Ubuntu: sudo apt-get install socat")
-            print("  - Fedora: sudo dnf install socat")
-            print("  - Arch/Manjaro: sudo pacman -S socat")
-            print()
-
         oauth = OAuthClient(
             user_agent=(
                 args.config["oauth_user_agent"] or args.config["user_agent"]
             ),
         )
-        print("Пробуем открыть в браузере:", oauth.authorize_url)
-        subprocess.Popen(["xdg-open", oauth.authorize_url])
-        print("Авторизуйтесь и нажмите <Подтвердить>")
-        logger.info(
-            "🚀 Запускаем TCP-сервер и слушаем unix://%s", HHANDROID_SOCKET_PATH
-        )
-        server = HHAndroidProtocolServer(
-            HHANDROID_SOCKET_PATH, oauth_client=oauth, config=args.config
-        )
-        server.serve_forever()
 
-    def is_socat_installed(self) -> bool:
-        """Проверяет, установлен ли socat в системе."""
-        try:
-            subprocess.run(["socat", "-h"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return True
-        except FileNotFoundError:
-            return False
+        app = QApplication(sys.argv)
+        window = WebViewWindow(
+            oauth.authorize_url, oauth_client=oauth, config=args.config
+        )
+        window.show()
+
+        app.exec()
