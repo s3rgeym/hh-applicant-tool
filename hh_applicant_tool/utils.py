@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from datetime import datetime
 import hashlib
 import json
 import platform
@@ -9,6 +9,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 from os import getenv
+from .constants import INVALID_ISO8601_FORMAT
 
 print_err = partial(print, file=sys.stderr, flush=True)
 
@@ -65,3 +66,9 @@ def hash_with_salt(data: str, salt: str = "HorsePenis") -> str:
     # Вычисляем хеш SHA-256
     hashed_data = hashlib.sha256(salted_data.encode()).hexdigest()
     return hashed_data
+
+
+def fix_datetime(dt: str | None) -> str | None:
+    if dt is None:
+        return None
+    return datetime.strptime(dt, INVALID_ISO8601_FORMAT).isoformat()
