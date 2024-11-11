@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import platform
 import sys
 from functools import partial
 from pathlib import Path
@@ -10,6 +11,16 @@ from typing import Any
 print_err = partial(print, file=sys.stderr, flush=True)
 
 
+def get_config_path() -> Path:
+    match platform.system():
+        case "Windows":
+            return Path(getenv("APPDATA", Path.home() / "AppData/Roaming"))
+        case "Darwin":  # macOS
+            return Path.home() / "Library/Application Support"
+        case _:  # Linux and etc
+            return Path(getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
+            
+
 class AttrDict(dict):
     __getattr__ = dict.get
     __setattr__ = dict.__setitem__
@@ -18,8 +29,8 @@ class AttrDict(dict):
 
 # TODO: добавить defaults
 class Config(dict):
-    def __init__(self, config_path: str | Path):
-        self._config_path = Path(config_path)
+    def __init__(self, config_path: str | Path | None = None):
+        self._config_path = Path(config_path or get_config_path())
         self._lock = Lock()
         self.load()
 
