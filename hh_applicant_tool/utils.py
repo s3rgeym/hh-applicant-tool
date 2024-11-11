@@ -16,9 +16,9 @@ print_err = partial(print, file=sys.stderr, flush=True)
 def get_config_path() -> Path:
     match platform.system():
         case "Windows":
-            return Path(getenv("APPDATA", Path.home() / "AppData/Roaming"))
+            return Path(getenv("APPDATA", Path.home() / "AppData" / "Roaming"))
         case "Darwin":  # macOS
-            return Path.home() / "Library/Application Support"
+            return Path.home() / "Library" / "Application Support"
         case _:  # Linux and etc
             return Path(getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
 
