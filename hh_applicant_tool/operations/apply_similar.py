@@ -2,13 +2,14 @@ import argparse
 import logging
 import random
 import time
+from collections import defaultdict
 from typing import TextIO, Tuple
 
 from ..api import ApiClient, ApiError, BadRequest
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse, VacancyItem
-from ..utils import print_err, truncate_string, hash_with_salt
+from ..utils import print_err, truncate_string
 from ..telemetry_client import get_client as get_telemetry_client, TelemetryError
 
 logger = logging.getLogger(__package__)
@@ -137,26 +138,15 @@ class Operation(BaseOperation):
     ) -> None:
         item: VacancyItem
 
-        # хеш резюме можно было бы не шифровать, но
-        hashed_resume_id = hash_with_salt(resume_id)
-
         # Телеметрия не включает ваши персональные данные, она нужна для сбора информации о работодателях и их вакансиях
-        # для выбора Мисс тупая пезда ХХ  
         telemetry_client = get_telemetry_client()
-        
-        telemetry_data = {
-            'resume_hash': hashed_resume_id,
-            # могут встречаться одни и те же вакансии и работодатели
-            'vacancies': {},
-            'employers': {},
-        }
+        telemetry_data = defaultdict(dict)
         
         for item in self._get_vacancies(
             api, resume_id, page_min_interval, page_max_interval
         ):
             try:
                 # Информация о вакансии
-
                 vacancy_id = item['id']
 
                 telemetry_data['vacancies'][vacancy_id] = {
@@ -167,7 +157,6 @@ class Operation(BaseOperation):
                     'direct_url': item.get('alternate_url'),  # ссылка на вакансию
                     'created_at': item.get('created_at'),  # будем вычислять говно-вакансии, которые по полгода висят
                     'published_at': item.get('published_at'),
-                    'relations': item.get('relations'),  # список got_invitation (приглашение), *rejection и тп,
                     'contacts': item.get('contacts'), # пиздорванки там телеграм для связи указывают
                     # Остальное неинтересно
                 }
