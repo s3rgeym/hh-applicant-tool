@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import platform
 import sys
@@ -57,3 +58,11 @@ class Config(dict):
 
 def truncate_string(s: str, limit: int = 75, ellipsis: str = "…") -> str:
     return s[:limit] + bool(s[limit:]) * ellipsis
+
+
+def hash_with_salt(data: str, salt: str) -> str:
+    # Объединяем данные и соль
+    salted_data = data + salt
+    # Вычисляем хеш SHA-256
+    hashed_data = hashlib.sha256(salted_data.encode()).hexdigest()
+    return hashed_data
