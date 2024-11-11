@@ -134,7 +134,7 @@ class Operation(BaseOperation):
                 if getenv("TEST_TELEMETRY"):
                     break
 
-                if vacancy["has_test"]:
+                if vacancy.get("has_test"):
                     print("🚫 Пропускаем тест", vacancy["alternate_url"])
                     continue
 
@@ -147,16 +147,23 @@ class Operation(BaseOperation):
                     )
                     continue
 
-                employer_id = vacancy["employer"]["id"]
-                employer = api.get(f"/employers/{employer_id}")
+                try:
+                    employer_id = vacancy["employer"]["id"]
+                except IndexError:
+                    logger.warning(
+                        f"Вакансия без работодателя: {vacancy['alternate_url']}"
+                    )
+                else:
+                    employer = api.get(f"/employers/{employer_id}")
 
-                telemetry_data["employers"][employer_id] = {
-                    "name": employer.get("name"),
-                    "type": employer.get("type"),
-                    "description": employer.get("description"),
-                    "site_url": employer.get("site_url"),
-                    "area": employer.get("area", {}).get("name"),  # город
-                }
+                    telemetry_data["employers"][employer_id] = {
+                        "name": employer.get("name"),
+                        "type": employer.get("type"),
+                        "description": employer.get("description"),
+                        "site_url": employer.get("site_url"),
+                        "area": employer.get("area", {}).get("name"),  # город
+                    }
+
                 # Задержка перед отправкой отклика
                 interval = random.uniform(
                     apply_min_interval, apply_max_interval
@@ -242,7 +249,11 @@ class Operation(BaseOperation):
                 "contacts": vacancy.get(
                     "contacts"
                 ),  # пиздорванки там телеграм для связи указывают
-                "employer_id": int(vacancy["employer"]["id"]),
+                # HH с точки зрения перфикциониста — кусок говна, где кривые
+                # форматы даты, у вакансий может не быть работодателя...
+                "employer_id": int(vacancy["employer"]["id"])
+                if "employer" in vacancy and "id" in vacancy["employer"]
+                else None,
                 # Остальное неинтересно
             }
 
@@ -250,7 +261,9 @@ class Operation(BaseOperation):
         self, telemetry_client, telemetry_data: defaultdict
     ) -> None:
         try:
-            res = telemetry_client.send_telemetry("/collect", dict(telemetry_data))
+            res = telemetry_client.send_telemetry(
+                "/collect", dict(telemetry_data)
+            )
             logger.debug(res)
         except TelemetryError as ex:
             logger.error(ex)
