@@ -11,10 +11,10 @@ from pkgutil import iter_modules
 from typing import Sequence
 
 from .color_log import ColorHandler
-from .utils import Config
+from .utils import Config, get_config_path
 
 DEFAULT_CONFIG_PATH = (
-    Path(getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
+    get_config_path()
     / __package__.replace("_", "-")
     / "config.json"
 )
