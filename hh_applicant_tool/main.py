@@ -42,7 +42,7 @@ class HHApplicantTool:
 
     Исходники и предложения: <https://github.com/s3rgeym/hh-applicant-tool>
 
-    Группа поддержки: <https://t.me/vaitishniki>
+    Группа поддержки: <https://t.me/+aSjr8qM_AP85ZDBi>
     """
 
     def create_parser(self) -> argparse.ArgumentParser:
