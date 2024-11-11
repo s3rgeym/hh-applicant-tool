@@ -8,6 +8,7 @@ from functools import partial
 from pathlib import Path
 from threading import Lock
 from typing import Any
+from os import getenv
 
 print_err = partial(print, file=sys.stderr, flush=True)
 
@@ -20,7 +21,7 @@ def get_config_path() -> Path:
             return Path.home() / "Library/Application Support"
         case _:  # Linux and etc
             return Path(getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
-            
+
 
 class AttrDict(dict):
     __getattr__ = dict.get
@@ -49,9 +50,7 @@ class Config(dict):
         self._config_path.parent.mkdir(exist_ok=True, parents=True)
         with self._lock:
             with self._config_path.open("w+") as fp:
-                json.dump(
-                    self, fp, ensure_ascii=True, indent=2, sort_keys=True
-                )
+                json.dump(self, fp, ensure_ascii=True, indent=2, sort_keys=True)
 
     __getitem__ = dict.get
 
