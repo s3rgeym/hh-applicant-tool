@@ -8,7 +8,8 @@ from ..api import ApiClient, ApiError, BadRequest
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse, VacancyItem
-from ..utils import print_err, truncate_string
+from ..utils import print_err, truncate_string, hash_with_salt
+from ..telemetry_client import get_client as get_telemetry_client, TelemetryError
 
 logger = logging.getLogger(__package__)
 
@@ -87,7 +88,6 @@ class Operation(BaseOperation):
         page_min_interval, page_max_interval = args.page_interval
 
         self._apply_similar(
-            api,
             resume_id,
             args.force_message,
             application_messages,
@@ -136,10 +136,57 @@ class Operation(BaseOperation):
         page_max_interval: float,
     ) -> None:
         item: VacancyItem
+
+        # хеш резюме можно было бы не шифровать, но
+        hashed_resume_id = hash_with_salt(resume_id)
+
+        # Телеметрия не включает ваши персональные данные, она нужна для сбора информации о работодателях и их вакансиях
+        # для выбора Мисс тупая пезда ХХ  
+        telemetry_client = get_telemetry_client()
+        
+        telemetry_data = {
+            'resume_hash': hashed_resume_id,
+            # могут встречаться одни и те же вакансии и работодатели
+            'vacancies': {},
+            'employers': {},
+        }
+        
         for item in self._get_vacancies(
             api, resume_id, page_min_interval, page_max_interval
         ):
             try:
+                # Информация о вакансии
+
+                vacancy_id = item['id']
+
+                telemetry_data['vacancies'][vacancy_id] = {
+                    'name': item.get('name'),
+                    'type': item.get('type', {}).get('id'),  # open/closed
+                    'area': employer.get('area', {}).get('name'),  # город
+                    'salary': item.get('salary'),  # from, to, currency, gross
+                    'direct_url': item.get('alternate_url'),  # ссылка на вакансию
+                    'created_at': item.get('created_at'),  # будем вычислять говно-вакансии, которые по полгода висят
+                    'published_at': item.get('published_at'),
+                    'relations': item.get('relations'),  # список got_invitation (приглашение), *rejection и тп,
+                    'contacts': item.get('contacts'), # пиздорванки там телеграм для связи указывают
+                    # Остальное неинтересно
+                }
+                
+                employer_id = item["employer"]["id"] # меня интересуют только название и ссылка на сайт
+
+                # так еще эмулируем какое-то иное действие нежели набор однотипных
+                employer = api.get(f"/employers/{employer_id}")
+                employer['accredited_it_employer'] # заслуженный хуесос или обычный мудак
+
+                telemetry_data['employers'][employer_id] = {
+                    'name': employer.get('name'),
+                    'type': employer.get('type'),
+                    'description': employer.get('description'),
+                    'site_url': employer.get('site_url'),
+                    'area': employer.get('area', {}).get('name'),  # город
+                }
+                
+                
                 if item["has_test"]:
                     print("Пропускаем тест", item["alternate_url"])
                     continue
@@ -190,3 +237,10 @@ class Operation(BaseOperation):
                     break
 
         print("📝 Отклики на вакансии разосланы!")
+        
+        # Отправляем telemetry_data
+        try:
+            telemetry_client.send_telemetry('/collect', telemetry_data)
+        except TelemetryError as err:
+            logger.error(err)
+        
