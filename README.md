@@ -10,7 +10,7 @@
 [![Total Downloads](https://static.pepy.tech/badge/hh-applicant-tool)]()
 
 <div align="center">
-  <img src="https://github.com/user-attachments/assets/9bfce763-1359-471f-8b0b-ad0b7d21bd1c" width="500">
+  <img src="https://github.com/user-attachments/assets/29d91490-2c83-4e3f-a573-c7a6182a4044" width="500">
 </div>
 
 Утилита для успешных волчат, служащая для автоматизации действий на HH.RU таких как рассылка откликов на подходящие вакансии и обновление всех резюме. Поддержка осуществляется строго в группе https://t.me/+aSjr8qM_AP85ZDBi (в ней разрешены мат, п*рнография, оскорбления всех участников кроме админа, а так же слив любой информации про хуевых работодателей и нерадивых херок).
