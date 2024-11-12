@@ -173,12 +173,20 @@ class Operation(BaseOperation):
                 params = {
                     "resume_id": resume_id,
                     "vacancy_id": vacancy["id"],
-                    "message": (
-                        random.choice(application_messages) % vacancy
-                        if force_message or vacancy["response_letter_required"]
-                        else ""
-                    ),
+                    "message": "",
                 }
+
+                if vacancy.get("response_letter_required"):
+                    message_template = random.choice(application_messages)
+                    
+                    try:
+                        params["message"] = template_message % vacancy
+                    except TypeError as ex:
+                        # TypeError: not enough arguments for format string
+                        # API HH все кривое, иногда нет идентификатора работодателя, иногда у вакансии нет названия.
+                        # И это типа рашн хайлоад, где из-за дрочки на аджайл слепили кривую говнину.
+                        logger.error(f"Ошибка форматирования шаблона сообщения {template_message!r} для {vacancy = }")
+                        continue
 
                 res = api.post("/negotiations", params)
                 assert res == {}
