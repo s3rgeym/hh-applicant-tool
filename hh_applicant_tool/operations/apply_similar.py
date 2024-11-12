@@ -25,8 +25,9 @@ class Namespace(BaseNamespace):
     page_interval: Tuple[float, float]
 
 
+# https://api.hh.ru/openapi/redoc
 class Operation(BaseOperation):
-    """Откликнуться на все подходящие вакансии"""
+    """Откликнуться на все подходящие вакансии. По умолчанию применяются значения, которые были отмечены галочками в форме для поиска на сайте"""
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
@@ -52,6 +53,18 @@ class Operation(BaseOperation):
             help="Интервал между получением следующей страницы рекомендованных вакансий в секундах (X, X-Y)",
             default="1-3",
             type=self._parse_interval,
+        )
+        parser.add_argument(
+            "--sort-by",
+            help="Сортировка вакансий",
+            choices=["publication_time", "salary_desc", "salary_asc", "relevance", "distance"],
+            default="relevance",
+        )
+        parser.add_argument(
+            "--search",
+            help="Строка поиска для фильтрации вакансий, например, 'москва бухгалтер 100500', те можно и город указать и ожидаемую зряплату",
+            type=str,
+            default=None,
         )
 
     @staticmethod
@@ -84,6 +97,8 @@ class Operation(BaseOperation):
             apply_max_interval,
             page_min_interval,
             page_max_interval,
+            args.order_by,
+            args.search,
         )
 
     def _get_resume_id(self, args: Namespace, api: ApiClient) -> str:
@@ -119,12 +134,14 @@ class Operation(BaseOperation):
         apply_max_interval: float,
         page_min_interval: float,
         page_max_interval: float,
+        order_by: str,
+        search: str | None = None,
     ) -> None:
         telemetry_client = get_telemetry_client()
         telemetry_data = defaultdict(dict)
 
         vacancies = self._get_vacancies(
-            api, resume_id, page_min_interval, page_max_interval, per_page=100
+            api, resume_id, page_min_interval, page_max_interval, per_page=100, order_by=order_by, search=search
         )
 
         self._collect_vacancy_telemetry(telemetry_data, vacancies)
@@ -213,9 +230,18 @@ class Operation(BaseOperation):
         page_min_interval: float,
         page_max_interval: float,
         per_page: int,
+        order_by: str,
+        search: str = None,
     ) -> list[VacancyItem]:
         rv = []
         for page in range(20):
+            params = {
+                "page": page,
+                "per_page": per_page,
+                "order_by": order_by,
+            }
+            if search:
+                params["text"] = search
             res: ApiListResponse = api.get(
                 f"/resumes/{resume_id}/similar_vacancies",
                 page=page,
