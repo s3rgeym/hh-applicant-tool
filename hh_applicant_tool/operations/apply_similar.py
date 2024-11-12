@@ -55,14 +55,20 @@ class Operation(BaseOperation):
             type=self._parse_interval,
         )
         parser.add_argument(
-            "--sort-by",
+            "--order-by",
             help="Сортировка вакансий",
-            choices=["publication_time", "salary_desc", "salary_asc", "relevance", "distance"],
+            choices=[
+                "publication_time",
+                "salary_desc",
+                "salary_asc",
+                "relevance",
+                "distance",
+            ],
             default="relevance",
         )
         parser.add_argument(
             "--search",
-            help="Строка поиска для фильтрации вакансий, например, 'москва бухгалтер 100500', те можно и город указать и ожидаемую зряплату",
+            help="Строка поиска для фильтрации вакансий, например, 'москва бухгалтер 100500', те можно и город указать, и ожидаемую зряплату",
             type=str,
             default=None,
         )
@@ -141,7 +147,13 @@ class Operation(BaseOperation):
         telemetry_data = defaultdict(dict)
 
         vacancies = self._get_vacancies(
-            api, resume_id, page_min_interval, page_max_interval, per_page=100, order_by=order_by, search=search
+            api,
+            resume_id,
+            page_min_interval,
+            page_max_interval,
+            per_page=100,
+            order_by=order_by,
+            search=search,
         )
 
         self._collect_vacancy_telemetry(telemetry_data, vacancies)
@@ -195,14 +207,16 @@ class Operation(BaseOperation):
 
                 if vacancy.get("response_letter_required"):
                     message_template = random.choice(application_messages)
-                    
+
                     try:
                         params["message"] = template_message % vacancy
                     except TypeError as ex:
                         # TypeError: not enough arguments for format string
                         # API HH все кривое, иногда нет идентификатора работодателя, иногда у вакансии нет названия.
                         # И это типа рашн хайлоад, где из-за дрочки на аджайл слепили кривую говнину.
-                        logger.error(f"Ошибка форматирования шаблона сообщения {template_message!r} для {vacancy = }")
+                        logger.error(
+                            f"Ошибка форматирования шаблона сообщения {template_message!r} для {vacancy = }"
+                        )
                         continue
 
                 res = api.post("/negotiations", params)
@@ -231,7 +245,7 @@ class Operation(BaseOperation):
         page_max_interval: float,
         per_page: int,
         order_by: str,
-        search: str = None,
+        search: str | None = None,
     ) -> list[VacancyItem]:
         rv = []
         for page in range(20):
@@ -243,10 +257,7 @@ class Operation(BaseOperation):
             if search:
                 params["text"] = search
             res: ApiListResponse = api.get(
-                f"/resumes/{resume_id}/similar_vacancies",
-                page=page,
-                per_page=per_page,
-                order_by="relevance",
+                f"/resumes/{resume_id}/similar_vacancies", params
             )
             rv.extend(res["items"])
 
