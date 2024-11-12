@@ -54,7 +54,7 @@ $ pipx upgrade hh-applicant-tool
 Отдельно я распишу процесс установки в **Windows** в подробностях:
 
 * Для начала поставьте Python 3 любым удобным способом.
-* Запустите терминал от Администратора и выполните:
+* Запустите терминал/консоль от Администратора и выполните:
   ```ps
   Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Unrestricted
   ```
