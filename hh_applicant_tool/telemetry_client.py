@@ -51,8 +51,6 @@ class TelemetryClient:
         :raises TelemetryError: Если произошла ошибка при отправке или декодировании JSON.
         """
         url = urljoin(self.server_address, endpoint)
-        logger.debug(data)
-
         try:
             response = self.session.post(url, json=data)
             # response.raise_for_status()
