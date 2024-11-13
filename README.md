@@ -74,76 +74,6 @@ $ pipx upgrade hh-applicant-tool
   ```
 * В случае неудачи вернитесь к первому шагу.
 * Для последующих запусков сначала активируйте виртуальное окружение.
-  
-
-### Примеры
-
-```bash
-$ hh-applicant-tool [ GLOBAL_FLAGS ] [ OPERATION [ OPERATION_FLAGS  ] ]
-
-# Справка по глобальным флагам и список операций
-$ hh-applicant-tool -h
-
-# Справка по операции
-$ hh-applicant-tool apply-similar -h
-
-# Авторизуемся
-$ hh-applicant-tool authorize
-
-# Рассылаем заявки
-$ hh-applicant-tool apply-similar
-
-# Поднимаем резюме
-$ hh-applicant-tool update-resumes
-
-# Чистим заявки и баним за отказы говноконторы
-$ hh-applicant-tool clear-negotiations --blacklist-discard
-```
-
-Можно вызвать любой метод API:
-
-```bash
-$ hh-applicant-tool call-api /employers text="IT" only_with_vacancies=true | jq -r '.items[].alternate_url'
-https://hh.ru/employer/1966364
-https://hh.ru/employer/4679771
-https://hh.ru/employer/8932785
-https://hh.ru/employer/9451699
-https://hh.ru/employer/766478
-https://hh.ru/employer/4168187
-https://hh.ru/employer/9274777
-https://hh.ru/employer/1763330
-https://hh.ru/employer/5926815
-https://hh.ru/employer/1592535
-https://hh.ru/employer/9627641
-https://hh.ru/employer/4073857
-https://hh.ru/employer/2667859
-https://hh.ru/employer/4053700
-https://hh.ru/employer/5190600
-https://hh.ru/employer/607484
-https://hh.ru/employer/9386615
-https://hh.ru/employer/80660
-https://hh.ru/employer/6078902
-https://hh.ru/employer/1918903
-```
-
-Данная возможность полезна для написания Bash-скриптов.
-
-Глобальные флаги:
-
-- `-v` используется для вывода отладочной информации. Два таких флага, например, выводят запросы к **API**.
-- `-c <path>` можно создать путь до конфига. С помощью этого флага можно одновременно использовать несколько профилей.
-
-| Операция               | Описание                                                                                            |
-| ---------------------- | --------------------------------------------------------------------------------------------------- |
-| **authorize**          | Открывает сайт hh.ru для авторизации и перехватывает перенаправление на `hhadnroid://oauthresponse` |
-| **whoami**             | Выводит информацию об авторизованном пользователе                                                   |
-| **list-resumes**       | Список резюме                                                                                       |
-| **update-resumes**     | Обновить все резюме. Аналогично нажатию кнопки «Обновить дату».                                     |
-| **apply-similar**      | Откликнуться на все подходящие вакансии. Лимит = 200 в день. На HH есть спам-фильтры, так что лучше не рассылайте отклики со ссылками. |
-| **clear-negotiations** | Удаляет отказы и отменяет заявки, которые долго висят                                               |
-| **call-api**           | Вызов произвольного метода API с выводом результата.                                                |
-| **refresh-token**      | Обновляет access_token.                                                                             |
-| **get-employer-contacts** | Получить список контактов работодателя, даже если тот не высылал приглашения. Контакты получаются строго из публичного доступа, например, с сайта фирмы и могут быть удалены только по просьбе уполнамоченного лица. Данная функция готова и будет доступна после 100 ⭐  |
 
 ### Путь до файла конфигурации
 
@@ -239,14 +169,74 @@ datetime.datetime(2023, 3, 23, 6, 36, 15, 596290)
 $ hh-applicant-tool refresh-token
 ```
 
-### Удаление следов
+### Описание команд
 
 ```bash
-rm -rf ~/.config/hh-applicant-tool
+$ hh-applicant-tool [ GLOBAL_FLAGS ] [ OPERATION [ OPERATION_FLAGS  ] ]
 
-# В старых версиях добавлялся обработчик протокола через socat
-rm -f ~/.local/share/applications/hhandroid.desktop
+# Справка по глобальным флагам и список операций
+$ hh-applicant-tool -h
+
+# Справка по операции
+$ hh-applicant-tool apply-similar -h
+
+# Авторизуемся
+$ hh-applicant-tool authorize
+
+# Рассылаем заявки
+$ hh-applicant-tool apply-similar
+
+# Поднимаем резюме
+$ hh-applicant-tool update-resumes
+
+# Чистим заявки и баним за отказы говноконторы
+$ hh-applicant-tool clear-negotiations --blacklist-discard
 ```
+
+Можно вызвать любой метод API:
+
+```bash
+$ hh-applicant-tool call-api /employers text="IT" only_with_vacancies=true | jq -r '.items[].alternate_url'
+https://hh.ru/employer/1966364
+https://hh.ru/employer/4679771
+https://hh.ru/employer/8932785
+https://hh.ru/employer/9451699
+https://hh.ru/employer/766478
+https://hh.ru/employer/4168187
+https://hh.ru/employer/9274777
+https://hh.ru/employer/1763330
+https://hh.ru/employer/5926815
+https://hh.ru/employer/1592535
+https://hh.ru/employer/9627641
+https://hh.ru/employer/4073857
+https://hh.ru/employer/2667859
+https://hh.ru/employer/4053700
+https://hh.ru/employer/5190600
+https://hh.ru/employer/607484
+https://hh.ru/employer/9386615
+https://hh.ru/employer/80660
+https://hh.ru/employer/6078902
+https://hh.ru/employer/1918903
+```
+
+Данная возможность полезна для написания Bash-скриптов.
+
+Глобальные флаги:
+
+- `-v` используется для вывода отладочной информации. Два таких флага, например, выводят запросы к **API**.
+- `-c <path>` можно создать путь до конфига. С помощью этого флага можно одновременно использовать несколько профилей.
+
+| Операция               | Описание                                                                                            |
+| ---------------------- | --------------------------------------------------------------------------------------------------- |
+| **authorize**          | Открывает сайт hh.ru для авторизации и перехватывает перенаправление на `hhadnroid://oauthresponse` |
+| **whoami**             | Выводит информацию об авторизованном пользователе                                                   |
+| **list-resumes**       | Список резюме                                                                                       |
+| **update-resumes**     | Обновить все резюме. Аналогично нажатию кнопки «Обновить дату».                                     |
+| **apply-similar**      | Откликнуться на все подходящие вакансии. Лимит = 200 в день. На HH есть спам-фильтры, так что лучше не рассылайте отклики со ссылками. |
+| **clear-negotiations** | Удаляет отказы и отменяет заявки, которые долго висят                                               |
+| **call-api**           | Вызов произвольного метода API с выводом результата.                                                |
+| **refresh-token**      | Обновляет access_token.                                                                             |
+| **get-employer-contacts** | Получить список контактов работодателя, даже если тот не высылал приглашения. Контакты получаются строго из публичного доступа, например, с сайта фирмы и могут быть удалены только по просьбе уполнамоченного лица. Данная функция готова и будет доступна после 100 ⭐  |
 
 ### Система плагинов
 
