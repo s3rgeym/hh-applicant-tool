@@ -5,7 +5,7 @@ import logging
 from prettytable import PrettyTable
 
 from ..api import ApiClient
-from ..main import BaseOperation
+from ..main import BaseOperation, get_api
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse
 from ..utils import truncate_string
@@ -24,11 +24,7 @@ class Operation(BaseOperation):
         pass
 
     def run(self, args: Namespace) -> None:
-        assert args.config["token"]
-        api = ApiClient(
-            access_token=args.config["token"]["access_token"],
-            user_agent=args.config["user_agent"],
-        )
+        api = get_api(args)
         resumes: ApiListResponse = api.get("/resumes/mine")
         t = PrettyTable(
             field_names=["ID", "Название", "Статус"], align="l", valign="t"

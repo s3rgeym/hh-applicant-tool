@@ -8,7 +8,7 @@ from typing import TextIO, Tuple
 
 from ..api import ApiClient, ApiError, BadRequest
 from ..main import BaseOperation
-from ..main import Namespace as BaseNamespace
+from ..main import Namespace as BaseNamespace, get_api
 from ..telemetry_client import TelemetryError
 from ..telemetry_client import get_client as get_telemetry_client
 from ..types import ApiListResponse, VacancyItem
@@ -83,11 +83,7 @@ class Operation(BaseOperation):
         return min(min_interval, max_interval), max(min_interval, max_interval)
 
     def run(self, args: Namespace) -> None:
-        assert args.config["token"]
-        api = ApiClient(
-            access_token=args.config["token"]["access_token"],
-            user_agent=args.config["user_agent"],
-        )
+        api = get_api(args)
         resume_id = self._get_resume_id(args, api)
         application_messages = self._get_application_messages(args)
 
