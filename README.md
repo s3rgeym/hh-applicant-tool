@@ -145,6 +145,23 @@ https://hh.ru/employer/1918903
 | **refresh-token**      | Обновляет access_token.                                                                             |
 | **get-employer-contacts** | Получить список контактов работодателя, даже если тот не высылал приглашения. Контакты получаются строго из публичного доступа, например, с сайта фирмы и могут быть удалены только по просьбе уполнамоченного лица. Данная функция готова и будет доступна после 100 ⭐  |
 
+### Путь до файла конфигурации
+
+| OS                         | Путь                                                                |
+|----------------------------|---------------------------------------------------------------------|
+| **Windows**                | `C:\Users\%username%\AppData\Roaming\hh-applicant-tool\config.json` |
+| **macOS**                  | `~/Library/Application Support/hh-applicant-tool/config.json`       |
+| **Linux**                  | `~/.config/hh-applicant-tool/config.json`                           |
+
+
+Через этот файл, например, можно задать кастомный `user_agent`:
+
+```json
+{
+  "user_agent": "Mozilla/5.0 YablanBrowser"
+}
+```
+
 ### Авторизация
 
 ```bash
@@ -167,24 +184,6 @@ $ hh-applicant-tool -vv authorize
     "refresh_token": "...",
     "token_type": "bearer"
   }
-}
-```
-
-
-### Путь до файла конфигурации
-
-| OS                         | Путь                                                                |
-|----------------------------|---------------------------------------------------------------------|
-| **Windows**                | `C:\Users\%username%\AppData\Roaming\hh-applicant-tool\config.json` |
-| **macOS**                  | `~/Library/Application Support/hh-applicant-tool/config.json`       |
-| **Linux**                  | `~/.config/hh-applicant-tool/config.json`                           |
-
-
-Через этот файл можно задать кастомный `user_agent`:
-
-```json
-{
-  "user_agent": "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/110.0"
 }
 ```
 
