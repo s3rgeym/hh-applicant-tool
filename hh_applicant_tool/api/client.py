@@ -54,7 +54,24 @@ class BaseClient:
             logger.debug("Default Headers: %r", session.headers)
 
     def default_user_agent(self) -> str:
-        return USER_AGENT_TEMPLATE % random.randint(88, 130)
+        return USER_AGENT_TEMPLATE % (
+            random.choice(["8.0", "8.1", "9", "10", "11", "12"]),
+            random.choice(
+                [
+                    "SM-G998B",  # Samsung Galaxy S21 Ultra
+                    "Pixel 6",  # Google Pixel 6
+                    "Mi 11",  # Xiaomi Mi 11
+                    "OnePlus 9",  # OnePlus 9
+                    "P40",  # Huawei P40
+                    "LG G8",  # LG G8
+                    "Xperia 1 II",  # Sony Xperia 1 II
+                    "Moto G Power",  # Motorola Moto G Power
+                    "HTC U12+",  # HTC U12+
+                    "ROG Phone 5",  # Asus ROG Phone 5
+                ]
+            ),
+            random.randint(88, 130),
+        )
 
     def additional_headers(
         self,

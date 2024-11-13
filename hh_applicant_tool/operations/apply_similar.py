@@ -174,7 +174,7 @@ class Operation(BaseOperation):
 
                 try:
                     employer_id = vacancy["employer"]["id"]
-                except IndexError:
+                except KeyError:
                     logger.warning(
                         f"Вакансия без работодателя: {vacancy['alternate_url']}"
                     )
@@ -205,7 +205,7 @@ class Operation(BaseOperation):
                     message_template = random.choice(application_messages)
 
                     try:
-                        params["message"] = template_message % vacancy
+                        params["message"] = message_template % vacancy
                     except TypeError as ex:
                         # TypeError: not enough arguments for format string
                         # API HH все кривое, иногда нет идентификатора работодателя, иногда у вакансии нет названия.
