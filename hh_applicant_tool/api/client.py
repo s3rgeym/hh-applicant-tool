@@ -12,11 +12,12 @@ from urllib.parse import urlencode
 
 import requests
 from requests import Response, Session
+import random
 
 from ..constants import (
     ANDROID_CLIENT_ID,
     ANDROID_CLIENT_SECRET,
-    DEFAULT_USER_AGENT,
+    USER_AGENT_TEMPLATE,
 )
 from ..types import AccessToken
 from . import errors
@@ -38,6 +39,7 @@ class BaseClient:
     user_agent: str | None = None
     session: Session | None = None
     previous_request_time: float = 0.0
+    delay: float = 0.334
 
     def __post_init__(self) -> None:
         self.lock = Lock()
@@ -46,10 +48,13 @@ class BaseClient:
             session.headers.update(
                 {
                     **self.additional_headers(),
-                    "User-Agent": self.user_agent or DEFAULT_USER_AGENT,
+                    "User-Agent": self.user_agent or self.default_user_agent(),
                 }
             )
             logger.debug("Default Headers: %r", session.headers)
+
+    def default_user_agent(self) -> str:
+        return USER_AGENT_TEMPLATE % random.randint(88, 130)
 
     def additional_headers(
         self,
@@ -61,7 +66,7 @@ class BaseClient:
         method: ALLOWED_METHODS,
         endpoint: str,
         params: dict | None = None,
-        delay: float = 0.34,
+        delay: float | None = None,
         **kwargs: Any,
     ) -> dict:
         # Не знаю насколько это "правильно"
@@ -72,7 +77,9 @@ class BaseClient:
         with self.lock:
             # На серваке какая-то анти-DDOS система
             if (
-                delay := delay - time.monotonic() + self.previous_request_time
+                delay := (self.delay if delay is None else delay)
+                - time.monotonic()
+                + self.previous_request_time
             ) > 0:
                 logger.debug("wait %fs before request", delay)
                 time.sleep(delay)

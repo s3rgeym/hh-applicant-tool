@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from ..api import ApiClient, ClientError
 from ..constants import INVALID_ISO8601_FORMAT
-from ..main import BaseOperation
+from ..main import BaseOperation, get_api
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse
 from ..utils import print_err, truncate_string
@@ -51,11 +51,7 @@ class Operation(BaseOperation):
         return rv
 
     def run(self, args: Namespace) -> None:
-        assert args.config["token"]
-        api = ApiClient(
-            access_token=args.config["token"]["access_token"],
-            user_agent=args.config["user_agent"],
-        )
+        api = get_api(args)
         negotiations = self._get_active_negotiations(api)
         print("Всего активных:", len(negotiations))
         for item in negotiations:

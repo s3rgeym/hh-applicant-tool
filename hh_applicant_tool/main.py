@@ -9,14 +9,12 @@ from os import getenv
 from pathlib import Path
 from pkgutil import iter_modules
 from typing import Sequence
-
+from .api import ApiClient
 from .color_log import ColorHandler
 from .utils import Config, get_config_path
 
 DEFAULT_CONFIG_PATH = (
-    get_config_path()
-    / __package__.replace("_", "-")
-    / "config.json"
+    get_config_path() / __package__.replace("_", "-") / "config.json"
 )
 
 logger = logging.getLogger(__package__)
@@ -35,6 +33,18 @@ OPERATIONS = "operations"
 class Namespace(argparse.Namespace):
     config: Config
     verbosity: int
+    delay: float
+
+
+def get_api(args: Namespace) -> ApiClient:
+    token = args.config.get("token", {})
+    api = ApiClient(
+        access_token=token.get("access_token"),
+        refresh_token=token.get("refresh_token"),
+        user_agent=args.config["user_agent"],
+        delay=args.delay,
+    )
+    return api
 
 
 class HHApplicantTool:
@@ -45,24 +55,37 @@ class HHApplicantTool:
     Группа поддержки: <https://t.me/+aSjr8qM_AP85ZDBi>
     """
 
+    class ArgumentFormatter(
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.RawDescriptionHelpFormatter,
+    ):
+        pass
+
     def create_parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
             description=self.__doc__,
-            formatter_class=argparse.RawDescriptionHelpFormatter,
+            formatter_class=self.ArgumentFormatter,
         )
         parser.add_argument(
             "-c",
             "--config",
-            help="config path",
+            help="Путь до файла конфигурации",
             type=Config,
             default=Config(DEFAULT_CONFIG_PATH),
         )
         parser.add_argument(
             "-v",
             "--verbosity",
-            help="increase verbosity",
+            help="При использовании от одного и более раз увеличивает количество отладочной информации в выводе",
             action="count",
             default=0,
+        )
+        parser.add_argument(
+            "-d",
+            "--delay",
+            type=float,
+            default=0.334,
+            help="Задержка между запросами к API HH",
         )
         subparsers = parser.add_subparsers(help="commands")
         package_dir = Path(__file__).resolve().parent / OPERATIONS
@@ -70,7 +93,8 @@ class HHApplicantTool:
             mod = import_module(f"{__package__}.{OPERATIONS}.{module_name}")
             op: BaseOperation = mod.Operation()
             op_parser = subparsers.add_parser(
-                module_name.replace("_", "-"), description=op.__doc__
+                module_name.replace("_", "-"),
+                description=op.__doc__, formatter_class=self.ArgumentFormatter
             )
             op_parser.set_defaults(run=op.run)
             op.setup_parser(op_parser)

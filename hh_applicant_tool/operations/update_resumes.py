@@ -3,7 +3,7 @@ import argparse
 import logging
 
 from ..api import ApiClient, ApiError
-from ..main import BaseOperation
+from ..main import BaseOperation, get_api
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse
 from ..utils import print_err, truncate_string
@@ -22,11 +22,7 @@ class Operation(BaseOperation):
         pass
 
     def run(self, args: Namespace) -> None:
-        assert args.config["token"]
-        api = ApiClient(
-            access_token=args.config["token"]["access_token"],
-            user_agent=args.config["user_agent"],
-        )
+        api = get_api(args)
         resumes: ApiListResponse = api.get("/resumes/mine")
         for resume in resumes["items"]:
             try:
