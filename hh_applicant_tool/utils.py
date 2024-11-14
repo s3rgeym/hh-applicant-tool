@@ -10,6 +10,7 @@ from threading import Lock
 from typing import Any
 from os import getenv
 from .constants import INVALID_ISO8601_FORMAT
+import re, random
 
 print_err = partial(print, file=sys.stderr, flush=True)
 
@@ -72,3 +73,17 @@ def fix_datetime(dt: str | None) -> str | None:
     if dt is None:
         return None
     return datetime.strptime(dt, INVALID_ISO8601_FORMAT).isoformat()
+
+
+def random_text(s: str) -> str:
+    while (
+        s1 := re.sub(
+            r"{([^{}]+)}",
+            lambda m: random.choice(
+                m.group(1).split("|"),
+            ),
+            s,
+        )
+    ) != s:
+        s = s1
+    return s
