@@ -12,7 +12,7 @@ from ..main import Namespace as BaseNamespace, get_api
 from ..telemetry_client import TelemetryError
 from ..telemetry_client import get_client as get_telemetry_client
 from ..types import ApiListResponse, VacancyItem
-from ..utils import fix_datetime, print_err, truncate_string
+from ..utils import fix_datetime, print_err, truncate_string, random_text
 
 logger = logging.getLogger(__package__)
 
@@ -23,8 +23,13 @@ class Namespace(BaseNamespace):
     force_message: bool
     apply_interval: Tuple[float, float]
     page_interval: Tuple[float, float]
+    message_interval: Tuple[float, float]
+    order_by: str
+    search: str
+    reply_message: str
 
 
+# gx для открытия (никак не запомню в виме)
 # https://api.hh.ru/openapi/redoc
 class Operation(BaseOperation):
     """Откликнуться на все подходящие вакансии. По умолчанию применяются значения, которые были отмечены галочками в форме для поиска на сайте"""
@@ -33,7 +38,7 @@ class Operation(BaseOperation):
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
         parser.add_argument(
             "--message-list",
-            help="Путь до файла, где хранятся сообщения для отклика на вакансии. Каждое сообщение — с новой строки. В сообщения можно использовать плейсхолдеры типа %%(name)s",
+            help="Путь до файла, где хранятся сообщения для отклика на вакансии. Каждое сообщение — с новой строки. В сообщения можно использовать плейсхолдеры типа %%(vacabcy_name)s",
             type=argparse.FileType(),
         )
         parser.add_argument(
@@ -44,14 +49,20 @@ class Operation(BaseOperation):
         )
         parser.add_argument(
             "--apply-interval",
-            help="Интервал между отправкой откликов в секундах (X, X-Y)",
+            help="Интервал перед отправкой откликов в секундах (X, X-Y)",
             default="1-5",
             type=self._parse_interval,
         )
         parser.add_argument(
             "--page-interval",
-            help="Интервал между получением следующей страницы рекомендованных вакансий в секундах (X, X-Y)",
+            help="Интервал перед получением следующей страницы рекомендованных вакансий в секундах (X, X-Y)",
             default="1-3",
+            type=self._parse_interval,
+        )
+        parser.add_argument(
+            "--message-interval",
+            help="Интервал перед отправкой сообщения в секундах (X, X-Y)",
+            default="5-10",
             type=self._parse_interval,
         )
         parser.add_argument(
@@ -68,9 +79,14 @@ class Operation(BaseOperation):
         )
         parser.add_argument(
             "--search",
-            help="Строка поиска для фильтрации вакансий, например, 'москва бухгалтер 100500', те можно и город указать, и ожидаемую зряплату",
+            help="Строка поиска для фильтрации вакансий, например, 'москва бухгалтер 100500', те можно и город указать, и ожидаемую зарплату",
             type=str,
             default=None,
+        )
+        parser.add_argument(
+            "--reply-message",
+            "--reply",
+            help="Отправить сообщение во все чаты, где ожидают ответа либо не прочитали ответ",
         )
 
     @staticmethod
@@ -89,6 +105,7 @@ class Operation(BaseOperation):
 
         apply_min_interval, apply_max_interval = args.apply_interval
         page_min_interval, page_max_interval = args.page_interval
+        message_min_interval, message_max_interval = args.message_interval
 
         self._apply_similar(
             api,
@@ -99,8 +116,11 @@ class Operation(BaseOperation):
             apply_max_interval,
             page_min_interval,
             page_max_interval,
+            message_min_interval,
+            message_max_interval,
             args.order_by,
             args.search,
+            args.reply_message or args.config["reply_message"],
         )
 
     def _get_resume_id(self, args: Namespace, api: ApiClient) -> str:
@@ -118,11 +138,8 @@ class Operation(BaseOperation):
             )
         else:
             application_messages = [
-                "Меня заинтересовала ваша вакансия %(name)s",
-                "Прошу рассмотреть мою жалкую кандидатуру на вакансию %(name)s",
-                "Ваша вакансия %(name)s соответствует моим навыкам и опыту",
-                "Хочу присоединиться к вашей успешной команде лидеров рынка в качестве %(name)s",
-                "Мое резюме содержит все баззворды, указанные в вашей вакансии %(name)s",
+                "{Меня заинтересовала|Мне понравилась} ваша вакансия %(vacancy_name)s",
+                "{Прошу рассмотреть|Предлагаю рассмотреть} {мою кандидатуру|мое резюме} на вакансию %(vacancy_name)s",
             ]
         return application_messages
 
@@ -136,8 +153,11 @@ class Operation(BaseOperation):
         apply_max_interval: float,
         page_min_interval: float,
         page_max_interval: float,
+        message_min_interval: float,
+        message_max_interval: float,
         order_by: str,
         search: str | None = None,
+        reply_message: str | None = None,
     ) -> None:
         telemetry_client = get_telemetry_client()
         telemetry_data = defaultdict(dict)
@@ -154,33 +174,124 @@ class Operation(BaseOperation):
 
         self._collect_vacancy_telemetry(telemetry_data, vacancies)
 
+        me = api.get("/me")
+
+        basic_message_placeholders = {
+            "first_name": me.get("first_name", ""),
+            "last_name": me.get("last_name", ""),
+            "email": me.get("email", ""),
+            "phone": me.get("phone", ""),
+        }
+
+        do_apply = True
+
         for vacancy in vacancies:
             try:
                 if getenv("TEST_TELEMETRY"):
                     break
 
+                message_placeholders = {
+                    "vacancy_name": vacancy.get("name", ""),
+                    "employer_name": vacancy.get("employer", {}).get(
+                        "name", ""
+                    ),
+                    **basic_message_placeholders,
+                }
+
+                logger.debug(
+                    "Вакансия %(vacancy_name)s от %(employer_name)s"
+                    % message_placeholders
+                )
+
                 if vacancy.get("has_test"):
                     print("🚫 Пропускаем тест", vacancy["alternate_url"])
+                    continue
+
+                if vacancy.get("archived"):
+                    print(
+                        "🚫 Пропускаем вакансию в архиве",
+                        vacancy["alternate_url"],
+                    )
+
                     continue
 
                 relations = vacancy.get("relations", [])
 
                 if relations:
+                    if "got_rejection" in relations:
+                        print(
+                            "🚫 Пропускаем отказ на вакансию",
+                            vacancy["alternate_url"],
+                        )
+                        continue
+
+                    if reply_message:
+                        r = api.get("/negotiations", vacancy_id=vacancy["id"])
+
+                        if len(r["items"]) == 1:
+                            neg = r["items"][0]
+                            nid = neg["id"]
+
+                            page: int = 0
+                            last_message: dict | None = None
+                            while True:
+                                r2 = api.get(
+                                    f"/negotiations/{nid}/messages", page=page
+                                )
+                                last_message = r2["items"][-1]
+                                if page + 1 >= r2["pages"]:
+                                    break
+
+                                page = r2["pages"] - 1
+
+                            logger.debug(last_message["text"])
+
+                            if last_message["author"][
+                                "participant_type"
+                            ] == "employer" or not neg.get(
+                                "viewed_by_opponent"
+                            ):
+                                message = (
+                                    random_text(reply_message)
+                                    % message_placeholders
+                                )
+                                logger.debug(message)
+
+                                time.sleep(
+                                    random.uniform(
+                                        message_min_interval,
+                                        message_max_interval,
+                                    )
+                                )
+                                api.post(
+                                    f"/negotiations/{nid}/messages",
+                                    message=message,
+                                )
+                                print(
+                                    "📨 Отправили сообщение для привлечения внимания",
+                                    vacancy["alternate_url"],
+                                )
+                            continue
+                        else:
+                            logger.warning(
+                                "Приглашение без чата для вакансии: %s",
+                                vacancy["alternate_url"],
+                            )
+
                     print(
-                        "🚫 Пропускаем ответ на заявку",
+                        "🚫 Пропускаем вакансию с откликом",
                         vacancy["alternate_url"],
                     )
                     continue
 
-                try:
-                    employer_id = vacancy["employer"]["id"]
-                except KeyError:
-                    logger.warning(
-                        f"Вакансия без работодателя: {vacancy['alternate_url']}"
-                    )
-                else:
-                    employer = api.get(f"/employers/{employer_id}")
+                employer_id = vacancy.get("employer", {}).get("id")
 
+                if (
+                    employer_id
+                    and employer_id not in telemetry_data["employers"]
+                    and 200 > len(telemetry_data["employers"])
+                ):
+                    employer = api.get(f"/employers/{employer_id}")
                     telemetry_data["employers"][employer_id] = {
                         "name": employer.get("name"),
                         "type": employer.get("type"),
@@ -189,11 +300,9 @@ class Operation(BaseOperation):
                         "area": employer.get("area", {}).get("name"),  # город
                     }
 
-                # Задержка перед отправкой отклика
-                interval = random.uniform(
-                    apply_min_interval, apply_max_interval
-                )
-                time.sleep(interval)
+                if not do_apply:
+                    logger.debug("skip apply similar")
+                    continue
 
                 params = {
                     "resume_id": resume_id,
@@ -201,19 +310,23 @@ class Operation(BaseOperation):
                     "message": "",
                 }
 
-                if vacancy.get("response_letter_required"):
-                    message_template = random.choice(application_messages)
+                if force_message or vacancy.get("response_letter_required"):
+                    msg = params["message"] = (
+                        random_text(random.choice(application_messages))
+                        % message_placeholders
+                    )
+                    logger.debug(msg)
 
-                    try:
-                        params["message"] = message_template % vacancy
-                    except TypeError as ex:
-                        # TypeError: not enough arguments for format string
-                        # API HH все кривое, иногда нет идентификатора работодателя, иногда у вакансии нет названия.
-                        # И это типа рашн хайлоад, где из-за дрочки на аджайл слепили кривую говнину.
-                        logger.error(
-                            f"Ошибка форматирования шаблона сообщения {template_message!r} для {vacancy = }"
-                        )
-                        continue
+                # Задержка перед отправкой отклика
+                interval = random.uniform(
+                    max(apply_min_interval, message_min_interval)
+                    if params["message"]
+                    else apply_min_interval,
+                    max(apply_max_interval, message_max_interval)
+                    if params["message"]
+                    else apply_max_interval,
+                )
+                time.sleep(interval)
 
                 res = api.post("/negotiations", params)
                 assert res == {}
@@ -225,12 +338,16 @@ class Operation(BaseOperation):
                     ")",
                 )
             except ApiError as ex:
-                print_err("❗ Ошибка:", ex)
+                logger.error(ex)
                 if isinstance(ex, BadRequest) and ex.limit_exceeded:
-                    break
+                    if not reply_message:
+                        break
+                    do_apply = False
 
         print("📝 Отклики на вакансии разосланы!")
 
+        # Я собираюсь задеанонить всех хрюш яндексов и прочей хуеты, которую
+        # считаю вселенским злом, так что телеметирию не трогайте
         self._send_telemetry(telemetry_client, telemetry_data)
 
     def _get_vacancies(
