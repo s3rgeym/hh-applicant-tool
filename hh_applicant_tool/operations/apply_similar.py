@@ -9,10 +9,10 @@ from typing import TextIO, Tuple
 from ..api import ApiClient, ApiError, BadRequest
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace, get_api
-from ..telemetry_client import TelemetryError
-from ..telemetry_client import get_client as get_telemetry_client
+from ..telemetry_client import TelemetryClient, TelemetryError
 from ..types import ApiListResponse, VacancyItem
-from ..utils import fix_datetime, print_err, truncate_string, random_text
+from ..utils import fix_datetime, truncate_string, random_text
+from requests import Session
 
 logger = logging.getLogger(__package__)
 
@@ -159,7 +159,11 @@ class Operation(BaseOperation):
         search: str | None = None,
         reply_message: str | None = None,
     ) -> None:
-        telemetry_client = get_telemetry_client()
+        # TODO: вынести куда-нибудь в функцию
+        session = Session()
+        session.headers["User-Agent"] = "Mozilla/5.0 (HHApplicantTelemetry/1.0)"
+        session.proxies = dict(api.session.proxies)
+        telemetry_client = TelemetryClient(session=session)
         telemetry_data = defaultdict(dict)
 
         vacancies = self._get_vacancies(

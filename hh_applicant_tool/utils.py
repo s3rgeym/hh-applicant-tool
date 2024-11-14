@@ -10,7 +10,8 @@ from threading import Lock
 from typing import Any
 from os import getenv
 from .constants import INVALID_ISO8601_FORMAT
-import re, random
+import re
+import random
 
 print_err = partial(print, file=sys.stderr, flush=True)
 
