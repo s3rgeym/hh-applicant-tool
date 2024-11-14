@@ -3,7 +3,6 @@ import json
 from urllib.parse import urljoin
 import requests
 from typing import Optional, Dict, Any
-from functools import cache
 import logging
 import base64
 
@@ -64,8 +63,3 @@ class TelemetryClient:
             json.JSONDecodeError,
         ) as ex:
             raise TelemetryError(str(ex)) from ex
-
-
-@cache
-def get_client() -> TelemetryClient:
-    return TelemetryClient()

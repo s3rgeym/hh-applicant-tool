@@ -5,13 +5,13 @@ import logging
 import sys
 from abc import ABCMeta, abstractmethod
 from importlib import import_module
-from os import getenv
 from pathlib import Path
 from pkgutil import iter_modules
-from typing import Sequence
+from typing import Sequence, Literal
 from .api import ApiClient
 from .color_log import ColorHandler
 from .utils import Config, get_config_path
+from os import getenv
 
 DEFAULT_CONFIG_PATH = (
     get_config_path() / __package__.replace("_", "-") / "config.json"
@@ -34,6 +34,15 @@ class Namespace(argparse.Namespace):
     config: Config
     verbosity: int
     delay: float
+    user_agent: str
+    proxy_url: str
+
+
+def get_proxies(args: Namespace) -> dict[Literal["http", "https"], str | None]:
+    return {
+        "http": args.config["proxy_url"] or getenv("HTTP_PROXY"),
+        "https": args.config["proxy_url"] or getenv("HTTPS_PROXY"),
+    }
 
 
 def get_api(args: Namespace) -> ApiClient:
@@ -41,8 +50,9 @@ def get_api(args: Namespace) -> ApiClient:
     api = ApiClient(
         access_token=token.get("access_token"),
         refresh_token=token.get("refresh_token"),
-        user_agent=args.config["user_agent"],
         delay=args.delay,
+        user_agent=args.config["user_agent"],
+        proxies=get_proxies(args),
     )
     return api
 
@@ -87,6 +97,12 @@ class HHApplicantTool:
             default=0.334,
             help="Задержка между запросами к API HH",
         )
+        parser.add_argument(
+            "--user-agent", help="User-Agent для каждого запроса"
+        )
+        parser.add_argument(
+            "--proxy-url", help="Прокси, используемый для запросов к API"
+        )
         subparsers = parser.add_subparsers(help="commands")
         package_dir = Path(__file__).resolve().parent / OPERATIONS
         for _, module_name, _ in iter_modules([str(package_dir)]):
@@ -94,7 +110,8 @@ class HHApplicantTool:
             op: BaseOperation = mod.Operation()
             op_parser = subparsers.add_parser(
                 module_name.replace("_", "-"),
-                description=op.__doc__, formatter_class=self.ArgumentFormatter
+                description=op.__doc__,
+                formatter_class=self.ArgumentFormatter,
             )
             op_parser.set_defaults(run=op.run)
             op.setup_parser(op_parser)

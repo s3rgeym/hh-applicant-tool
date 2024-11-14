@@ -37,6 +37,7 @@ class BaseClient:
     _: dataclasses.KW_ONLY
     # TODO: сделать генерацию User-Agent'а как в приложении
     user_agent: str | None = None
+    proxies: dict | None = None
     session: Session | None = None
     previous_request_time: float = 0.0
     delay: float = 0.334
@@ -47,8 +48,8 @@ class BaseClient:
             self.session = session = requests.session()
             session.headers.update(
                 {
-                    **self.additional_headers(),
                     "User-Agent": self.user_agent or self.default_user_agent(),
+                    **self.additional_headers(),
                 }
             )
             logger.debug("Default Headers: %r", session.headers)
@@ -101,10 +102,13 @@ class BaseClient:
                 logger.debug("wait %fs before request", delay)
                 time.sleep(delay)
             has_body = method in ["POST", "PUT"]
+            user_agent = self.user_agent or self.default_user_agent()
+            logger.debug(f"{user_agent = }")
             response = self.session.request(
                 method,
                 url,
                 **{"data" if has_body else "params": params},
+                proxies=self.proxies,
                 allow_redirects=False,
             )
             try:
