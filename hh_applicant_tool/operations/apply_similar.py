@@ -159,11 +159,7 @@ class Operation(BaseOperation):
         search: str | None = None,
         reply_message: str | None = None,
     ) -> None:
-        # TODO: вынести куда-нибудь в функцию
-        session = Session()
-        session.headers["User-Agent"] = "Mozilla/5.0 (HHApplicantTelemetry/1.0)"
-        session.proxies = dict(api.session.proxies)
-        telemetry_client = TelemetryClient(session=session)
+        telemetry_client = TelemetryClient(proxies=api.proxies)
         telemetry_data = defaultdict(dict)
 
         vacancies = self._get_vacancies(

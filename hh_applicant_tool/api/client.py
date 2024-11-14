@@ -102,8 +102,6 @@ class BaseClient:
                 logger.debug("wait %fs before request", delay)
                 time.sleep(delay)
             has_body = method in ["POST", "PUT"]
-            user_agent = self.user_agent or self.default_user_agent()
-            logger.debug(f"{user_agent = }")
             response = self.session.request(
                 method,
                 url,
