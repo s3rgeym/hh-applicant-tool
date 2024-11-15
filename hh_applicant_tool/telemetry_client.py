@@ -4,8 +4,10 @@ from urllib.parse import urljoin
 import requests
 from typing import Optional, Dict, Any
 import logging
-import base64
 from functools import partialmethod
+import warnings
+
+warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
 logger = logging.getLogger(__package__)
 
@@ -19,9 +21,7 @@ class TelemetryError(Exception):
 class TelemetryClient:
     """Клиент для отправки телеметрии на сервер."""
 
-    server_address = base64.b64decode(
-        "aHR0cDovLzMxLjEzMS4yNTEuMTA3OjU0MTU2"
-    ).decode()
+    server_address: str = "https://hh-applicant-tool.mooo.com:54157/"
 
     def __init__(
         self,
@@ -55,6 +55,7 @@ class TelemetryClient:
                 proxies=self.proxies,
                 params=data if not has_body else None,
                 json=data if has_body else None,
+                verify=False,  # Игнорирование истекшего сертификата
             )
             # response.raise_for_status()
             result = response.json()
