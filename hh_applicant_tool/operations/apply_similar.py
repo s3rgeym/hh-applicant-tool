@@ -99,6 +99,20 @@ class Operation(BaseOperation):
         return min(min_interval, max_interval), max(min_interval, max_interval)
 
     def run(self, args: Namespace) -> None:
+        self.enable_telemetry = True
+        if args.disable_telemetry:
+            print(
+                "👁️ Телеметрия используется только для сбора данных о работодателях и их вакансиях, персональные данные пользователей не передаются на сервер."
+            )
+            if (
+                input("Вы действительно хотите отключить телеметрию (д/Н)? ")
+                .lower()
+                .startswith(("д", "y"))
+            ):
+                self.enable_telemetry = False
+                logger.info("Телеметрия отключена")
+            else:
+                logger.info("Телеметрия включена")
         api = get_api(args)
         resume_id = self._get_resume_id(args, api)
         application_messages = self._get_application_messages(args)
@@ -156,8 +170,8 @@ class Operation(BaseOperation):
         message_min_interval: float,
         message_max_interval: float,
         order_by: str,
-        search: str | None = None,
-        reply_message: str | None = None,
+        search: str | None,
+        reply_message: str | None,
     ) -> None:
         telemetry_client = TelemetryClient(proxies=api.proxies)
         telemetry_data = defaultdict(dict)
@@ -172,7 +186,8 @@ class Operation(BaseOperation):
             search=search,
         )
 
-        self._collect_vacancy_telemetry(telemetry_data, vacancies)
+        if self.enable_telemetry:
+            self._collect_vacancy_telemetry(telemetry_data, vacancies)
 
         me = api.get("/me")
 
@@ -287,7 +302,8 @@ class Operation(BaseOperation):
                 employer_id = vacancy.get("employer", {}).get("id")
 
                 if (
-                    employer_id
+                    self.enable_telemetry
+                    and employer_id
                     and employer_id not in telemetry_data["employers"]
                     and 200 > len(telemetry_data["employers"])
                 ):
@@ -346,8 +362,9 @@ class Operation(BaseOperation):
 
         print("📝 Отклики на вакансии разосланы!")
 
-        # Я собираюсь выложить контакты херок в общественный доступ
-        self._send_telemetry(telemetry_client, telemetry_data)
+        if self.enable_telemetry:
+            # Я собираюсь выложить контакты херок в общественный доступ
+            self._send_telemetry(telemetry_client, telemetry_data)
 
     def _get_vacancies(
         self,

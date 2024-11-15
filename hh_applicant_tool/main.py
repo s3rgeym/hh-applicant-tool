@@ -36,6 +36,7 @@ class Namespace(argparse.Namespace):
     delay: float
     user_agent: str
     proxy_url: str
+    disable_telemetry: bool
 
 
 def get_proxies(args: Namespace) -> dict[Literal["http", "https"], str | None]:
@@ -102,6 +103,12 @@ class HHApplicantTool:
         )
         parser.add_argument(
             "--proxy-url", help="Прокси, используемый для запросов к API"
+        )
+        parser.add_argument(
+            "--disable-telemetry",
+            default=False,
+            action=argparse.BooleanOptionalAction,
+            help="Отключить телеметрию",
         )
         subparsers = parser.add_subparsers(help="commands")
         package_dir = Path(__file__).resolve().parent / OPERATIONS
