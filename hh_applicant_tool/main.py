@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from abc import ABCMeta, abstractmethod
 from importlib import import_module
 from pathlib import Path
 from pkgutil import iter_modules
@@ -14,17 +13,17 @@ from .utils import Config, get_config_path
 from os import getenv
 
 DEFAULT_CONFIG_PATH = (
-    get_config_path() / __package__.replace("_", "-") / "config.json"
+    get_config_path() / (__package__ or '').replace("_", "-") / "config.json"
 )
 
 logger = logging.getLogger(__package__)
 
 
-class BaseOperation(metaclass=ABCMeta):
+class BaseOperation:
     def setup_parser(self, parser: argparse.ArgumentParser) -> None: ...
 
-    @abstractmethod
-    def run(self, args: argparse.Namespace) -> None | int: ...
+    def run(self, args: argparse.Namespace) -> None | int:
+        raise NotImplementedError()
 
 
 OPERATIONS = "operations"

@@ -88,3 +88,11 @@ def random_text(s: str) -> str:
     ) != s:
         s = s1
     return s
+
+def parse_interval(interval: str) -> tuple[float, float]:
+    """Парсит строку интервала и возвращает кортеж с минимальным и максимальным значениями."""
+    if "-" in interval:
+        min_interval, max_interval = map(float, interval.split("-"))
+    else:
+        min_interval = max_interval = float(interval)
+    return min(min_interval, max_interval), max(min_interval, max_interval)
