@@ -43,6 +43,7 @@ class TelemetryClient:
         method: str,
         endpoint: str,
         data: Dict[str, Any] | None = None,
+        **kwargs: Any
     ) -> Dict[str, Any]:
         method = method.upper()
         url = urljoin(self.server_address, endpoint)
@@ -56,7 +57,8 @@ class TelemetryClient:
                 params=data if not has_body else None,
                 json=data if has_body else None,
                 verify=False,  # Игнорирование истекшего сертификата
-            )
+                **kwargs,
+                )
             # response.raise_for_status()
             result = response.json()
             if "error" in result:
@@ -69,4 +71,5 @@ class TelemetryClient:
         ) as ex:
             raise TelemetryError(str(ex)) from ex
 
+    get_telemetry = partialmethod(request, "GET")
     send_telemetry = partialmethod(request, "POST")
