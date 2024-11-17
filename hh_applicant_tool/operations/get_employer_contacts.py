@@ -26,7 +26,7 @@ class Operation(BaseOperation):
             help="Имя пользователя для аутентификации",
         )
         parser.add_argument(
-            "-p", "--password", type=str, help="Пароль для аутентификации"
+            "-P", "--password", type=str, help="Пароль для аутентификации"
         )
         parser.add_argument(
             "-s",
@@ -50,7 +50,7 @@ class Operation(BaseOperation):
         # Аутентификация пользователя
         results = client.get_telemetry(
             "/contact/persons",
-            {"search": args.search, "per_page": 10},
+            {"search": args.search, "per_page": 10, "page": args.page},
             auth=auth,
         )
         self._print_contacts(results)
