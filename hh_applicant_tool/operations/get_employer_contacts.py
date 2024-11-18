@@ -1,5 +1,6 @@
 import argparse
 import logging
+from os import getenv
 
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
@@ -24,9 +25,14 @@ class Operation(BaseOperation):
             "--username",
             type=str,
             help="Имя пользователя для аутентификации",
+            default=getenv("AUTH_USERNAME"),
         )
         parser.add_argument(
-            "-P", "--password", type=str, help="Пароль для аутентификации"
+            "-P",
+            "--password",
+            type=str,
+            help="Пароль для аутентификации",
+            default=getenv("AUTH_PASSWORD"),
         )
         parser.add_argument(
             "-s",
@@ -36,7 +42,10 @@ class Operation(BaseOperation):
             help="Строка поиска для контактов работодателя",
         )
         parser.add_argument(
-            "-p", "--page", default=1, help="Номер страницы в выдаче"
+            "-p",
+            "--page",
+            default=1,
+            help="Номер страницы в выдаче",
         )
 
     def run(self, args: Namespace) -> None:
