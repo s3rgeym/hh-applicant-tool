@@ -3,15 +3,18 @@ import logging
 import random
 import time
 from collections import defaultdict
+from datetime import datetime, timedelta
 from typing import TextIO, Tuple
 
 from ..api import ApiError, BadRequest
 from ..main import BaseOperation
-from ..main import Namespace as BaseNamespace, get_api
+from ..main import Namespace as BaseNamespace
+from ..main import get_api
+from ..mixins import GetResumeIdMixin
 from ..telemetry_client import TelemetryClient, TelemetryError
 from ..types import ApiListResponse, VacancyItem
-from ..utils import fix_datetime, truncate_string, random_text, parse_interval
-from ..mixins import GetResumeIdMixin
+from ..utils import (fix_datetime, parse_interval, parse_invalid_datetime,
+                     random_text, truncate_string)
 
 logger = logging.getLogger(__package__)
 
@@ -95,10 +98,12 @@ class Operation(BaseOperation, GetResumeIdMixin):
                 logger.info("Телеметрия отключена.")
             else:
                 logger.info("Спасибо за то что оставили телеметрию включенной!")
-        
+
         self.api = get_api(args)
         self.resume_id = args.resume_id or self._get_resume_id()
-        self.application_messages = self._get_application_messages(args.message_list)
+        self.application_messages = self._get_application_messages(
+            args.message_list
+        )
 
         self.apply_min_interval, self.apply_max_interval = args.apply_interval
         self.page_min_interval, self.page_max_interval = args.page_interval
@@ -109,7 +114,9 @@ class Operation(BaseOperation, GetResumeIdMixin):
         self.dry_run = args.dry_run
         self._apply_similar()
 
-    def _get_application_messages(self, message_list: TextIO | None) -> list[str]:
+    def _get_application_messages(
+        self, message_list: TextIO | None
+    ) -> list[str]:
         if message_list:
             application_messages = list(
                 filter(None, map(str.strip, message_list))
@@ -134,7 +141,9 @@ class Operation(BaseOperation, GetResumeIdMixin):
                     "name": vacancy.get("name"),
                     "type": vacancy.get("type", {}).get("id"),  # open/closed
                     "area": vacancy.get("area", {}).get("name"),  # город
-                    "salary": vacancy.get("salary"),  # from, to, currency, gross
+                    "salary": vacancy.get(
+                        "salary"
+                    ),  # from, to, currency, gross
                     "direct_url": vacancy.get(
                         "alternate_url"
                     ),  # ссылка на вакансию
@@ -150,6 +159,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                     "employer_id": int(vacancy["employer"]["id"])
                     if "employer" in vacancy and "id" in vacancy["employer"]
                     else None,
+                    # "relations": vacancy.get("relations", []),
                     # Остальное неинтересно
                 }
 
@@ -161,6 +171,9 @@ class Operation(BaseOperation, GetResumeIdMixin):
             "email": me.get("email", ""),
             "phone": me.get("phone", ""),
         }
+
+        do_apply = True
+        complained_employers = set()
 
         for vacancy in vacancies:
             try:
@@ -178,41 +191,75 @@ class Operation(BaseOperation, GetResumeIdMixin):
                 )
 
                 if vacancy.get("has_test"):
-                    print("🚫 Пропускаем тест", vacancy["alternate_url"])
+                    logger.debug(
+                        "Пропускаем вакансию с тестом: %s",
+                        vacancy["alternate_url"],
+                    )
                     continue
 
                 if vacancy.get("archived"):
-                    print(
-                        "🚫 Пропускаем вакансию в архиве",
+                    logger.warning(
+                        "Пропускаем вакансию в архиве: %s",
                         vacancy["alternate_url"],
                     )
                     continue
 
                 relations = vacancy.get("relations", [])
-
-                if relations:
-                    print(
-                        "🚫 Пропускаем вакансию с",
-                        ["откликом или приглашением", "отказом"]["got_rejection" in relations],
-                        vacancy["alternate_url"],
-                    )
-                    continue
-
                 employer_id = vacancy.get("employer", {}).get("id")
 
                 if (
                     self.enable_telemetry
                     and employer_id
                     and employer_id not in telemetry_data["employers"]
+                    and employer_id not in complained_employers
+                    and (
+                        not relations
+                        or parse_invalid_datetime(vacancy["created_at"])
+                        + timedelta(days=7)
+                        > datetime.now()
+                    )
                 ):
                     employer = self.api.get(f"/employers/{employer_id}")
-                    telemetry_data["employers"][employer_id] = {
+
+                    employer_data = {
                         "name": employer.get("name"),
                         "type": employer.get("type"),
                         "description": employer.get("description"),
                         "site_url": employer.get("site_url"),
                         "area": employer.get("area", {}).get("name"),  # город
                     }
+                    if "got_rejected" in relations:
+                        try:
+                            response = telemetry_client.send_telemetry(
+                                f"/employers/{employer_id}/complaint",
+                                employer_data,
+                            )
+                            print(
+                                f"🚨 Вы получили отказ от {employer.get('name', 'какого-то ноунейма')}."
+                            )
+                            print(
+                                "Ссылка для отзыва:",
+                                response["topic_url"],
+                            )
+                            complained_employers.add(employer_id)
+                        except TelemetryError as ex:
+                            logger.error(ex)
+                    else:
+                        telemetry_data["employers"][employer_id] = employer_data
+
+                if not do_apply:
+                    logger.debug(
+                        "Проопускаем вакансию так как достигла лимита заявок: %s",
+                        vacancy["alternate_url"],
+                    )
+                    continue
+
+                if relations:
+                    logger.debug(
+                        "Пропускаем вакансию с откликом: %s",
+                        vacancy["alternate_url"],
+                    )
+                    continue
 
                 params = {
                     "resume_id": self.resume_id,
@@ -220,7 +267,9 @@ class Operation(BaseOperation, GetResumeIdMixin):
                     "message": "",
                 }
 
-                if self.force_message or vacancy.get("response_letter_required"):
+                if self.force_message or vacancy.get(
+                    "response_letter_required"
+                ):
                     msg = params["message"] = (
                         random_text(random.choice(self.application_messages))
                         % message_placeholders
@@ -229,7 +278,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
 
                 if self.dry_run:
                     logger.info(
-                            "Dry Run: Отправка отклика на вакансию %s с параметрами: %s",
+                        "Dry Run: Отправка отклика на вакансию %s с параметрами: %s",
                         vacancy["alternate_url"],
                         params,
                     )
@@ -253,24 +302,28 @@ class Operation(BaseOperation, GetResumeIdMixin):
             except ApiError as ex:
                 logger.error(ex)
                 if isinstance(ex, BadRequest) and ex.limit_exceeded:
-                    break
+                    do_apply = False
 
         print("📝 Отклики на вакансии разосланы!")
 
         if self.enable_telemetry:
             if self.dry_run:
                 # С --dry-run можно посмотреть что отправляется
-                logger.info('Dry Run: Данные телеметрии для отправки на сервер: %r', telemetry_data)
+                logger.info(
+                    "Dry Run: Данные телеметрии для отправки на сервер: %r",
+                    telemetry_data,
+                )
                 return
 
             try:
-                telemetry_client.send_telemetry("/collect", dict(telemetry_data))
+                response = telemetry_client.send_telemetry(
+                    "/collect", dict(telemetry_data)
+                )
+                logger.debug(response)
             except TelemetryError as ex:
                 logger.error(ex)
-                
-    def _get_vacancies(
-            self, per_page: int = 100
-    ) -> list[VacancyItem]:
+
+    def _get_vacancies(self, per_page: int = 100) -> list[VacancyItem]:
         rv = []
         for page in range(20):
             params = {
@@ -289,8 +342,9 @@ class Operation(BaseOperation, GetResumeIdMixin):
 
             # Задержка перед получением следующей страницы
             if page > 0:
-                interval = random.uniform(self.page_min_interval, self.page_max_interval)
+                interval = random.uniform(
+                    self.page_min_interval, self.page_max_interval
+                )
                 time.sleep(interval)
 
         return rv
-

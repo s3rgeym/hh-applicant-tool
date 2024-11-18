@@ -1,17 +1,19 @@
 from __future__ import annotations
-from datetime import datetime
+
 import hashlib
 import json
 import platform
+import random
+import re
 import sys
+from datetime import datetime
 from functools import partial
+from os import getenv
 from pathlib import Path
 from threading import Lock
 from typing import Any
-from os import getenv
+
 from .constants import INVALID_ISO8601_FORMAT
-import re
-import random
 
 print_err = partial(print, file=sys.stderr, flush=True)
 
@@ -53,7 +55,13 @@ class Config(dict):
         self._config_path.parent.mkdir(exist_ok=True, parents=True)
         with self._lock:
             with self._config_path.open("w+") as fp:
-                json.dump(self, fp, ensure_ascii=True, indent=2, sort_keys=True)
+                json.dump(
+                    self,
+                    fp,
+                    ensure_ascii=True,
+                    indent=2,
+                    sort_keys=True,
+                )
 
     __getitem__ = dict.get
 
@@ -62,18 +70,17 @@ def truncate_string(s: str, limit: int = 75, ellipsis: str = "…") -> str:
     return s[:limit] + bool(s[limit:]) * ellipsis
 
 
-def hash_with_salt(data: str, salt: str = "HorsePenis") -> str:
-    # Объединяем данные и соль
-    salted_data = data + salt
+def make_hash(data: str) -> str:
     # Вычисляем хеш SHA-256
-    hashed_data = hashlib.sha256(salted_data.encode()).hexdigest()
-    return hashed_data
+    return hashlib.sha256(data.encode()).hexdigest()
+
+
+def parse_invalid_datetime(dt: str) -> datetime:
+    return datetime.strptime(dt, INVALID_ISO8601_FORMAT)
 
 
 def fix_datetime(dt: str | None) -> str | None:
-    if dt is None:
-        return None
-    return datetime.strptime(dt, INVALID_ISO8601_FORMAT).isoformat()
+    return parse_invalid_datetime(dt).isoformat() if dt is not None else None
 
 
 def random_text(s: str) -> str:
@@ -88,6 +95,7 @@ def random_text(s: str) -> str:
     ) != s:
         s = s1
     return s
+
 
 def parse_interval(interval: str) -> tuple[float, float]:
     """Парсит строку интервала и возвращает кортеж с минимальным и максимальным значениями."""
