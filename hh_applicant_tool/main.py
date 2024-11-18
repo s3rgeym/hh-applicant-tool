@@ -4,23 +4,25 @@ import argparse
 import logging
 import sys
 from importlib import import_module
+from os import getenv
 from pathlib import Path
 from pkgutil import iter_modules
-from typing import Sequence, Literal
+from typing import Literal, Sequence
+
 from .api import ApiClient
 from .color_log import ColorHandler
 from .utils import Config, get_config_path
-from os import getenv
 
 DEFAULT_CONFIG_PATH = (
-    get_config_path() / (__package__ or '').replace("_", "-") / "config.json"
+    get_config_path() / (__package__ or "").replace("_", "-") / "config.json"
 )
 
 logger = logging.getLogger(__package__)
 
 
 class BaseOperation:
-    def setup_parser(self, parser: argparse.ArgumentParser) -> None: ...
+    def setup_parser(self, parser: argparse.ArgumentParser) -> None:
+        ...
 
     def run(self, args: argparse.Namespace) -> None | int:
         raise NotImplementedError()
@@ -62,7 +64,7 @@ class HHApplicantTool:
 
     Исходники и предложения: <https://github.com/s3rgeym/hh-applicant-tool>
 
-    Группа поддержки: <https://t.me/+aSjr8qM_AP85ZDBi>
+    Группа поддержки: <https://t.me/otzyvy_headhunter>
     """
 
     class ArgumentFormatter(
