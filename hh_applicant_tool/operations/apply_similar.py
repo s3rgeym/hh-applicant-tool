@@ -3,7 +3,7 @@ import logging
 import random
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TextIO, Tuple
 
 from ..api import ApiError, BadRequest
@@ -216,7 +216,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                         not relations
                         or parse_invalid_datetime(vacancy["created_at"])
                         + timedelta(days=7)
-                        > datetime.now()
+                        > datetime.now(tz=timezone.utc)
                     )
                 ):
                     employer = self.api.get(f"/employers/{employer_id}")
@@ -228,23 +228,29 @@ class Operation(BaseOperation, GetResumeIdMixin):
                         "site_url": employer.get("site_url"),
                         "area": employer.get("area", {}).get("name"),  # город
                     }
-                    if "got_rejected" in relations:
+                    if "got_rejection" in relations:
                         try:
+                            print(
+                                "🚨 Вы получили отказ от https://hh.ru/employer/%s"
+                                % employer_id
+                            )
                             response = telemetry_client.send_telemetry(
                                 f"/employers/{employer_id}/complaint",
                                 employer_data,
                             )
-                            print(
-                                f"🚨 Вы получили отказ от {employer.get('name', 'какого-то ноунейма')}."
-                            )
-                            print(
-                                "Ссылка для отзыва:",
-                                response["topic_url"],
-                            )
+                            if "topic_url" in response:
+                                print(
+                                    "Ссылка на обсуждение работодателя:",
+                                    response["topic_url"],
+                                )
+                            else:
+                                print(
+                                    "Создание темы для обсуждения работодателя добавлено в очередь..."
+                                )
                             complained_employers.add(employer_id)
                         except TelemetryError as ex:
                             logger.error(ex)
-                    else:
+                    elif do_apply:
                         telemetry_data["employers"][employer_id] = employer_data
 
                 if not do_apply:
