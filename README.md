@@ -22,7 +22,7 @@ asdf/pyenv/conda и что-то еще.
 
 Пример работы:
 
-![image](https://github.com/user-attachments/assets/55ab24ba-5325-40b4-9bd9-69ebcbc011c4)
+![image](https://github.com/user-attachments/assets/a0cce1aa-884b-4d84-905a-3bb207eba4a3)
 
 
 ### Предыстория
