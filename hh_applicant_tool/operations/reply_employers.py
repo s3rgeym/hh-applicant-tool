@@ -52,7 +52,8 @@ class Operation(BaseOperation, GetResumeIdMixin):
         self.api = get_api(args)
         self.resume_id = self._get_resume_id()
         self.reply_min_interval, self.reply_max_interval = args.reply_interval
-        self.reply_message = args.reply_message
+        self.reply_message = args.reply_message or args.config['reply_message']
+        assert self.reply_message, "`reply_message` должен быть передан чеерез аргументы или настройки"
         self.max_pages = args.max_pages
         self.dry_run = args.dry_run
         logger.debug(f'{self.reply_message = }')
