@@ -85,7 +85,7 @@ def fix_datetime(dt: str | None) -> str | None:
 
 def random_text(s: str) -> str:
     while (
-        s1 := re.sub(
+        temp := re.sub(
             r"{([^{}]+)}",
             lambda m: random.choice(
                 m.group(1).split("|"),
@@ -93,7 +93,7 @@ def random_text(s: str) -> str:
             s,
         )
     ) != s:
-        s = s1
+        s = temp
     return s
 
 
