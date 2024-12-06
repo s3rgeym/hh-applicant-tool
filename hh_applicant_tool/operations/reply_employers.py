@@ -26,7 +26,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
             "reply_message",
-            help="Сообщение для отправки во все чаты с работодателями, где ожидают ответа либо не прочитали ответ",
+            help="Сообщение для отправки во все чаты с работодателями, где ожидают ответа либо не прочитали ответ. Если не передать, то его нужно будет вводить интерактивно.",
         )
         parser.add_argument('--resume-id', help="Идентификатор резюме")
         parser.add_argument(
@@ -53,7 +53,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
         self.resume_id = self._get_resume_id()
         self.reply_min_interval, self.reply_max_interval = args.reply_interval
         self.reply_message = args.reply_message or args.config['reply_message']
-        assert self.reply_message, "`reply_message` должен быть передан чеерез аргументы или настройки"
+        #assert self.reply_message, "`reply_message` должен быть передан чеерез аргументы или настройки"
         self.max_pages = args.max_pages
         self.dry_run = args.dry_run
         logger.debug(f'{self.reply_message = }')
@@ -97,24 +97,39 @@ class Operation(BaseOperation, GetResumeIdMixin):
                     messages_res = self.api.get(
                         f"/negotiations/{nid}/messages", page=page
                     )
+                    first_message = messages_res["items"][0]
                     last_message = messages_res["items"][-1]
                     if page + 1 >= messages_res["pages"]:
                         break
 
                     page = messages_res["pages"] - 1
 
-                logger.debug(last_message["text"])
+                first_message_text = first_message["text"]
+                last_message_text = last_message["text"]
+                logger.debug(last_message_text)
 
-                if last_message["author"][
-                    "participant_type"
-                ] == "employer" or not negotiation.get(
-                    "viewed_by_opponent"
-                ):
-                    message = (
-                        random_text(self.reply_message)
-                        % message_placeholders
-                    )
-                    logger.debug(message)
+                is_employer_message = last_message["author"]["participant_type"] == "employer"
+
+                if  is_employer_message or not negotiation.get("viewed_by_opponent"):
+                    if self.reply_message:
+                        message = (
+                            random_text(self.reply_message)
+                            % message_placeholders
+                        )
+                        logger.debug(message)
+                    else:
+                        print("🏢", message_placeholders["employer_name"])
+                        print("💼", message_placeholders["vacancy_name"])
+                        print()
+                        print("История переписки:")
+                        print(first_message_text)
+                        print("...")
+                        print(last_message_text)
+                        print('-' * 10)
+                        message = input("Ваше сообщение: ").strip()
+                        if not message:
+                            print("🚶‍♂️ Пропускаем чат")
+                            continue
 
                     if self.dry_run:
                         logger.info(
