@@ -122,9 +122,12 @@ class Operation(BaseOperation, GetResumeIdMixin):
                         print("💼", message_placeholders["vacancy_name"])
                         print()
                         print("История переписки:")
-                        print(first_message_text)
-                        print("...")
-                        print(last_message_text)
+                        if first_message_text == last_message_text:
+                            print(first_message_text)
+                        else:
+                            print(first_message_text)
+                            print("...")
+                            print(last_message_text)
                         print('-' * 10)
                         message = input("Ваше сообщение: ").strip()
                         if not message:
