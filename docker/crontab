@@ -1,4 +1,10 @@
-@reboot /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json apply-similar
-0 13,21 * * * /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json apply-similar
+@reboot /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json update-resumes
+0 */4 * * * /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json update-resumes
+@reboot /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json  apply-similar --resume-id *resume-id* --message-list *path to message.txt* --force-message
+0 13,21 * * * /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json  apply-similar --resume-id *resume-id* --message-list *path to message.txt* --force-message
+@reboot /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json clear-negotiations --blacklist-discard
+0 13,21 * * * /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json clear-negotiations --blacklist-discard
+@reboot /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json reply-employers --resume-id *resume-id* --max-pages 10000 "Меня заинтересовала ваша вакансия %(vacancy_name)s. Прошу рассмотреть мою кандидатуру. С уважением, %(first_name)s %(last_name)s"
+0 13,21 * * * /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json reply-employers --resume-id *resume-id* --max-pages 10000 "Меня заинтересовала ваша вакансия %(vacancy_name)s. Прошу рассмотреть мою кандидатуру. С уважением, %(first_name)s %(last_name)s"
 @reboot /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json refresh-token
 0 19 * * * /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json refresh-token
