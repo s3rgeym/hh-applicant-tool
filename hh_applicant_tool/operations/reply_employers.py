@@ -160,15 +160,15 @@ class Operation(BaseOperation, GetResumeIdMixin):
                         print("💼", message_placeholders["vacancy_name"])
                         print("📅", vacancy["created_at"])
                         if salary:
-                            salary_from = salary.get("from", "-")
-                            salary_to = salary.get("to", "-")
+                            salary_from = salary.get("from")or "-"
+                            salary_to = salary.get("to")or "-"
                             salary_currency = salary.get("currency")
                             print("💵 от", salary_from, "до", salary_to, salary_currency)
                         print("")
                         print("Последние сообщения:")
                         for msg in (
-                            message_history[:1] + ["..."] + message_history[-2:]
-                            if len(message_history) > 3
+                            message_history[:1] + ["..."] + message_history[-3:]
+                            if len(message_history) > 5
                             else message_history
                         ):
                             print(msg)
