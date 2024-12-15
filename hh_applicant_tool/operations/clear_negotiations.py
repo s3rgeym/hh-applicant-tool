@@ -5,8 +5,9 @@ from datetime import datetime, timedelta, timezone
 
 from ..api import ApiClient, ClientError
 from ..constants import INVALID_ISO8601_FORMAT
-from ..main import BaseOperation, get_api
+from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
+from ..main import get_api
 from ..types import ApiListResponse
 from ..utils import print_err, truncate_string
 
@@ -19,14 +20,21 @@ class Namespace(BaseNamespace):
 
 
 class Operation(BaseOperation):
-    """Отменяет старые заявки, скрывает отказы с опциональной блокировкой работодателя."""
+    """Отменяет старые отклики, скрывает отказы с опциональной блокировкой работодателя."""
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
             "--older-than",
             type=int,
             default=30,
-            help="Удалить заявки старше опр. кол-ва дней. По умолчанию: %(default)d",
+            help="Удалить отклики старше опр. кол-ва дней. По умолчанию: %(default)d",
+        )
+        parser.add_argument(
+            "--all",
+            type=bool,
+            default=False,
+            action=argparse.BooleanOptionalAction,
+            help="Удалить все отклики в тч с приглашениями",
         )
         parser.add_argument(
             "--blacklist-discard",
@@ -61,7 +69,8 @@ class Operation(BaseOperation):
             # hidden True
             is_discard = state["id"] == "discard"
             if not item["hidden"] and (
-                is_discard
+                args.all 
+                or is_discard
                 or (
                     state["id"] == "response"
                     and (
@@ -72,7 +81,11 @@ class Operation(BaseOperation):
                     )
                 )
             ):
-                r = api.delete(f"/negotiations/active/{item['id']}")
+                decline_allowed = item.get("decline_allowed") or False
+                r = api.delete(
+                    f"/negotiations/active/{item['id']}",
+                    with_decline_message=decline_allowed,
+                )
                 assert {} == r
                 vacancy = item["vacancy"]
                 print(
