@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import TextIO, Tuple
 
+from ..ai.blackbox import BlackboxChat, BlackboxError
 from ..api import ApiError, BadRequest
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
@@ -23,8 +24,10 @@ class Namespace(BaseNamespace):
     resume_id: str | None
     message_list: TextIO
     force_message: bool
-    apply_interval: Tuple[float, float]
-    page_interval: Tuple[float, float]
+    use_ai: bool
+    pre_prompt: str
+    apply_interval: tuple[float, float]
+    page_interval: tuple[float, float]
     order_by: str
     search: str
     dry_run: bool
@@ -36,15 +39,31 @@ class Operation(BaseOperation, GetResumeIdMixin):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
         parser.add_argument(
+            "-L",
             "--message-list",
             help="Путь до файла, где хранятся сообщения для отклика на вакансии. Каждое сообщение — с новой строки.",
             type=argparse.FileType(),
         )
         parser.add_argument(
+            "-f",
             "--force-message",
+            "--force",
             help="Всегда отправлять сообщение при отклике",
             default=False,
             action=argparse.BooleanOptionalAction,
+        )
+        parser.add_argument(
+            "--use-ai",
+            "--ai",
+            help="Использовать AI для генерации сообщений",
+            default=False,
+            action=argparse.BooleanOptionalAction,
+        )
+        parser.add_argument(
+            "--pre-prompt",
+            "--prompt",
+            help="Добавочный промпт для генерации сопроводительного письма",
+            default="Сгенерируй сопроводительное письмо не более 5-7 предложений от моего имени для вакансии",
         )
         parser.add_argument(
             "--apply-interval",
@@ -104,6 +123,16 @@ class Operation(BaseOperation, GetResumeIdMixin):
         self.application_messages = self._get_application_messages(
             args.message_list
         )
+        self.chat = None
+
+        if chatbox_config := args.config.get("chatbox"):
+            self.chat = BlackboxChat(
+                session_id=chatbox_config["session_id"],
+                chat_payload=chatbox_config["chat_payload"],
+                proxies=self.api.proxies or {},
+            )
+
+        self.pre_prompt = args.pre_prompt
 
         self.apply_min_interval, self.apply_max_interval = args.apply_interval
         self.page_min_interval, self.page_max_interval = args.page_interval
@@ -255,7 +284,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
 
                 if not do_apply:
                     logger.debug(
-                        "Проопускаем вакансию так как достигла лимита заявок: %s",
+                        "Пропускаем вакансию так как достигла лимита заявок: %s",
                         vacancy["alternate_url"],
                     )
                     continue
@@ -276,11 +305,24 @@ class Operation(BaseOperation, GetResumeIdMixin):
                 if self.force_message or vacancy.get(
                     "response_letter_required"
                 ):
-                    msg = params["message"] = (
-                        random_text(random.choice(self.application_messages))
-                        % message_placeholders
-                    )
+                    if self.chat:
+                        try:
+                            msg = self.pre_prompt + "\n\n"
+                            msg += message_placeholders["vacancy_name"]
+                            msg = self.chat.send_message(msg)
+                        except BlackboxError as ex:
+                            logger.error(ex)
+                            continue
+                    else:
+                        msg = (
+                            random_text(
+                                random.choice(self.application_messages)
+                            )
+                            % message_placeholders
+                        )
+
                     logger.debug(msg)
+                    params["message"] = msg
 
                 if self.dry_run:
                     logger.info(
