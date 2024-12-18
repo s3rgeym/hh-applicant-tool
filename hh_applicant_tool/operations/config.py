@@ -32,5 +32,5 @@ class Operation(BaseOperation):
         config_path = str(args.config._config_path)
         if args.print:
             print(config_path)
-            return
-        subprocess.call([EDITOR, config_path])
+        else:
+            subprocess.call([EDITOR, config_path])
