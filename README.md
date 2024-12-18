@@ -147,6 +147,11 @@ $ hh-applicant-tool refresh-token
 | **macOS**                  | `~/Library/Application Support/hh-applicant-tool/config.json`       |
 | **Linux**                  | `~/.config/hh-applicant-tool/config.json`                           |
 
+Полный путь до конфигурационного файла можно вывести с помощью команды:
+
+```bash
+hh-applicant-tool config -p
+```
 
 Через конфиг можно задать дополнительные настройки:
 
