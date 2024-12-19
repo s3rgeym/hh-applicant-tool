@@ -16,6 +16,7 @@ from ..telemetry_client import TelemetryClient, TelemetryError
 from ..types import ApiListResponse, VacancyItem
 from ..utils import (fix_datetime, parse_interval, parse_invalid_datetime,
                      random_text, truncate_string)
+from hh_applicant_tool.ai import blackbox
 
 logger = logging.getLogger(__package__)
 
@@ -125,10 +126,10 @@ class Operation(BaseOperation, GetResumeIdMixin):
         )
         self.chat = None
 
-        if chatbox_config := args.config.get("chatbox"):
+        if config := args.config.get("blackbox"):
             self.chat = BlackboxChat(
-                session_id=chatbox_config["session_id"],
-                chat_payload=chatbox_config["chat_payload"],
+                session_id=config["session_id"],
+                chat_payload=config["chat_payload"],
                 proxies=self.api.proxies or {},
             )
 
@@ -309,6 +310,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                         try:
                             msg = self.pre_prompt + "\n\n"
                             msg += message_placeholders["vacancy_name"]
+                            logger.debug(msg)
                             msg = self.chat.send_message(msg)
                         except BlackboxError as ex:
                             logger.error(ex)
