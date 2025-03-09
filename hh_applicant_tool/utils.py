@@ -44,7 +44,7 @@ class Config(dict):
     def load(self) -> None:
         if self._config_path.exists():
             with self._lock:
-                with self._config_path.open() as f:
+                with self._config_path.open("r", encoding="utf-8", errors="replace") as f:
                     try:
                         self.update(json.load(f))
                     except ValueError:
@@ -54,7 +54,7 @@ class Config(dict):
         self.update(*args, **kwargs)
         self._config_path.parent.mkdir(exist_ok=True, parents=True)
         with self._lock:
-            with self._config_path.open("w+") as fp:
+            with self._config_path.open("w+", encoding="utf-8", errors="replace") as fp:
                 json.dump(
                     self,
                     fp,
