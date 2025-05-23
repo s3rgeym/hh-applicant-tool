@@ -21,8 +21,7 @@ logger = logging.getLogger(__package__)
 
 
 class BaseOperation:
-    def setup_parser(self, parser: argparse.ArgumentParser) -> None:
-        ...
+    def setup_parser(self, parser: argparse.ArgumentParser) -> None: ...
 
     def run(self, args: argparse.Namespace) -> None | int:
         raise NotImplementedError()
@@ -99,9 +98,7 @@ class HHApplicantTool:
             default=0.334,
             help="Задержка между запросами к API HH",
         )
-        parser.add_argument(
-            "--user-agent", help="User-Agent для каждого запроса"
-        )
+        parser.add_argument("--user-agent", help="User-Agent для каждого запроса")
         parser.add_argument(
             "--proxy-url", help="Прокси, используемый для запросов к API"
         )
