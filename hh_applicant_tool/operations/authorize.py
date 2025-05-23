@@ -4,12 +4,18 @@ import time
 from urllib.parse import parse_qs, urlsplit
 import sys
 from typing import Any
+from ..utils import print_err
+
+
+QT_IMPORTED = False
 
 try:
     from PyQt6.QtCore import QUrl
     from PyQt6.QtWidgets import QApplication, QMainWindow
     from PyQt6.QtWebEngineCore import QWebEngineUrlSchemeHandler
     from PyQt6.QtWebEngineWidgets import QWebEngineView
+
+    QT_IMPORTED = True
 except ImportError:
     # Заглушки чтобы на сервере не нужно было ставить сотни мегабайт qt-говна
 
@@ -48,9 +54,7 @@ class HHAndroidUrlSchemeHandler(QWebEngineUrlSchemeHandler):
 
 
 class WebViewWindow(QMainWindow):
-    def __init__(
-        self, url: str, oauth_client: OAuthClient, config: Config
-    ) -> None:
+    def __init__(self, url: str, oauth_client: OAuthClient, config: Config) -> None:
         super().__init__()
         self.oauth_client = oauth_client
         self.config = config
@@ -85,10 +89,14 @@ class Operation(BaseOperation):
         pass
 
     def run(self, args: Namespace) -> None:
+        if not QT_IMPORTED:
+            print_err(
+                "❗Критиническая Ошибка: PyQt6 не был импортирован, возможно, вы долбоеб и забыли его установить, либо же криворукие разрабы этой либы опять все сломали..."
+            )
+            sys.exit(1)
+
         oauth = OAuthClient(
-            user_agent=(
-                args.config["oauth_user_agent"] or args.config["user_agent"]
-            ),
+            user_agent=(args.config["oauth_user_agent"] or args.config["user_agent"]),
         )
 
         app = QApplication(sys.argv)
