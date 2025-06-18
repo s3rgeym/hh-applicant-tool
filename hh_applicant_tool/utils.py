@@ -14,6 +14,7 @@ from threading import Lock
 from typing import Any
 
 from .constants import INVALID_ISO8601_FORMAT
+from .jsonc import parse_jsonc
 
 print_err = partial(print, file=sys.stderr, flush=True)
 
@@ -45,10 +46,7 @@ class Config(dict):
         if self._config_path.exists():
             with self._lock:
                 with self._config_path.open("r", encoding="utf-8", errors="replace") as f:
-                    try:
-                        self.update(json.load(f))
-                    except ValueError:
-                        pass
+                    self.update(parse_jsonc(f.read()))
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         self.update(*args, **kwargs)
