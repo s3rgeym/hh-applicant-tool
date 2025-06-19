@@ -10,7 +10,7 @@ class TokenType(enum.Enum):
     WHITESPACE = r"\s+"
     COMMENT = r"//.*|/\*[\s\S]*?\*/"
     NUMBER = r"-?\d+(?:\.\d+)?"
-    STRING = r'"(?:[^"\\]|\\.)*"'
+    STRING = r'"(?:\\"|[^"]+)*"'
     KEYWORD = r"null|true|false"
     OPEN_CURLY = r"\{"
     CLOSE_CURLY = r"\}"
