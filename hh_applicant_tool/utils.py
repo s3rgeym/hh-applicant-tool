@@ -46,7 +46,7 @@ class Config(dict):
         if self._config_path.exists():
             with self._lock:
                 with self._config_path.open("r", encoding="utf-8", errors="replace") as f:
-                    self.update(parse_jsonc(f.read()))
+                    self.update(json.load(f))
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         self.update(*args, **kwargs)
