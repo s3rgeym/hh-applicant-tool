@@ -117,8 +117,8 @@ class BaseClient:
                 try:
                     rv = response.json()
                 except json.decoder.JSONDecodeError:
-                    if response.status_code not in [201, 204]:
-                        raise
+                    # if response.status_code not in [201, 204]:
+                    #     raise
                     rv = {}
             finally:
                 logger.debug(
