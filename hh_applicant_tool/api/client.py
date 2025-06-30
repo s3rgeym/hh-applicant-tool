@@ -17,7 +17,6 @@ from requests import Response, Session
 from ..constants import (
     ANDROID_CLIENT_ID,
     ANDROID_CLIENT_SECRET,
-    USER_AGENT_TEMPLATE,
 )
 from ..types import AccessToken
 from . import errors
