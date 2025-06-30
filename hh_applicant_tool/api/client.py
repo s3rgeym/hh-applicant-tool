@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+import uuid
 import time
 from dataclasses import dataclass
 from functools import partialmethod
@@ -12,7 +13,6 @@ from urllib.parse import urlencode
 
 import requests
 from requests import Response, Session
-import random
 
 from ..constants import (
     ANDROID_CLIENT_ID,
@@ -55,24 +55,7 @@ class BaseClient:
             logger.debug("Default Headers: %r", session.headers)
 
     def default_user_agent(self) -> str:
-        return USER_AGENT_TEMPLATE % (
-            random.choice(["8.0", "8.1", "9", "10", "11", "12"]),
-            random.choice(
-                [
-                    "SM-G998B",  # Samsung Galaxy S21 Ultra
-                    "Pixel 6",  # Google Pixel 6
-                    "Mi 11",  # Xiaomi Mi 11
-                    "OnePlus 9",  # OnePlus 9
-                    "P40",  # Huawei P40
-                    "LG G8",  # LG G8
-                    "Xperia 1 II",  # Sony Xperia 1 II
-                    "Moto G Power",  # Motorola Moto G Power
-                    "HTC U12+",  # HTC U12+
-                    "ROG Phone 5",  # Asus ROG Phone 5
-                ]
-            ),
-            random.randint(88, 130),
-        )
+        return f"ru.hh.android/7.122.11395, Device: 23053RN02Y, Android OS: 13 (UUID: {uuid.uuid4()})"
 
     def additional_headers(
         self,
