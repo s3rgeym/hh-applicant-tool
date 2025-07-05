@@ -7,7 +7,6 @@ from ..api import ApiClient, ClientError
 from ..constants import INVALID_ISO8601_FORMAT
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
-from ..main import get_api
 from ..types import ApiListResponse
 from ..utils import print_err, truncate_string
 
@@ -58,8 +57,7 @@ class Operation(BaseOperation):
                 break
         return rv
 
-    def run(self, args: Namespace) -> None:
-        api = get_api(args)
+    def run(self, api: ApiClient, args: Namespace) -> None:
         negotiations = self._get_active_negotiations(api)
         print("Всего активных:", len(negotiations))
         for item in negotiations:
@@ -69,16 +67,14 @@ class Operation(BaseOperation):
             # hidden True
             is_discard = state["id"] == "discard"
             if not item["hidden"] and (
-                args.all 
+                args.all
                 or is_discard
                 or (
                     state["id"] == "response"
-                    and (
-                        datetime.utcnow() - timedelta(days=args.older_than)
-                    ).replace(tzinfo=timezone.utc)
-                    > datetime.strptime(
-                        item["updated_at"], INVALID_ISO8601_FORMAT
+                    and (datetime.utcnow() - timedelta(days=args.older_than)).replace(
+                        tzinfo=timezone.utc
                     )
+                    > datetime.strptime(item["updated_at"], INVALID_ISO8601_FORMAT)
                 )
             ):
                 decline_allowed = item.get("decline_allowed") or False

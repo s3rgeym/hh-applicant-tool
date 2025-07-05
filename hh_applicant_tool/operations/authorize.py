@@ -35,7 +35,7 @@ except ImportError:
         pass
 
 
-from ..api import OAuthClient
+from ..api import ApiClient, OAuthClient
 from ..main import BaseOperation, Namespace
 from ..utils import Config
 
@@ -54,10 +54,9 @@ class HHAndroidUrlSchemeHandler(QWebEngineUrlSchemeHandler):
 
 
 class WebViewWindow(QMainWindow):
-    def __init__(self, url: str, oauth_client: OAuthClient, config: Config) -> None:
+    def __init__(self, api_client: ApiClient) -> None:
         super().__init__()
-        self.oauth_client = oauth_client
-        self.config = config
+        self.api_client = api_client
         # Настройка WebEngineView
         self.web_view = QWebEngineView()
         self.setCentralWidget(self.web_view)
@@ -68,16 +67,15 @@ class WebViewWindow(QMainWindow):
         profile.installUrlSchemeHandler(b"hhandroid", self.hhandroid_handler)
         # Настройки окна для мобильного вида
         self.resize(480, 800)
-        self.web_view.setUrl(QUrl(url))
+        self.web_view.setUrl(QUrl(api_client.oauth_client.authorize_url))
 
     def handle_redirect_uri(self, redirect_uri: str) -> None:
         logger.debug(f"handle redirect uri: {redirect_uri}")
         sp = urlsplit(redirect_uri)
         code = parse_qs(sp.query).get("code", [None])[0]
         if code:
-            token = self.oauth_client.authenticate(code)
-            logger.debug("Сохраняем токен")
-            self.config.save(token=dict(token, created_at=int(time.time())))
+            token = self.api_client.oauth_client.authenticate(code)
+            self.api_client.handle_access_token(token)
             print("🔓 Авторизация прошла успешно!")
             self.close()
 
@@ -88,21 +86,15 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, args: Namespace) -> None:
+    def run(self, api_client: ApiClient, args: Namespace) -> None:
         if not QT_IMPORTED:
             print_err(
                 "❗Критиническая Ошибка: PyQt6 не был импортирован, возможно, вы долбоеб и забыли его установить, либо же криворукие разрабы этой либы опять все сломали..."
             )
             sys.exit(1)
 
-        oauth = OAuthClient(
-            user_agent=(args.config["oauth_user_agent"] or args.config["user_agent"]),
-        )
-
         app = QApplication(sys.argv)
-        window = WebViewWindow(
-            oauth.authorize_url, oauth_client=oauth, config=args.config
-        )
+        window = WebViewWindow(api_client=api_client)
         window.show()
 
         app.exec()

@@ -13,7 +13,7 @@ RUN pip install hh-applicant-tool
 
 # Создаем группу и пользователя с указанными UID и GID
 RUN groupadd -g $GID docker && \
-    useradd -u $UID -g docker -m -s /bin/sh docker
+  useradd -u $UID -g docker -m -s /bin/sh docker
 
 # Указываем рабочую директорию
 WORKDIR /app

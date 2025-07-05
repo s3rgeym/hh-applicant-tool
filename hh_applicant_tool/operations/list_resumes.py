@@ -5,7 +5,7 @@ import logging
 from prettytable import PrettyTable
 
 from ..api import ApiClient
-from ..main import BaseOperation, get_api
+from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse
 from ..utils import truncate_string
@@ -23,12 +23,9 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, args: Namespace) -> None:
-        api = get_api(args)
+    def run(self, api: ApiClient, _) -> None:
         resumes: ApiListResponse = api.get("/resumes/mine")
-        t = PrettyTable(
-            field_names=["ID", "Название", "Статус"], align="l", valign="t"
-        )
+        t = PrettyTable(field_names=["ID", "Название", "Статус"], align="l", valign="t")
         t.add_rows(
             [
                 (

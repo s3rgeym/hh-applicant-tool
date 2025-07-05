@@ -4,10 +4,9 @@ import random
 import time
 from typing import Tuple
 
-from ..api import ApiError
+from ..api import ApiError, ApiClient
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
-from ..main import get_api
 from ..mixins import GetResumeIdMixin
 from ..utils import parse_interval, random_text
 
@@ -67,8 +66,8 @@ class Operation(BaseOperation, GetResumeIdMixin):
             action=argparse.BooleanOptionalAction,
         )
 
-    def run(self, args: Namespace) -> None:
-        self.api = get_api(args)
+    def run(self, api: ApiClient, args: Namespace) -> None:
+        self.api = api
         self.resume_id = self._get_resume_id()
         self.reply_min_interval, self.reply_max_interval = args.reply_interval
         self.reply_message = args.reply_message or args.config["reply_message"]
@@ -160,10 +159,12 @@ class Operation(BaseOperation, GetResumeIdMixin):
                         print("💼", message_placeholders["vacancy_name"])
                         print("📅", vacancy["created_at"])
                         if salary:
-                            salary_from = salary.get("from")or "-"
-                            salary_to = salary.get("to")or "-"
+                            salary_from = salary.get("from") or "-"
+                            salary_to = salary.get("to") or "-"
                             salary_currency = salary.get("currency")
-                            print("💵 от", salary_from, "до", salary_to, salary_currency)
+                            print(
+                                "💵 от", salary_from, "до", salary_to, salary_currency
+                            )
                         print("")
                         print("Последние сообщения:")
                         for msg in (

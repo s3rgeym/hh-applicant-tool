@@ -9,6 +9,7 @@ from urllib.parse import urljoin
 
 import requests
 
+# Сертификат на сервере давно истек, но его обновлять мне лень...
 warnings.filterwarnings("ignore", message="Unverified HTTPS request")
 
 logger = logging.getLogger(__package__)

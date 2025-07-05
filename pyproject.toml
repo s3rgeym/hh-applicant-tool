@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hh-applicant-tool"
-version = "0.5.7"
+version = "0.5.8"
 description = ""
 authors = ["Senior YAML Developer <yamldeveloper@proton.me>"]
 readme = "README.md"
@@ -29,3 +29,10 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 hh-applicant-tool = "hh_applicant_tool.main:main"
+
+# Он заебал агриться на старый код, который был написан до появления агрессивной
+# проверки типов в pyright
+[tool.pyright]
+# https://github.com/microsoft/pyright/blob/main/docs/configuration.md
+# Ошибки показывать он не бросит, но заебывать перестанет
+typeCheckingMode = "off"

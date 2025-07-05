@@ -37,14 +37,18 @@ class ApiError(Exception):
     def response_headers(self) -> CaseInsensitiveDict:
         return self._response.headers
 
-#     def __getattr__(self, name: str) -> Any:
-#         try:
-#             return self._raw[name]
-#         except KeyError as ex:
-#             raise AttributeError(name) from ex
+    #     def __getattr__(self, name: str) -> Any:
+    #         try:
+    #             return self._raw[name]
+    #         except KeyError as ex:
+    #             raise AttributeError(name) from ex
 
     def __str__(self) -> str:
         return str(self._raw)
+
+    @staticmethod
+    def is_limit_exceeded(data) -> bool:
+        return any(x["value"] == "limit_exceeded" for x in data.get("errors", []))
 
 
 class Redirect(ApiError):
@@ -56,9 +60,11 @@ class ClientError(ApiError):
 
 
 class BadRequest(ClientError):
-    @property
-    def limit_exceeded(self) -> bool:
-        return any(x["value"] == "limit_exceeded" for x in self._raw["errors"])
+    pass
+
+
+class LimitExceeded(ClientError):
+    pass
 
 
 class Forbidden(ClientError):

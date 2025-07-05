@@ -1,16 +1,19 @@
+# Unused
+"""Парсер JSON с комментариями"""
+
 import re
 import enum
 from dataclasses import dataclass
 import ast
 from typing import Any, Iterator
-from collections import OrderedDict
+# from collections import OrderedDict
 
 
 class TokenType(enum.Enum):
     WHITESPACE = r"\s+"
     COMMENT = r"//.*|/\*[\s\S]*?\*/"
     NUMBER = r"-?\d+(?:\.\d+)?"
-    STRING = r'"(?:\\"|[^"]+)*"'
+    STRING = r'"(?:\\.|[^"]+)*"'
     KEYWORD = r"null|true|false"
     OPEN_CURLY = r"\{"
     CLOSE_CURLY = r"\}"
@@ -42,7 +45,8 @@ class JSONCParser:
             lambda t: t.token_type not in [TokenType.COMMENT, TokenType.WHITESPACE],
             tokenize(s),
         )
-        self.next_token = None
+        self.token: Token
+        self.next_token: Token | None = None
         self.advance()
         result = self.parse_value()
         self.expect(TokenType.EOF)
@@ -91,6 +95,7 @@ class JSONCParser:
             raise SyntaxError(f"Unexpected token: {self.token.token_type.name}")
 
     def advance(self):
+        assert self.next_token is not None
         self.token, self.next_token = (
             self.next_token,
             next(self.token_it, Token(TokenType.EOF, "")),
@@ -98,7 +103,7 @@ class JSONCParser:
         # print(f"{self.token =}, {self.next_token =}")
 
     def match(self, token_type: TokenType) -> bool:
-        if self.next_token.token_type == token_type:
+        if self.next_token is not None and self.next_token.token_type == token_type:
             self.advance()
             return True
         return False
@@ -106,7 +111,7 @@ class JSONCParser:
     def expect(self, token_type: TokenType):
         if not self.match(token_type):
             raise SyntaxError(
-                f"Expected {token_type.name}, got {self.next_token.token_type.name}"
+                f"Expected {token_type.name}, got {self.next_token.token_type.name if self.next_token else '???'}"
             )
 
 

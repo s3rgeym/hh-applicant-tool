@@ -28,7 +28,7 @@ class Operation(BaseOperation):
             help="Напечатать путь и выйти",
         )
 
-    def run(self, args: Namespace) -> None:
+    def run(self, _, args: Namespace) -> None:
         config_path = str(args.config._config_path)
         if args.print:
             print(config_path)
