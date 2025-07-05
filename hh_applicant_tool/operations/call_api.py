@@ -4,8 +4,8 @@ import json
 import logging
 import sys
 
-from ..api import ApiError
-from ..main import BaseOperation, get_api
+from ..api import ApiError, ApiClient
+from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 
 logger = logging.getLogger(__package__)
@@ -33,8 +33,7 @@ class Operation(BaseOperation):
             "-m", "--method", "--meth", default="GET", help="HTTP Метод"
         )
 
-    def run(self, args: Namespace) -> None:
-        api = get_api(args)
+    def run(self, api: ApiClient, args: Namespace) -> None:
         params = dict(x.split("=", 1) for x in args.param)
         try:
             result = api.request(args.method, args.endpoint, params=params)

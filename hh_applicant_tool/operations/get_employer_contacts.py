@@ -48,13 +48,11 @@ class Operation(BaseOperation):
             help="Номер страницы в выдаче",
         )
 
-    def run(self, args: Namespace) -> None:
+    def run(self, _, args: Namespace) -> None:
         proxies = get_proxies(args)
         client = TelemetryClient(proxies=proxies)
         auth = (
-            (args.username, args.password)
-            if args.username and args.password
-            else None
+            (args.username, args.password) if args.username and args.password else None
         )
         # Аутентификация пользователя
         results = client.get_telemetry(
@@ -62,6 +60,13 @@ class Operation(BaseOperation):
             {"search": args.search, "per_page": 10, "page": args.page},
             auth=auth,
         )
+        if "contact_persons" not in results:
+            print("❌", results)
+            return 1
+
+        print("Данная информация была собрана из публичных источников.")
+        print()
+
         self._print_contacts(results)
 
     def _print_contacts(self, data: dict) -> None:
@@ -78,26 +83,11 @@ class Operation(BaseOperation):
     def _print_contact(self, contact: dict, is_last_contact: bool) -> None:
         """Вывод информации о конкретном контакте."""
         prefix = "└──" if is_last_contact else "├──"
-        print(f" {prefix} 🧑 {contact.get('name', 'н/д')}")
+        print(f" {prefix} 🧑 Контактное лицо")
         prefix2 = "    " if is_last_contact else " │   "
         print(f"{prefix2}├── 📧 Email: {contact.get('email', 'н/д')}")
         employer = contact.get("employer") or {}
         print(f"{prefix2}├── 🏢 Работодатель: {employer.get('name', 'н/д')}")
         print(f"{prefix2}├── 🏠 Город: {employer.get('area', 'н/д')}")
-        print(f"{prefix2}├── 🌐 Сайт: {employer.get('site_url', 'н/д')}")
-
-        phones = contact["phone_numbers"] or [{"phone_number": "(нет номеров)"}]
-        print(f"{prefix2}├── 📞 Телефоны:")
-        last_phone = len(phones) - 1
-        for i, phone in enumerate(phones):
-            sub_prefix = "└──" if i == last_phone else "├──"
-            print(f"{prefix2}│   {sub_prefix} {phone['phone_number']}")
-
-        telegrams = contact["telegram_usernames"] or [
-            {"username": "(нет аккаунтов)"}
-        ]
-        print(f"{prefix2}└── 📱 Telegram:")
-        last_telegram = len(telegrams) - 1
-        for i, telegram in enumerate(telegrams):
-            sub_prefix = "└──" if i == last_telegram else "├──"
-            print(f"{prefix2}    {sub_prefix} {telegram['username']}")
+        print(f"{prefix2}└── 🌐 Сайт: {employer.get('site_url', 'н/д')}")
+        print(prefix2)

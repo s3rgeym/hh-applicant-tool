@@ -4,19 +4,25 @@ import random
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import TextIO, Tuple
+from typing import TextIO
+
+from hh_applicant_tool.api.errors import LimitExceeded
 
 from ..ai.blackbox import BlackboxChat, BlackboxError
-from ..api import ApiError, BadRequest
+from ..api import ApiError, ApiClient
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..main import get_api
 from ..mixins import GetResumeIdMixin
 from ..telemetry_client import TelemetryClient, TelemetryError
 from ..types import ApiListResponse, VacancyItem
-from ..utils import (fix_datetime, parse_interval, parse_invalid_datetime,
-                     random_text, truncate_string)
-from hh_applicant_tool.ai import blackbox
+from ..utils import (
+    fix_datetime,
+    parse_interval,
+    parse_invalid_datetime,
+    random_text,
+    truncate_string,
+)
 
 logger = logging.getLogger(__package__)
 
@@ -43,7 +49,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
             "-L",
             "--message-list",
             help="Путь до файла, где хранятся сообщения для отклика на вакансии. Каждое сообщение — с новой строки.",
-            type=argparse.FileType('r', encoding='utf-8', errors='replace'),
+            type=argparse.FileType("r", encoding="utf-8", errors="replace"),
         )
         parser.add_argument(
             "-f",
@@ -103,7 +109,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
             action=argparse.BooleanOptionalAction,
         )
 
-    def run(self, args: Namespace) -> None:
+    def run(self, api: ApiClient, args: Namespace) -> None:
         self.enable_telemetry = True
         if args.disable_telemetry:
             # print(
@@ -120,11 +126,9 @@ class Operation(BaseOperation, GetResumeIdMixin):
             #     logger.info("Спасибо за то что оставили телеметрию включенной!")
             self.enable_telemetry = False
 
-        self.api = get_api(args)
+        self.api = api
         self.resume_id = args.resume_id or self._get_resume_id()
-        self.application_messages = self._get_application_messages(
-            args.message_list
-        )
+        self.application_messages = self._get_application_messages(args.message_list)
         self.chat = None
 
         if config := args.config.get("blackbox"):
@@ -145,13 +149,9 @@ class Operation(BaseOperation, GetResumeIdMixin):
         self.dry_run = args.dry_run
         self._apply_similar()
 
-    def _get_application_messages(
-        self, message_list: TextIO | None
-    ) -> list[str]:
+    def _get_application_messages(self, message_list: TextIO | None) -> list[str]:
         if message_list:
-            application_messages = list(
-                filter(None, map(str.strip, message_list))
-            )
+            application_messages = list(filter(None, map(str.strip, message_list)))
         else:
             application_messages = [
                 "{Меня заинтересовала|Мне понравилась} ваша вакансия %(vacancy_name)s",
@@ -172,12 +172,8 @@ class Operation(BaseOperation, GetResumeIdMixin):
                     "name": vacancy.get("name"),
                     "type": vacancy.get("type", {}).get("id"),  # open/closed
                     "area": vacancy.get("area", {}).get("name"),  # город
-                    "salary": vacancy.get(
-                        "salary"
-                    ),  # from, to, currency, gross
-                    "direct_url": vacancy.get(
-                        "alternate_url"
-                    ),  # ссылка на вакансию
+                    "salary": vacancy.get("salary"),  # from, to, currency, gross
+                    "direct_url": vacancy.get("alternate_url"),  # ссылка на вакансию
                     "created_at": fix_datetime(
                         vacancy.get("created_at")
                     ),  # будем вычислять говно-вакансии, которые по полгода висят
@@ -210,9 +206,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
             try:
                 message_placeholders = {
                     "vacancy_name": vacancy.get("name", ""),
-                    "employer_name": vacancy.get("employer", {}).get(
-                        "name", ""
-                    ),
+                    "employer_name": vacancy.get("employer", {}).get("name", ""),
                     **basic_message_placeholders,
                 }
 
@@ -304,9 +298,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                     "message": "",
                 }
 
-                if self.force_message or vacancy.get(
-                    "response_letter_required"
-                ):
+                if self.force_message or vacancy.get("response_letter_required"):
                     if self.chat:
                         try:
                             msg = self.pre_prompt + "\n\n"
@@ -318,9 +310,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                             continue
                     else:
                         msg = (
-                            random_text(
-                                random.choice(self.application_messages)
-                            )
+                            random_text(random.choice(self.application_messages))
                             % message_placeholders
                         )
 
@@ -350,10 +340,11 @@ class Operation(BaseOperation, GetResumeIdMixin):
                     truncate_string(vacancy["name"]),
                     ")",
                 )
+            except LimitExceeded:
+                print("⚠️ Достигли лимита рассылки")
+                do_apply = False
             except ApiError as ex:
                 logger.error(ex)
-                if isinstance(ex, BadRequest) and ex.limit_exceeded:
-                    do_apply = False
 
         print("📝 Отклики на вакансии разосланы!")
 

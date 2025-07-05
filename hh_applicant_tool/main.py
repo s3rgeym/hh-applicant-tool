@@ -134,7 +134,11 @@ class HHApplicantTool:
         logger.addHandler(handler)
         if args.run:
             try:
-                return args.run(args)
+                api = get_api(args)
+                if not (res := args.run(api, args)):
+                    # 0 or None = success
+                    args.config.save(token=api.get_access_token())
+                return res
             except Exception as e:
                 logger.exception(e)
                 return 1
