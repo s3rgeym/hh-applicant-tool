@@ -6,13 +6,11 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import TextIO
 
-from hh_applicant_tool.api.errors import LimitExceeded
-
+from ..api.errors import LimitExceeded
 from ..ai.blackbox import BlackboxChat, BlackboxError
 from ..api import ApiError, ApiClient
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
-from ..main import get_api
 from ..mixins import GetResumeIdMixin
 from ..telemetry_client import TelemetryClient, TelemetryError
 from ..types import ApiListResponse, VacancyItem
@@ -109,7 +107,9 @@ class Operation(BaseOperation, GetResumeIdMixin):
             action=argparse.BooleanOptionalAction,
         )
 
-    def run(self, api: ApiClient, args: Namespace) -> None:
+    def run(
+        self, args: Namespace, api_client: ApiClient, telemetry_client: TelemetryClient
+    ) -> None:
         self.enable_telemetry = True
         if args.disable_telemetry:
             # print(
@@ -126,7 +126,8 @@ class Operation(BaseOperation, GetResumeIdMixin):
             #     logger.info("Спасибо за то что оставили телеметрию включенной!")
             self.enable_telemetry = False
 
-        self.api = api
+        self.api_client = api_client
+        self.telemetry_client = telemetry_client
         self.resume_id = args.resume_id or self._get_resume_id()
         self.application_messages = self._get_application_messages(args.message_list)
         self.chat = None
@@ -135,7 +136,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
             self.chat = BlackboxChat(
                 session_id=config["session_id"],
                 chat_payload=config["chat_payload"],
-                proxies=self.api.proxies or {},
+                proxies=self.api_client.proxies or {},
             )
 
         self.pre_prompt = args.pre_prompt
@@ -160,7 +161,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
         return application_messages
 
     def _apply_similar(self) -> None:
-        telemetry_client = TelemetryClient(proxies=self.api.proxies)
+        telemetry_client = self.telemetry_client
         telemetry_data = defaultdict(dict)
 
         vacancies = self._get_vacancies()
@@ -190,7 +191,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                     # Остальное неинтересно
                 }
 
-        me = self.api.get("/me")
+        me = self.api_client.get("/me")
 
         basic_message_placeholders = {
             "first_name": me.get("first_name", ""),
@@ -244,7 +245,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                         > datetime.now(tz=timezone.utc)
                     )
                 ):
-                    employer = self.api.get(f"/employers/{employer_id}")
+                    employer = self.api_client.get(f"/employers/{employer_id}")
 
                     employer_data = {
                         "name": employer.get("name"),
@@ -269,9 +270,10 @@ class Operation(BaseOperation, GetResumeIdMixin):
                                     response["topic_url"],
                                 )
                             else:
-                                print(
-                                    "Создание темы для обсуждения работодателя добавлено в очередь..."
-                                )
+                                # print(
+                                #     "Создание темы для обсуждения работодателя добавлено в очередь..."
+                                # )
+                                ...
                             complained_employers.add(employer_id)
                         except TelemetryError as ex:
                             logger.error(ex)
@@ -331,7 +333,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                 )
                 time.sleep(interval)
 
-                res = self.api.post("/negotiations", params)
+                res = self.api_client.post("/negotiations", params)
                 assert res == {}
                 print(
                     "📨 Отправили отклик",
@@ -375,7 +377,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
             }
             if self.search:
                 params["text"] = self.search
-            res: ApiListResponse = self.api.get(
+            res: ApiListResponse = self.api_client.get(
                 f"/resumes/{self.resume_id}/similar_vacancies", params
             )
             rv.extend(res["items"])

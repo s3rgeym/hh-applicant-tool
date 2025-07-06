@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -6,8 +8,8 @@ import warnings
 from functools import partialmethod
 from typing import Any, Dict, Optional
 from urllib.parse import urljoin
-
 import requests
+from .utils import Config
 
 # Сертификат на сервере давно истек, но его обновлять мне лень...
 warnings.filterwarnings("ignore", message="Unverified HTTPS request")
@@ -29,6 +31,7 @@ class TelemetryClient:
 
     def __init__(
         self,
+        telemetry_client_id: str,
         server_address: Optional[str] = None,
         *,
         session: Optional[requests.Session] = None,
@@ -36,6 +39,7 @@ class TelemetryClient:
         proxies: dict | None = None,
         delay: Optional[float] = None,
     ) -> None:
+        self.send_telemetry_id = telemetry_client_id
         self.server_address = os.getenv(
             "TELEMETRY_SERVER", server_address or self.server_address
         )
@@ -68,7 +72,10 @@ class TelemetryClient:
             response = self.session.request(
                 method,
                 url,
-                headers={"User-Agent": self.user_agent},
+                headers={
+                    "User-Agent": self.user_agent,
+                    "X-Telemetry-Client-ID": self.send_telemetry_id,
+                },
                 proxies=self.proxies,
                 params=data if not has_body else None,
                 json=data if has_body else None,
@@ -92,3 +99,8 @@ class TelemetryClient:
 
     get_telemetry = partialmethod(request, "GET")
     send_telemetry = partialmethod(request, "POST")
+
+    @classmethod
+    def create_from_config(cls, config: Config) -> "TelemetryClient":
+        assert "telemetry_client_id" in config
+        return cls(config["telemetry_client_id"])

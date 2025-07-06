@@ -43,12 +43,12 @@ class Operation(BaseOperation):
             action=argparse.BooleanOptionalAction,
         )
 
-    def _get_active_negotiations(self, api: ApiClient) -> list[dict]:
+    def _get_active_negotiations(self, api_client: ApiClient) -> list[dict]:
         rv = []
         page = 0
         per_page = 100
         while True:
-            r: ApiListResponse = api.get(
+            r: ApiListResponse = api_client.get(
                 "/negotiations", page=page, per_page=per_page, status="active"
             )
             rv.extend(r["items"])
@@ -57,8 +57,8 @@ class Operation(BaseOperation):
                 break
         return rv
 
-    def run(self, api: ApiClient, args: Namespace) -> None:
-        negotiations = self._get_active_negotiations(api)
+    def run(self, args: Namespace, api_client: ApiClient, *_) -> None:
+        negotiations = self._get_active_negotiations(api_client)
         print("Всего активных:", len(negotiations))
         for item in negotiations:
             state = item["state"]
@@ -78,7 +78,7 @@ class Operation(BaseOperation):
                 )
             ):
                 decline_allowed = item.get("decline_allowed") or False
-                r = api.delete(
+                r = api_client.delete(
                     f"/negotiations/active/{item['id']}",
                     with_decline_message=decline_allowed,
                 )
@@ -95,7 +95,7 @@ class Operation(BaseOperation):
                 if is_discard and args.blacklist_discard:
                     employer = vacancy["employer"]
                     try:
-                        r = api.put(f"/employers/blacklisted/{employer['id']}")
+                        r = api_client.put(f"/employers/blacklisted/{employer['id']}")
                         assert not r
                         print(
                             "🚫 Заблокировали",

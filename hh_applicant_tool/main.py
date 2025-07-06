@@ -12,6 +12,8 @@ from typing import Literal, Sequence
 from .api import ApiClient
 from .color_log import ColorHandler
 from .utils import Config, get_config_path
+from .telemetry_client import TelemetryClient
+
 
 DEFAULT_CONFIG_PATH = (
     get_config_path() / (__package__ or "").replace("_", "-") / "config.json"
@@ -46,11 +48,12 @@ def get_proxies(args: Namespace) -> dict[Literal["http", "https"], str | None]:
     }
 
 
-def get_api(args: Namespace) -> ApiClient:
+def get_api_client(args: Namespace) -> ApiClient:
     token = args.config.get("token", {})
     api = ApiClient(
         access_token=token.get("access_token"),
         refresh_token=token.get("refresh_token"),
+        access_expires_at=token.get("access_expires_at"),
         delay=args.delay,
         user_agent=args.config["user_agent"],
         proxies=get_proxies(args),
@@ -134,10 +137,19 @@ class HHApplicantTool:
         logger.addHandler(handler)
         if args.run:
             try:
-                api = get_api(args)
-                if not (res := args.run(api, args)):
-                    # 0 or None = success
-                    args.config.save(token=api.get_access_token())
+                if not args.config["telemetry_client_id"]:
+                    import uuid
+
+                    args.config.save(telemetry_client_id=str(uuid.uuid4()))
+                api_client = get_api_client(args)
+                telemetry_client = TelemetryClient(
+                    telemetry_client_id=args.config["telemetry_client_id"],
+                    proxies=api_client.proxies.copy(),
+                )
+                # 0 or None = success
+                res = args.run(args, api_client, telemetry_client)
+                if (token := api_client.get_access_token()) != args.config["token"]:
+                    args.config.save(token=token)
                 return res
             except Exception as e:
                 logger.exception(e)

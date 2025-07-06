@@ -1,6 +1,5 @@
 import argparse
 import logging
-import time
 from urllib.parse import parse_qs, urlsplit
 import sys
 from typing import Any
@@ -35,9 +34,8 @@ except ImportError:
         pass
 
 
-from ..api import ApiClient, OAuthClient
-from ..main import BaseOperation, Namespace
-from ..utils import Config
+from ..api import ApiClient  # noqa: E402
+from ..main import BaseOperation, Namespace  # noqa: E402
 
 logger = logging.getLogger(__package__)
 
@@ -86,7 +84,7 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, api_client: ApiClient, args: Namespace) -> None:
+    def run(self, args: Namespace, api_client: ApiClient, *_) -> None:
         if not QT_IMPORTED:
             print_err(
                 "❗Критиническая Ошибка: PyQt6 не был импортирован, возможно, вы долбоеб и забыли его установить, либо же криворукие разрабы этой либы опять все сломали..."

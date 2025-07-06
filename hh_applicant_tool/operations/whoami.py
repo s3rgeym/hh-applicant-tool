@@ -20,6 +20,6 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, api: ApiClient, args: Namespace) -> None:
-        result = api.get("/me")
-        print(json.dumps(result, ensure_ascii=True, indent=2, sort_keys=True))
+    def run(self, args: Namespace, api_client: ApiClient, _) -> None:
+        result = api_client.get("/me")
+        print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
