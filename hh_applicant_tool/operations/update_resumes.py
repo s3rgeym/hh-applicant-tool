@@ -21,11 +21,11 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, api: ApiClient, args: Namespace) -> None:
-        resumes: ApiListResponse = api.get("/resumes/mine")
+    def run(self, args: Namespace, api_client: ApiClient, *_) -> None:
+        resumes: ApiListResponse = api_client.get("/resumes/mine")
         for resume in resumes["items"]:
             try:
-                res = api.post(f"/resumes/{resume['id']}/publish")
+                res = api_client.post(f"/resumes/{resume['id']}/publish")
                 assert res == {}
                 print("✅ Обновлено", truncate_string(resume["title"]))
             except ApiError as ex:

@@ -23,8 +23,8 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, api: ApiClient, _) -> None:
-        resumes: ApiListResponse = api.get("/resumes/mine")
+    def run(self, args: Namespace, api_client: ApiClient, *_) -> None:
+        resumes: ApiListResponse = api_client.get("/resumes/mine")
         t = PrettyTable(field_names=["ID", "Название", "Статус"], align="l", valign="t")
         t.add_rows(
             [

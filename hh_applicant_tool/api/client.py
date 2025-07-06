@@ -124,10 +124,17 @@ class BaseClient:
         assert 300 > response.status_code >= 200
         return rv
 
-    get = partialmethod(request, "GET")
-    post = partialmethod(request, "POST")
-    put = partialmethod(request, "PUT")
-    delete = partialmethod(request, "DELETE")
+    def get(self, *args, **kwargs):
+        return self.request("GET", *args, **kwargs)
+
+    def post(self, *args, **kwargs):
+        return self.request("POST", *args, **kwargs)
+
+    def put(self, *args, **kwargs):
+        return self.request("PUT", *args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        return self.request("DELETE", *args, **kwargs)
 
     def resolve_url(self, url: str) -> str:
         return url if "://" in url else f"{self.base_url.rstrip('/')}/{url.lstrip('/')}"
@@ -194,7 +201,7 @@ class OAuthClient(BaseClient):
         }
         return self.request_access_token("/token", params)
 
-    def refresh_access(self, refresh_token: str) -> AccessToken:
+    def refresh_access_token(self, refresh_token: str) -> AccessToken:
         # refresh_token можно использовать только один раз и только по истечению срока действия access_token.
         return self.request_access_token(
             "/token", grant_type="refresh_token", refresh_token=refresh_token
@@ -243,25 +250,30 @@ class ApiClient(BaseClient):
         **kwargs: Any,
     ) -> dict:
         def do_request():
-            return super().request(method, endpoint, params, delay, **kwargs)
+            return BaseClient.request(self, method, endpoint, params, delay, **kwargs)
 
         try:
             return do_request()
         # TODO: добавить класс для ошибок типа AccessTokenExpired
-        except errors.ApiError as ex:
-            if not self.is_access_expired:
+        except errors.Forbidden as ex:
+            if not self.is_access_expired or not self.refresh_token:
                 raise ex
             logger.info("try refresh access_token")
             # Пробуем обновить токен
-            token = self.oauth_client.refresh_access(self.refresh_token)
-            self.handle_access_token(token)
+            self.refresh_access_token()
             # И повторно отправляем запрос
             return do_request()
 
     def handle_access_token(self, token: AccessToken) -> None:
-        for k in ["access_token", "refresh_token", "access_expires_at"]:
-            if k in token:
-                setattr(self, k, token[k])
+        for field in ["access_token", "refresh_token", "access_expires_at"]:
+            if field in token and hasattr(self, field):
+                setattr(self, field, token[field])
+
+    def refresh_access_token(self) -> None:
+        if not self.refresh_token:
+            raise ValueError("Refresh token required.")
+        token = self.oauth_client.refresh_access_token(self.refresh_token)
+        self.handle_access_token(token)
 
     def get_access_token(self) -> AccessToken:
         return {

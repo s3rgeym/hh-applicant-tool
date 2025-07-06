@@ -4,7 +4,6 @@ from os import getenv
 
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
-from ..main import get_proxies
 from ..telemetry_client import TelemetryClient
 
 logger = logging.getLogger(__package__)
@@ -48,23 +47,18 @@ class Operation(BaseOperation):
             help="Номер страницы в выдаче",
         )
 
-    def run(self, _, args: Namespace) -> None:
-        proxies = get_proxies(args)
-        client = TelemetryClient(proxies=proxies)
-        auth = (
-            (args.username, args.password) if args.username and args.password else None
-        )
-        # Аутентификация пользователя
-        results = client.get_telemetry(
+    def run(self, args: Namespace, _, telemetry_client: TelemetryClient) -> None:
+        results = telemetry_client.get_telemetry(
             "/contact/persons",
             {"search": args.search, "per_page": 10, "page": args.page},
-            auth=auth,
         )
         if "contact_persons" not in results:
             print("❌", results)
             return 1
 
-        print("Данная информация была собрана из публичных источников.")
+        print(
+            "Тут отображаются только данные, собранные с вашего telemetry_client_id. Вы так же можете их удалить с помощью команды delete-telemtry."
+        )
         print()
 
         self._print_contacts(results)
@@ -73,7 +67,7 @@ class Operation(BaseOperation):
         """Вывод всех контактов в древовидной структуре."""
         page = data["page"]
         pages = (data["total"] // data["per_page"]) + 1
-        print(f"📋 Контакты ({page}/{pages}):")
+        print(f"Страница {page}/{pages}:")
         contacts = data.get("contact_persons", [])
         for idx, contact in enumerate(contacts):
             is_last_contact = idx == len(contacts) - 1
@@ -83,7 +77,7 @@ class Operation(BaseOperation):
     def _print_contact(self, contact: dict, is_last_contact: bool) -> None:
         """Вывод информации о конкретном контакте."""
         prefix = "└──" if is_last_contact else "├──"
-        print(f" {prefix} 🧑 Контактное лицо")
+        print(f" {prefix} 🧑 {contact.get('name', 'Имя скрыто')}")
         prefix2 = "    " if is_last_contact else " │   "
         print(f"{prefix2}├── 📧 Email: {contact.get('email', 'н/д')}")
         employer = contact.get("employer") or {}

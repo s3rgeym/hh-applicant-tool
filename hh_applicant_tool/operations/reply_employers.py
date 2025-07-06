@@ -66,8 +66,8 @@ class Operation(BaseOperation, GetResumeIdMixin):
             action=argparse.BooleanOptionalAction,
         )
 
-    def run(self, api: ApiClient, args: Namespace) -> None:
-        self.api = api
+    def run(self, args: Namespace, api_client: ApiClient, *_) -> None:
+        self.api_client = api_client
         self.resume_id = self._get_resume_id()
         self.reply_min_interval, self.reply_max_interval = args.reply_interval
         self.reply_message = args.reply_message or args.config["reply_message"]
@@ -79,7 +79,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
         self._reply_chats()
 
     def _reply_chats(self) -> None:
-        me = self.me = self.api.get("/me")
+        me = self.me = self.api_client.get("/me")
 
         basic_message_placeholders = {
             "first_name": me.get("first_name", ""),
@@ -123,7 +123,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                 last_message: dict | None = None
                 message_history: list[str] = []
                 while True:
-                    messages_res = self.api.get(
+                    messages_res = self.api_client.get(
                         f"/negotiations/{nid}/messages", page=page
                     )
 
@@ -193,7 +193,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                             self.reply_max_interval,
                         )
                     )
-                    self.api.post(
+                    self.api_client.post(
                         f"/negotiations/{nid}/messages",
                         message=message,
                     )
@@ -209,7 +209,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
     def _get_negotiations(self) -> list[dict]:
         rv = []
         for page in range(self.max_pages):
-            res = self.api.get("/negotiations", page=page, status="active")
+            res = self.api_client.get("/negotiations", page=page, status="active")
             rv.extend(res["items"])
             if page >= res["pages"] - 1:
                 break
