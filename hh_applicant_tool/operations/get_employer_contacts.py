@@ -57,7 +57,7 @@ class Operation(BaseOperation):
             return 1
 
         print(
-            "Тут отображаются только данные, собранные с вашего telemetry_client_id. Вы так же можете их удалить с помощью команды delete-telemtry."
+            "Тут отображаются только данные, собранные с вашего telemetry_client_id. Вы так же можете их удалить с помощью команды delete-telemetry."
         )
         print()
 
