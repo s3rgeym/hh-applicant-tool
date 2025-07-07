@@ -11,9 +11,8 @@ from typing import Literal, Sequence
 
 from .api import ApiClient
 from .color_log import ColorHandler
-from .utils import Config, get_config_path
 from .telemetry_client import TelemetryClient
-
+from .utils import Config, get_config_path
 
 DEFAULT_CONFIG_PATH = (
     get_config_path() / (__package__ or "").replace("_", "-") / "config.json"
