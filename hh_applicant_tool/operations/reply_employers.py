@@ -169,7 +169,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                                 "vacancy_url": vacancy.get("alternate_url"),
                                 "vacancy_name": vacancy.get("name"),
                                 "salary": (
-                                    f"{salary.get('from', '...')}-{salary.get('to', '...')} {salary.get('currency', 'RUB')}"  # noqa: E501
+                                    f"{salary.get('from', '...')}-{salary.get('to', '...')} {salary.get('currency', 'RUR')}"  # noqa: E501
                                     if salary
                                     else None
                                 ),
