@@ -4,7 +4,7 @@ import json
 import logging
 import sys
 
-from ..api import ApiError, ApiClient
+from ..api import ApiClient, ApiError
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 

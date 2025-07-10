@@ -9,6 +9,14 @@ from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..mixins import GetResumeIdMixin
 from ..utils import parse_interval, random_text
+from ..telemetry_client import TelemetryClient, TelemetryError
+import re
+
+
+GOOGLE_DOCS_RE = re.compile(
+    r"\b(?:https?:\/\/)?(?:docs|forms|sheets|slides|drive)\.google\.com\/(?:document|spreadsheets|presentation|forms|file)\/(?:d|u)\/[a-zA-Z0-9_\-]+(?:\/[a-zA-Z0-9_\-]+)?\/?(?:[?#].*)?\b|\b(?:https?:\/\/)?(?:goo\.gl|forms\.gle)\/[a-zA-Z0-9]+\b",
+    re.I,
+)
 
 logger = logging.getLogger(__package__)
 
@@ -66,8 +74,11 @@ class Operation(BaseOperation, GetResumeIdMixin):
             action=argparse.BooleanOptionalAction,
         )
 
-    def run(self, args: Namespace, api_client: ApiClient, *_) -> None:
+    def run(
+        self, args: Namespace, api_client: ApiClient, telemetry_client: TelemetryClient
+    ) -> None:
         self.api_client = api_client
+        self.telemetry_client = telemetry_client
         self.resume_id = self._get_resume_id()
         self.reply_min_interval, self.reply_max_interval = args.reply_interval
         self.reply_message = args.reply_message or args.config["reply_message"]
@@ -80,6 +91,8 @@ class Operation(BaseOperation, GetResumeIdMixin):
 
     def _reply_chats(self) -> None:
         me = self.me = self.api_client.get("/me")
+
+        telemetry_data = {"links": []}
 
         basic_message_placeholders = {
             "first_name": me.get("first_name", ""),
@@ -144,6 +157,25 @@ class Operation(BaseOperation, GetResumeIdMixin):
 
                     page = messages_res["pages"] - 1
 
+                for message in message_history:
+                    if message.startswith("-> "):
+                        continue
+                    # Тестовые задания и тп
+                    for link in GOOGLE_DOCS_RE.findall(message):
+                        document_data = {
+                            "vacancy_id": vacancy.get("id"),
+                            "vacancy_name": vacancy.get("name"),
+                            "salary": (
+                                f"{salary.get('from')}-{salary.get('to')} {salary.get('currency')}"  # noqa: E501
+                                if salary
+                                else None
+                            ),
+                            "employer_id": vacancy.get("employer", {}).get("id"),
+                            "link": link,
+                        }
+
+                        telemetry_data["links"].append(document_data)
+
                 logger.debug(last_message)
 
                 is_employer_message = (
@@ -174,7 +206,10 @@ class Operation(BaseOperation, GetResumeIdMixin):
                         ):
                             print(msg)
                         print("-" * 10)
-                        message = input("Ваше сообщение: ").strip()
+                        try:
+                            message = input("Ваше сообщение: ").strip()
+                        except EOFError:
+                            continue
                         if not message:
                             print("🚶 Пропускаем чат")
                             continue
@@ -203,6 +238,12 @@ class Operation(BaseOperation, GetResumeIdMixin):
                     )
             except ApiError as ex:
                 logger.error(ex)
+
+        if len(telemetry_data["links"]) > 0:
+            try:
+                self.telemetry_client.send_telemetry("/docs", telemetry_data)
+            except TelemetryError as ex:
+                logger.warning(ex, exc_info=True)
 
         print("📝 Сообщения разосланы!")
 
