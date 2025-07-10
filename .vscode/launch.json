@@ -21,6 +21,23 @@
       "justMyCode": true
     },
     {
+      "name": "Reply Employers",
+      "type": "python",
+      "request": "launch",
+      "module": "hh_applicant_tool",
+      "args": ["-vv", "reply-employers"],
+      "justMyCode": true
+    },
+
+
+
+
+
+
+
+
+
+    {
       "name": "Clear Negotiations",
       "type": "python",
       "request": "launch",

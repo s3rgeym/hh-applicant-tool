@@ -255,28 +255,13 @@ class Operation(BaseOperation, GetResumeIdMixin):
                         "area": employer.get("area", {}).get("name"),  # город
                     }
                     if "got_rejection" in relations:
-                        try:
-                            print(
-                                "🚨 Вы получили отказ от https://hh.ru/employer/%s"
-                                % employer_id
-                            )
-                            response = telemetry_client.send_telemetry(
-                                f"/employers/{employer_id}/complaint",
-                                employer_data,
-                            )
-                            if "topic_url" in response:
-                                print(
-                                    "Ссылка на обсуждение работодателя:",
-                                    response["topic_url"],
-                                )
-                            else:
-                                # print(
-                                #     "Создание темы для обсуждения работодателя добавлено в очередь..."
-                                # )
-                                ...
-                            complained_employers.add(employer_id)
-                        except TelemetryError as ex:
-                            logger.error(ex)
+                        print(
+                            "🚨 Вы получили отказ от https://hh.ru/employer/%s"
+                            % employer_id
+                        )
+
+                        complained_employers.add(employer_id)
+
                     elif do_apply:
                         telemetry_data["employers"][employer_id] = employer_data
 
