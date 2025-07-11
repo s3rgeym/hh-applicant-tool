@@ -235,7 +235,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                             send_message = input("Ваше сообщение: ").strip()
                         except EOFError:
                             continue
-                        if not message:
+                        if not send_message:
                             print("🚶 Пропускаем чат")
                             continue
 
