@@ -84,7 +84,7 @@ class TelemetryClient:
             )
             # response.raise_for_status()
             result = response.json()
-            if "error" in result:
+            if 200 > response.status_code >= 300:
                 raise TelemetryError(result)
             return result
 

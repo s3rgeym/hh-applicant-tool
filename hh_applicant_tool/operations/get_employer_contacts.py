@@ -107,97 +107,97 @@ def generate_html_report(data: list[dict]) -> str:
     """
     Генерирует HTML-отчет на основе предоставленных данных.
     """
-    html_content = """
-    <!DOCTYPE html>
-    <html lang="ru">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Отчет о сотрудниках и компаниях</title>
-        <style>
-            body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                margin: 20px;
-                background-color: #f4f7f6;
-                color: #333;
-            }
-            .container {
-                max-width: 900px;
-                margin: 20px auto;
-                background-color: #ffffff;
-                padding: 30px;
-                border-radius: 10px;
-                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-            }
-            h1 {
-                color: #0056b3;
-                text-align: center;
-                margin-bottom: 30px;
-            }
-            .person-card {
-                background-color: #e9f0f8;
-                border: 1px solid #cce5ff;
-                border-radius: 8px;
-                padding: 20px;
-                margin-bottom: 25px;
-                transition: transform 0.2s ease-in-out;
-            }
-            .person-card:hover {
-                transform: translateY(-5px);
-            }
-            .person-card h2 {
-                color: #004085;
-                margin-top: 0;
-                margin-bottom: 10px;
-                border-bottom: 2px solid #0056b3;
-                padding-bottom: 5px;
-            }
-            .person-card p {
-                margin: 5px 0;
-            }
-            .person-card strong {
-                color: #004085;
-            }
-            .employer-info {
-                background-color: #d1ecf1;
-                border-left: 5px solid #007bff;
-                padding: 15px;
-                margin-top: 15px;
-                border-radius: 5px;
-            }
-            .employer-info h3 {
-                color: #0056b3;
-                margin-top: 0;
-                margin-bottom: 10px;
-            }
-            ul {
-                list-style-type: none;
-                padding: 0;
-            }
-            ul li {
-                background-color: #f8fafd;
-                padding: 8px 12px;
-                margin-bottom: 5px;
-                border-radius: 4px;
-                border: 1px solid #e0e9f1;
-            }
-            a {
-                color: #007bff;
-                text-decoration: none;
-            }
-            a:hover {
-                text-decoration: underline;
-            }
-            .no-data {
-                color: #6c757d;
-                font-style: italic;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>Отчет о сотрудниках</h1>
-    """
+    html_content = """\
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Контакты работодателей</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .person-card {
+            background-color: #e9f0f8;
+            border: 1px solid #cce5ff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+            transition: transform 0.2s ease-in-out;
+        }
+        .person-card:hover {
+            transform: translateY(-5px);
+        }
+        .person-card h2 {
+            color: #004085;
+            margin-top: 0;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #0056b3;
+            padding-bottom: 5px;
+        }
+        .person-card p {
+            margin: 5px 0;
+        }
+        .person-card strong {
+            color: #004085;
+        }
+        .employer-info {
+            background-color: #d1ecf1;
+            border-left: 5px solid #007bff;
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 5px;
+        }
+        .employer-info h3 {
+            color: #0056b3;
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        ul li {
+            background-color: #f8fafd;
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            border: 1px solid #e0e9f1;
+        }
+        a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .no-data {
+            color: #6c757d;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Полученные контакты</h1>
+"""
 
     for item in data:
         name = item.get("name", "N/A")
@@ -219,21 +219,21 @@ def generate_html_report(data: list[dict]) -> str:
             if "username" in tu
         ]
 
-        html_content += f"""
-            <div class="person-card">
-                <h2>{name}</h2>
-                <p><strong>Email:</strong> <a href="mailto:{email}">{email}</a></p>
+        html_content += f"""\
+        <div class="person-card">
+            <h2>{name}</h2>
+            <p><strong>Email:</strong> <a href="mailto:{email}">{email}</a></p>
         """
 
         if employer_name != "N/A":
-            html_content += f"""
-                <div class="employer-info">
-                    <h3>Работодатель: {employer_name}</h3>
-                    <p><strong>Город:</strong> {employer_area}</p>
+            html_content += f"""\
+            <div class="employer-info">
+                <h3>Работодатель: {employer_name}</h3>
+                <p><strong>Город:</strong> {employer_area}</p>
             """
             if employer_site_url:
-                html_content += f"""
-                    <p><strong>Сайт:</strong> <a href="{employer_site_url}" target="_blank">{employer_site_url}</a></p>
+                html_content += f"""\
+                <p><strong>Сайт:</strong> <a href="{employer_site_url}" target="_blank">{employer_site_url}</a></p>
                 """
             html_content += "</div>"  # Закрываем employer-info
         else:
@@ -261,11 +261,10 @@ def generate_html_report(data: list[dict]) -> str:
 
         html_content += "</div>"  # Закрываем person-card
 
-    html_content += """
-        </div>
-    </body>
-    </html>
-    """
+    html_content += """\
+    </div>
+</body>
+</html>"""
     return html_content
 
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+import os
 import argparse
 import logging
 import random
@@ -11,6 +13,14 @@ from ..mixins import GetResumeIdMixin
 from ..utils import parse_interval, random_text
 from ..telemetry_client import TelemetryClient, TelemetryError
 import re
+
+try:
+    import readline
+
+    readline.add_history("/cancel ")
+    readline.set_history_length(10_000)
+except ImportError:
+    pass
 
 
 GOOGLE_DOCS_RE = re.compile(
@@ -181,6 +191,9 @@ class Operation(BaseOperation, GetResumeIdMixin):
 
                             telemetry_data["links"].append(document_data)
 
+                if os.getenv("TEST_SEND_TELEMETRY") in ["1", "y", "Y"]:
+                    continue
+
                 logger.debug(last_message)
 
                 is_employer_message = (
@@ -189,8 +202,10 @@ class Operation(BaseOperation, GetResumeIdMixin):
 
                 if is_employer_message or not negotiation.get("viewed_by_opponent"):
                     if self.reply_message:
-                        message = random_text(self.reply_message) % message_placeholders
-                        logger.debug(message)
+                        send_message = (
+                            random_text(self.reply_message) % message_placeholders
+                        )
+                        logger.debug(send_message)
                     else:
                         print("🏢", message_placeholders["employer_name"])
                         print("💼", message_placeholders["vacancy_name"])
@@ -212,7 +227,12 @@ class Operation(BaseOperation, GetResumeIdMixin):
                             print(msg)
                         try:
                             print("-" * 10)
-                            message = input("Ваше сообщение: ").strip()
+                            print()
+                            print(
+                                "Чтобы отменить отклик введите /cancel <необязательное сообщение для отказа>"
+                            )
+                            print()
+                            send_message = input("Ваше сообщение: ").strip()
                         except EOFError:
                             continue
                         if not message:
@@ -223,7 +243,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                         logger.info(
                             "Dry Run: Отправка сообщения в чат по вакансии %s: %s",
                             vacancy["alternate_url"],
-                            message,
+                            send_message,
                         )
                         continue
 
@@ -233,18 +253,28 @@ class Operation(BaseOperation, GetResumeIdMixin):
                             self.reply_max_interval,
                         )
                     )
-                    self.api_client.post(
-                        f"/negotiations/{nid}/messages",
-                        message=message,
-                    )
-                    print(
-                        "📨 Отправили сообщение для",
-                        vacancy["alternate_url"],
-                    )
+
+                    if send_message.startswith("/cancel"):
+                        _, decline_allowed = send_message.split("/cancel", 1)
+                        self.api_client.delete(
+                            f"/negotiations/active/{negotiation['id']}",
+                            with_decline_message=decline_allowed.strip(),
+                        )
+                        print("Отменили заявку", vacancy["alternate_url"])
+                    else:
+                        self.api_client.post(
+                            f"/negotiations/{nid}/messages",
+                            message=send_message,
+                        )
+                        print(
+                            "📨 Отправили сообщение для",
+                            vacancy["alternate_url"],
+                        )
             except ApiError as ex:
                 logger.error(ex)
 
         if self.enable_telemetry and len(telemetry_data["links"]) > 0:
+            logger.debug(telemetry_data)
             try:
                 self.telemetry_client.send_telemetry("/docs", telemetry_data)
             except TelemetryError as ex:

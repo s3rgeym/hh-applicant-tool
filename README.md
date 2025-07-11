@@ -190,6 +190,10 @@ $ hh-applicant-tool update-resumes
 
 # Чистим заявки и баним за отказы говноконторы
 $ hh-applicant-tool clear-negotiations --blacklist-discard
+
+# Экспортировать в HTML, контакты работодателей, которые когда-либо высылали вам
+# приглашение
+$ hh-applicant-tool get-employer-contacts --export -f html > report.html
 ```
 
 Можно вызвать любой метод API:
