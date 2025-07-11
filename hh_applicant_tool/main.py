@@ -150,6 +150,9 @@ class HHApplicantTool:
                 if (token := api_client.get_access_token()) != args.config["token"]:
                     args.config.save(token=token)
                 return res
+            except KeyboardInterrupt:
+                logger.warning("Interrupted by user")
+                return 1
             except Exception as e:
                 logger.exception(e)
                 return 1
