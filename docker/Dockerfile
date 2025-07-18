@@ -21,8 +21,13 @@ WORKDIR /app
 # Копируем файлы проекта в контейнер
 COPY . /app
 
+RUN apk add --no-cache dos2unix
+
 # Копируем crontab файл в контейнер
 COPY crontab /etc/crontabs/docker
+
+# если crontab сохранен в windows из-за перевода каретки работать не будет
+RUN dos2unix /etc/crontabs/docker
 
 # Переключаемся на пользователя с указанными UID и GID
 #USER docker
