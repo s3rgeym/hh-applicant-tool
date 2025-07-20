@@ -29,6 +29,10 @@ COPY crontab /etc/crontabs/docker
 # если crontab сохранен в windows из-за перевода каретки работать не будет
 RUN dos2unix /etc/crontabs/docker
 
+# Настройка временной зоны (пример для Москвы)
+RUN apk add --no-cache tzdata
+RUN ln -fs /usr/share/zoneinfo/Europe/Moscow /etc/localtime
+
 # Переключаемся на пользователя с указанными UID и GID
 #USER docker
 
