@@ -18,6 +18,7 @@ try:
     import readline
 
     readline.add_history("/cancel ")
+    readline.add_history("/ban")
     readline.set_history_length(10_000)
 except ImportError:
     pass
@@ -131,10 +132,11 @@ class Operation(BaseOperation, GetResumeIdMixin):
                 nid = negotiation["id"]
                 vacancy = negotiation["vacancy"]
                 salary = vacancy.get("salary") or {}
+                employer = vacancy.get("employer") or {}
 
                 message_placeholders = {
                     "vacancy_name": vacancy.get("name", ""),
-                    "employer_name": vacancy.get("employer", {}).get("name", ""),
+                    "employer_name": employer.get("name", ""),
                     **basic_message_placeholders,
                 }
 
@@ -229,8 +231,9 @@ class Operation(BaseOperation, GetResumeIdMixin):
                             print("-" * 10)
                             print()
                             print(
-                                "Чтобы отменить отклик введите /cancel <необязательное сообщение для отказа>"
+                                "Отмена отклика: /cancel <необязательное сообщение для отказа>"
                             )
+                            print("Заблокировать работодателя: /ban")
                             print()
                             send_message = input("Ваше сообщение: ").strip()
                         except EOFError:
@@ -254,13 +257,16 @@ class Operation(BaseOperation, GetResumeIdMixin):
                         )
                     )
 
-                    if send_message.startswith("/cancel"):
+                    if send_message.startswith('/ban'):
+                        self.api_client.put(f"/employers/blacklisted/{employer['id']}")
+                        print("🚫 Работодатель добавлен в черный список", employer['id'])
+                    elif send_message.startswith("/cancel"):
                         _, decline_allowed = send_message.split("/cancel", 1)
                         self.api_client.delete(
                             f"/negotiations/active/{negotiation['id']}",
                             with_decline_message=decline_allowed.strip(),
                         )
-                        print("Отменили заявку", vacancy["alternate_url"])
+                        print("❌ Отменили заявку", vacancy["alternate_url"])
                     else:
                         self.api_client.post(
                             f"/negotiations/{nid}/messages",
