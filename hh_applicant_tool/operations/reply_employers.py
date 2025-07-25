@@ -13,6 +13,7 @@ from ..mixins import GetResumeIdMixin
 from ..utils import parse_interval, random_text
 from ..telemetry_client import TelemetryClient, TelemetryError
 import re
+from itertools import count
 
 try:
     import readline
@@ -101,7 +102,18 @@ class Operation(BaseOperation, GetResumeIdMixin):
         logger.debug(f"{self.reply_message = }")
         self._reply_chats()
 
+    def _get_blacklisted(self) -> list[str]:
+        rv = []
+        for page in count(0):
+            r = self.api_client.get("/employers/blacklisted", page=page)
+            rv += [item["id"] for item in r["items"]]
+            if page >= r["pages"]:
+                break
+        return rv
+
     def _reply_chats(self) -> None:
+        blacklisted = self._get_blacklisted()
+        logger.debug(f"{blacklisted = }")
         me = self.me = self.api_client.get("/me")
 
         telemetry_data = {"links": []}
@@ -131,8 +143,15 @@ class Operation(BaseOperation, GetResumeIdMixin):
                 logger.debug(negotiation)
                 nid = negotiation["id"]
                 vacancy = negotiation["vacancy"]
-                salary = vacancy.get("salary") or {}
                 employer = vacancy.get("employer") or {}
+                salary = vacancy.get("salary") or {}
+
+                if employer.get("id") in blacklisted:
+                    print(
+                        "🚫 Пропускаем заблокированного работодателя",
+                        employer.get("alternate_url"),
+                    )
+                    continue
 
                 message_placeholders = {
                     "vacancy_name": vacancy.get("name", ""),
@@ -257,9 +276,13 @@ class Operation(BaseOperation, GetResumeIdMixin):
                         )
                     )
 
-                    if send_message.startswith('/ban'):
+                    if send_message.startswith("/ban"):
                         self.api_client.put(f"/employers/blacklisted/{employer['id']}")
-                        print("🚫 Работодатель добавлен в черный список", employer['id'])
+                        blacklisted.append(employer["id"])
+                        print(
+                            "🚫 Работодатель добавлен в черный список",
+                            employer.get("alternate_url"),
+                        )
                     elif send_message.startswith("/cancel"):
                         _, decline_allowed = send_message.split("/cancel", 1)
                         self.api_client.delete(
