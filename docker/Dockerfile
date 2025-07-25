@@ -6,7 +6,7 @@ ARG UID=1000
 ARG GID=1000
 
 # Устанавливаем необходимые зависимости, включая пакет shadow
-RUN apk add --no-cache gcc musl-dev linux-headers shadow
+RUN apk add --no-cache gcc musl-dev linux-headers shadow dos2unix tzdata
 
 # Устанавливаем библиотеку hh-applicant-tool
 RUN pip install hh-applicant-tool
@@ -21,17 +21,11 @@ WORKDIR /app
 # Копируем файлы проекта в контейнер
 COPY . /app
 
-RUN apk add --no-cache dos2unix
-
 # Копируем crontab файл в контейнер
 COPY crontab /etc/crontabs/docker
 
 # если crontab сохранен в windows из-за перевода каретки работать не будет
 RUN dos2unix /etc/crontabs/docker
-
-# Настройка временной зоны (пример для Москвы)
-RUN apk add --no-cache tzdata
-RUN ln -fs /usr/share/zoneinfo/Europe/Moscow /etc/localtime
 
 # Переключаемся на пользователя с указанными UID и GID
 #USER docker
