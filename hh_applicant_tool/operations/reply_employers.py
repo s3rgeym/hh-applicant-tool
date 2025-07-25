@@ -104,10 +104,11 @@ class Operation(BaseOperation, GetResumeIdMixin):
 
     def _get_blacklisted(self) -> list[str]:
         rv = []
+        # В этом методе API страницы с 0 начинаются
         for page in count(0):
             r = self.api_client.get("/employers/blacklisted", page=page)
             rv += [item["id"] for item in r["items"]]
-            if page >= r["pages"]:
+            if page + 1 >= r["pages"]:
                 break
         return rv
 
