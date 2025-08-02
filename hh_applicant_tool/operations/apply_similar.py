@@ -266,11 +266,8 @@ class Operation(BaseOperation, GetResumeIdMixin):
                         telemetry_data["employers"][employer_id] = employer_data
 
                 if not do_apply:
-                    logger.debug(
-                        "Пропускаем вакансию так как достигла лимита заявок: %s",
-                        vacancy["alternate_url"],
-                    )
-                    continue
+                    logger.debug("Останавливаем рассылку откликов, так как достигли лимита, попробуйте через сутки.")
+                    break
 
                 if relations:
                     logger.debug(
