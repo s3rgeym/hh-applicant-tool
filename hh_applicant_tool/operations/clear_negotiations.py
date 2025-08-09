@@ -93,7 +93,10 @@ class Operation(BaseOperation):
                     ")",
                 )
                 if is_discard and args.blacklist_discard:
-                    employer = vacancy["employer"]
+                    employer = vacancy.get("employer", {})
+                    if not employer or 'id' not in employer:
+                        # Работодатель удален или скрыт
+                        continue
                     try:
                         r = api_client.put(f"/employers/blacklisted/{employer['id']}")
                         assert not r
