@@ -35,6 +35,7 @@ class Namespace(BaseNamespace):
     page_interval: tuple[float, float]
     order_by: str
     search: str
+    schedule: str
     dry_run: bool
 
 
@@ -100,6 +101,13 @@ class Operation(BaseOperation, GetResumeIdMixin):
             type=str,
             default=None,
         )
+
+        parser.add_argument(
+            "--schedule",
+            help="Тип графика. Возможные значения: fullDay, shift, flexible, remote, flyInFlyOut для полного дня, сменного графика, гибкого графика, удаленной работы и вахтового метода",
+            type=str,
+            default=None,
+        )
         parser.add_argument(
             "--dry-run",
             help="Не отправлять отклики, а только выводить параметры запроса",
@@ -147,6 +155,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
         self.force_message = args.force_message
         self.order_by = args.order_by
         self.search = args.search
+        self.schedule = args.schedule
         self.dry_run = args.dry_run
         self._apply_similar()
 
@@ -359,6 +368,8 @@ class Operation(BaseOperation, GetResumeIdMixin):
             }
             if self.search:
                 params["text"] = self.search
+            if self.schedule:
+                params['schedule'] = self.schedule
             res: ApiListResponse = self.api_client.get(
                 f"/resumes/{self.resume_id}/similar_vacancies", params
             )
