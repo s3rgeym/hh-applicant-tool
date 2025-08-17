@@ -20,7 +20,7 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, args: Namespace, api_client: ApiClient, _) -> None:
+    def run(self, api_client: ApiClient, _) -> None:
         result = api_client.get("/resumes/mine")
         resume_ids = [i['id'] for i in result['items']]
         for id in resume_ids:
