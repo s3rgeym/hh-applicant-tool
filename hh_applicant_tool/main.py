@@ -73,6 +73,16 @@ class HHApplicantTool:
         argparse.RawDescriptionHelpFormatter,
     ):
         pass
+    
+    def init_operations(self) -> dict:
+        operations = {}
+        package_dir = Path(__file__).resolve().parent / OPERATIONS
+        for _, module_name, _ in iter_modules([str(package_dir)]):
+            mod = import_module(f"{__package__}.{OPERATIONS}.{module_name}")
+            op: BaseOperation = mod.Operation()
+            operations[module_name] = op
+        
+        return operations
 
     def create_parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
