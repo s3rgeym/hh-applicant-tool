@@ -22,7 +22,7 @@ class Operation(BaseOperation):
 
     def run(self, args: Namespace, api_client: ApiClient, _) -> None:
         result = api_client.get("/resumes/mine")
-        resume_ids = [i['id'] for i in result]
+        resume_ids = [i['id'] for i in result['items']]
         for id in resume_ids:
             result = api_client.get(f'resumes/{id}')
             print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
