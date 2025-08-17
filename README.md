@@ -311,3 +311,14 @@ https://hh.ru/employer/1918903
 * [HH.RU OpenAPI](https://api.hh.ru/openapi/redoc)
 
 Для тестирования запросов к API используйте команду `call-api` и `jq` для вывода JSON в удобочитаемом формате.
+
+### API плагинов
+
+Можно использовать плагины в вашем коде благодаря python api. Для того чтобы это сделать вам необходимо создать клиент и инстанс класса HHApplicantTool. Для того чтобы узнать сигнатуру вашей операции см. исходники, т.к. они разнятся от операции к операции 
+```python
+from hh_applicant_tool.main import HHApplicantTool
+api = HHApplicantTool()
+client = api.api_init_client()
+operations = api.api_init_operations()
+operations['whoami'].run([], client, None)
+```
