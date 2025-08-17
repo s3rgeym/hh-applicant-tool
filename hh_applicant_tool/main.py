@@ -74,7 +74,10 @@ class HHApplicantTool:
     ):
         pass
     
-    def init_operations(self) -> dict:
+    def api_init_client(self) -> ApiClient:
+        return get_api_client(self.create_parser().parse_args(namespace=Namespace()))
+
+    def api_init_operations(self) -> dict:
         operations = {}
         package_dir = Path(__file__).resolve().parent / OPERATIONS
         for _, module_name, _ in iter_modules([str(package_dir)]):
