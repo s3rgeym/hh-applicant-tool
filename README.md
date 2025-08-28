@@ -45,6 +45,8 @@ $$('[data-qa="vacancy-serp__vacancy_response"]').forEach((el) => el.click());
 
 ### Установка
 
+Универсальный с использованием pipx (требует пакета `python-pipx` в Arch):
+
 ```bash
 # Версия с поддержкой авторизации через запуск окна с браузером (эта версия очень много весит)
 # Можно использовать обычный pip
@@ -55,6 +57,18 @@ $ pipx install git+https://github.com/s3rgeym/hh-applicant-tool
 
 # Для обновления до новой версии
 $ pipx upgrade hh-applicant-tool
+```
+
+pipx добавляет исполняемый файл `hh-appplicant-tool` в `~/.local/bin`, делая эту команду доступной. Путь до `~/.local/bin` должен быть в `$PATH` (в большинстве дистрибутивов он добавлен).
+
+Традиционный способ для Linux/Mac:
+
+```sh
+mkdir -p ~/.venvs
+python -m venv ~/.venvs/hh-applicant-tool
+# Это придется делать постоянно, чтобы команда hh-applicant-tool стала доступна
+.  ~/.venvs/hh-applicant-tool/bin/activate
+pip install 'hh-applicant-tool[qt]'
 ```
 
 Отдельно я распишу процесс установки в **Windows** в подробностях:
@@ -69,7 +83,8 @@ $ pipx upgrade hh-applicant-tool
   ```ps
   PS> python -m venv hh-applicant-venv
   PS> .\hh-applicant-venv\Scripts\activate
-  ```
+  ``` 
+  
 * Поставьте все пакеты в виртуальное окружение `hh-applicant-venv`:
   ```ps
   (hh-applicant-venv) PS> pip install hh-applicant-tool[qt]
