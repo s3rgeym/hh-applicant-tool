@@ -42,3 +42,4 @@ class VacancyItem(TypedDict):
     sort_point_distance: float
     type: dict
     url: str
+    experience: dict

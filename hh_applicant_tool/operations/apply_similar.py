@@ -37,6 +37,7 @@ class Namespace(BaseNamespace):
     search: str
     schedule: str
     dry_run: bool
+    experience: str
 
 
 class Operation(BaseOperation, GetResumeIdMixin):
@@ -114,6 +115,12 @@ class Operation(BaseOperation, GetResumeIdMixin):
             default=False,
             action=argparse.BooleanOptionalAction,
         )
+        parser.add_argument(
+            "--experience",
+            help="Уровень опыта работы в вакансии. Возможные значения: noExperience, between1And3, between3And6, moreThan6",
+            type=str,
+            default=None,
+        )
 
     def run(
         self, args: Namespace, api_client: ApiClient, telemetry_client: TelemetryClient
@@ -157,6 +164,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
         self.search = args.search
         self.schedule = args.schedule
         self.dry_run = args.dry_run
+        self.experience = args.experience
         self._apply_similar()
 
     def _get_application_messages(self, message_list: TextIO | None) -> list[str]:
@@ -370,6 +378,8 @@ class Operation(BaseOperation, GetResumeIdMixin):
                 params["text"] = self.search
             if self.schedule:
                 params['schedule'] = self.schedule
+            if self.experience:
+                params['experience'] = self.experience
             res: ApiListResponse = self.api_client.get(
                 f"/resumes/{self.resume_id}/similar_vacancies", params
             )
