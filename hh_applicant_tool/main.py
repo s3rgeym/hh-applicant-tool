@@ -7,7 +7,7 @@ from importlib import import_module
 from os import getenv
 from pathlib import Path
 from pkgutil import iter_modules
-from typing import Literal, Sequence
+from typing import Literal, Sequence, Dict
 
 from .api import ApiClient
 from .color_log import ColorHandler
@@ -73,6 +73,19 @@ class HHApplicantTool:
         argparse.RawDescriptionHelpFormatter,
     ):
         pass
+    
+    def api_init_client(self) -> ApiClient:
+        return get_api_client(self.create_parser().parse_args(namespace=Namespace()))
+
+    def api_init_operations(self) -> Dict[str, BaseOperation]:
+        operations = dict()
+        package_dir = Path(__file__).resolve().parent / OPERATIONS
+        for _, module_name, _ in iter_modules([str(package_dir)]):
+            mod = import_module(f"{__package__}.{OPERATIONS}.{module_name}")
+            op: BaseOperation = mod.Operation()
+            operations[module_name] = op
+        
+        return operations
 
     def create_parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
