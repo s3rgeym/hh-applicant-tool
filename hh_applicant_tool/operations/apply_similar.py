@@ -37,11 +37,40 @@ class Namespace(BaseNamespace):
     search: str
     schedule: str
     dry_run: bool
+    # Пошли доп фильтры, которых не было
     experience: str
+    employment: list[str] | None
+    area: list[str] | None
+    metro: list[str] | None
+    professional_role: list[str] | None
+    industry: list[str] | None
+    employer_id: list[str] | None
+    excluded_employer_id: list[str] | None
+    currency: str | None
+    salary: int | None
+    only_with_salary: bool
+    label: list[str] | None
+    period: int | None
+    date_from: str | None
+    date_to: str | None
+    top_lat: float | None
+    bottom_lat: float | None
+    left_lng: float | None
+    right_lng: float | None
+    sort_point_lat: float | None
+    sort_point_lng: float | None
+    no_magic: bool
+    premium: bool
+    responses_count_enabled: bool
 
+def _bool(v: bool) -> str:
+    return str(v).lower()
 
 class Operation(BaseOperation, GetResumeIdMixin):
-    """Откликнуться на все подходящие вакансии."""
+    """Откликнуться на все подходящие вакансии.
+
+    Описание фильтров для поиска вакансий: <https://api.hh.ru/openapi/redoc#tag/Poisk-vakansij-dlya-soiskatelya/operation/get-vacancies-similar-to-resume>
+    """
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
@@ -121,6 +150,32 @@ class Operation(BaseOperation, GetResumeIdMixin):
             type=str,
             default=None,
         )
+        parser.add_argument("--employment", nargs="+", help="Тип занятости (employment)")
+        parser.add_argument("--area", nargs="+", help="Регион (area id)")
+        parser.add_argument("--metro", nargs="+", help="Станции метро (metro id)")
+        parser.add_argument("--professional-role", nargs="+", help="Проф. роль (id)")
+        parser.add_argument("--industry", nargs="+", help="Индустрия (industry id)")
+        parser.add_argument("--employer-id", nargs="+", help="ID работодателей")
+        parser.add_argument("--excluded-employer-id", nargs="+", help="Исключить работодателей")
+        parser.add_argument("--currency", help="Код валюты (RUR, USD, EUR)")
+        parser.add_argument("--salary", type=int, help="Минимальная зарплата")
+        parser.add_argument("--only-with-salary", default=False, action=argparse.BooleanOptionalAction)
+        parser.add_argument("--label", nargs="+", help="Метки вакансий (label)")
+        parser.add_argument("--period", type=int, help="Искать вакансии за N дней")
+        parser.add_argument("--date-from", help="Дата публикации с (YYYY-MM-DD)")
+        parser.add_argument("--date-to", help="Дата публикации по (YYYY-MM-DD)")
+        parser.add_argument("--top-lat", type=float, help="Гео: верхняя широта")
+        parser.add_argument("--bottom-lat", type=float, help="Гео: нижняя широта")
+        parser.add_argument("--left-lng", type=float, help="Гео: левая долгота")
+        parser.add_argument("--right-lng", type=float, help="Гео: правая долгота")
+        parser.add_argument("--sort-point-lat", type=float, help="Координата lat для сортировки по расстоянию")
+        parser.add_argument("--sort-point-lng", type=float, help="Координата lng для сортировки по расстоянию")
+        parser.add_argument("--no-magic", default=False, action=argparse.BooleanOptionalAction, help="Отключить авторазбор текста запроса")
+        parser.add_argument("--premium", default=False, action=argparse.BooleanOptionalAction, help="Только премиум вакансии")
+        parser.add_argument("--responses-count-enabled", default=False, action=argparse.BooleanOptionalAction, help="Включить счётчик откликов")
+        parser.add_argument("--search-field", nargs="+", help="Поля поиска (name, company_name и т.п.)")
+        parser.add_argument("--clusters", action=argparse.BooleanOptionalAction, help="Включить кластеры (по умолчанию None)")
+        #parser.add_argument("--describe-arguments", action=argparse.BooleanOptionalAction, help="Вернуть описание параметров запроса")
 
     def run(
         self, args: Namespace, api_client: ApiClient, telemetry_client: TelemetryClient
@@ -165,6 +220,31 @@ class Operation(BaseOperation, GetResumeIdMixin):
         self.schedule = args.schedule
         self.dry_run = args.dry_run
         self.experience = args.experience
+        self.search_field = args.search_field
+        self.employment = args.employment
+        self.area = args.area
+        self.metro = args.metro
+        self.professional_role = args.professional_role
+        self.industry = args.industry
+        self.employer_id = args.employer_id
+        self.excluded_employer_id = args.excluded_employer_id
+        self.currency = args.currency
+        self.salary = args.salary
+        self.only_with_salary = args.only_with_salary
+        self.label = args.label
+        self.period = args.period
+        self.date_from = args.date_from
+        self.date_to = args.date_to
+        self.top_lat = args.top_lat
+        self.bottom_lat = args.bottom_lat
+        self.left_lng = args.left_lng
+        self.right_lng = args.right_lng
+        self.sort_point_lat = args.sort_point_lat
+        self.sort_point_lng = args.sort_point_lng
+        self.clusters = args.clusters
+        #self.describe_arguments = args.describe_arguments
+        self.no_magic = args.no_magic
+        self.premium = args.premium
         self._apply_similar()
 
     def _get_application_messages(self, message_list: TextIO | None) -> list[str]:
@@ -366,20 +446,73 @@ class Operation(BaseOperation, GetResumeIdMixin):
             except TelemetryError as ex:
                 logger.error(ex)
 
+    def _get_search_params(self, page: int, per_page: int) -> dict:
+        params = {
+            "page": page,
+            "per_page": per_page,
+            "order_by": self.order_by,
+        }
+        if self.search:
+            params["text"] = self.search
+        if self.schedule:
+            params['schedule'] = self.schedule
+        if self.experience:
+            params['experience'] = self.experience
+        if self.search_field:
+            params["search_field"] = self.search_field
+        if self.employment:
+            params["employment"] = self.employment
+        if self.area:
+            params["area"] = self.area
+        if self.metro:
+            params["metro"] = self.metro
+        if self.professional_role:
+            params["professional_role"] = self.professional_role
+        if self.industry:
+            params["industry"] = self.industry
+        if self.employer_id:
+            params["employer_id"] = self.employer_id
+        if self.excluded_employer_id:
+            params["excluded_employer_id"] = self.excluded_employer_id
+        if self.currency:
+            params["currency"] = self.currency
+        if self.salary:
+            params["salary"] = self.salary
+        if self.only_with_salary is not None: 
+            params["only_with_salary"] = _bool(self.only_with_salary)
+        if self.label:
+            params["label"] = self.label
+        if self.period:
+            params["period"] = self.period
+        if self.date_from:
+            params["date_from"] = self.date_from
+        if self.date_to:
+            params["date_to"] = self.date_to
+        if self.top_lat:
+            params["top_lat"] = self.top_lat
+        if self.bottom_lat:
+            params["bottom_lat"] = self.bottom_lat
+        if self.left_lng:
+            params["left_lng"] = self.left_lng
+        if self.right_lng:
+            params["right_lng"] = self.right_lng
+        if self.sort_point_lat:
+            params["sort_point_lat"] = self.sort_point_lat
+        if self.sort_point_lng:
+            params["sort_point_lng"] = self.sort_point_lng
+        if self.clusters is not None:
+            params["clusters"] = self.clusters
+        if self.no_magic is not None:
+            params["no_magic"] = _bool(self.no_magic)
+        if self.premium is not None:
+            params["premium"] = _bool(self.premium)
+        return params
+
     def _get_vacancies(self, per_page: int = 100) -> list[VacancyItem]:
         rv = []
+        # API отдает только 2000 результатов
         for page in range(20):
-            params = {
-                "page": page,
-                "per_page": per_page,
-                "order_by": self.order_by,
-            }
-            if self.search:
-                params["text"] = self.search
-            if self.schedule:
-                params['schedule'] = self.schedule
-            if self.experience:
-                params['experience'] = self.experience
+            params = self._get_search_params(page, per_page)
             res: ApiListResponse = self.api_client.get(
                 f"/resumes/{self.resume_id}/similar_vacancies", params
             )
