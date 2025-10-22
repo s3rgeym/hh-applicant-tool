@@ -66,6 +66,9 @@ class Namespace(BaseNamespace):
 def _bool(v: bool) -> str:
     return str(v).lower()
 
+def _join_list(items: list[Any] | None) -> str:
+    return ",".join(f"{v}" for v in items) if items else ""
+
 class Operation(BaseOperation, GetResumeIdMixin):
     """Откликнуться на все подходящие вакансии.
 
@@ -452,42 +455,23 @@ class Operation(BaseOperation, GetResumeIdMixin):
             "per_page": per_page,
             "order_by": self.order_by,
         }
+        
         if self.search:
             params["text"] = self.search
         if self.schedule:
             params['schedule'] = self.schedule
         if self.experience:
             params['experience'] = self.experience
-        if self.search_field:
-            params["search_field"] = self.search_field
-        if self.employment:
-            params["employment"] = self.employment
-        if self.area:
-            params["area"] = self.area
-        if self.metro:
-            params["metro"] = self.metro
-        if self.professional_role:
-            params["professional_role"] = self.professional_role
-        if self.industry:
-            params["industry"] = self.industry
-        if self.employer_id:
-            params["employer_id"] = self.employer_id
-        if self.excluded_employer_id:
-            params["excluded_employer_id"] = self.excluded_employer_id
         if self.currency:
             params["currency"] = self.currency
         if self.salary:
             params["salary"] = self.salary
-        if self.only_with_salary is not None: 
-            params["only_with_salary"] = _bool(self.only_with_salary)
-        if self.label:
-            params["label"] = self.label
         if self.period:
             params["period"] = self.period
         if self.date_from:
             params["date_from"] = self.date_from
         if self.date_to:
-            params["date_to"] = self.date_to
+            params["date_to"] = self.date_to   
         if self.top_lat:
             params["top_lat"] = self.top_lat
         if self.bottom_lat:
@@ -500,12 +484,35 @@ class Operation(BaseOperation, GetResumeIdMixin):
             params["sort_point_lat"] = self.sort_point_lat
         if self.sort_point_lng:
             params["sort_point_lng"] = self.sort_point_lng
+        if self.search_field:
+            params["search_field"] = _join_list(self.search_field)
+        if self.employment:
+            params["employment"] = _join_list(self.employment)
+        if self.area:
+            params["area"] = _join_list(self.area)
+        if self.metro:
+            params["metro"] = _join_list(self.metro)
+        if self.professional_role:
+            params["professional_role"] = _join_list(self.professional_role)
+        if self.industry:
+            params["industry"] = _join_list(self.industry)
+        if self.employer_id:
+            params["employer_id"] = _join_list(self.employer_id)
+        if self.excluded_employer_id:
+            params["excluded_employer_id"] = _join_list(self.excluded_employer_id)
+        if self.label:
+            params["label"] = _join_list(self.label)
+        if self.only_with_salary is not None:
+            params["only_with_salary"] = _bool(self.only_with_salary)
         if self.clusters is not None:
-            params["clusters"] = self.clusters
+            params["clusters"] = _bool(self.clusters)
         if self.no_magic is not None:
             params["no_magic"] = _bool(self.no_magic)
         if self.premium is not None:
             params["premium"] = _bool(self.premium)
+        if self.responses_count_enabled is not None:
+            params["responses_count_enabled"] = _bool(self.responses_count_enabled)
+            
         return params
 
     def _get_vacancies(self, per_page: int = 100) -> list[VacancyItem]:
