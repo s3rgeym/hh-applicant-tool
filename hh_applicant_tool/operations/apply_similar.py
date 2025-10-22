@@ -4,11 +4,11 @@ import random
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import TextIO
+from typing import Any, TextIO
 
-from ..api.errors import LimitExceeded
 from ..ai.blackbox import BlackboxChat, BlackboxError
-from ..api import ApiError, ApiClient
+from ..api import ApiClient, ApiError
+from ..api.errors import LimitExceeded
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..mixins import GetResumeIdMixin
@@ -63,11 +63,14 @@ class Namespace(BaseNamespace):
     premium: bool
     responses_count_enabled: bool
 
+
 def _bool(v: bool) -> str:
     return str(v).lower()
 
+
 def _join_list(items: list[Any] | None) -> str:
     return ",".join(f"{v}" for v in items) if items else ""
+
 
 class Operation(BaseOperation, GetResumeIdMixin):
     """Откликнуться на все подходящие вакансии.
@@ -153,16 +156,22 @@ class Operation(BaseOperation, GetResumeIdMixin):
             type=str,
             default=None,
         )
-        parser.add_argument("--employment", nargs="+", help="Тип занятости (employment)")
+        parser.add_argument(
+            "--employment", nargs="+", help="Тип занятости (employment)"
+        )
         parser.add_argument("--area", nargs="+", help="Регион (area id)")
         parser.add_argument("--metro", nargs="+", help="Станции метро (metro id)")
         parser.add_argument("--professional-role", nargs="+", help="Проф. роль (id)")
         parser.add_argument("--industry", nargs="+", help="Индустрия (industry id)")
         parser.add_argument("--employer-id", nargs="+", help="ID работодателей")
-        parser.add_argument("--excluded-employer-id", nargs="+", help="Исключить работодателей")
+        parser.add_argument(
+            "--excluded-employer-id", nargs="+", help="Исключить работодателей"
+        )
         parser.add_argument("--currency", help="Код валюты (RUR, USD, EUR)")
         parser.add_argument("--salary", type=int, help="Минимальная зарплата")
-        parser.add_argument("--only-with-salary", default=False, action=argparse.BooleanOptionalAction)
+        parser.add_argument(
+            "--only-with-salary", default=False, action=argparse.BooleanOptionalAction
+        )
         parser.add_argument("--label", nargs="+", help="Метки вакансий (label)")
         parser.add_argument("--period", type=int, help="Искать вакансии за N дней")
         parser.add_argument("--date-from", help="Дата публикации с (YYYY-MM-DD)")
@@ -171,14 +180,43 @@ class Operation(BaseOperation, GetResumeIdMixin):
         parser.add_argument("--bottom-lat", type=float, help="Гео: нижняя широта")
         parser.add_argument("--left-lng", type=float, help="Гео: левая долгота")
         parser.add_argument("--right-lng", type=float, help="Гео: правая долгота")
-        parser.add_argument("--sort-point-lat", type=float, help="Координата lat для сортировки по расстоянию")
-        parser.add_argument("--sort-point-lng", type=float, help="Координата lng для сортировки по расстоянию")
-        parser.add_argument("--no-magic", default=False, action=argparse.BooleanOptionalAction, help="Отключить авторазбор текста запроса")
-        parser.add_argument("--premium", default=False, action=argparse.BooleanOptionalAction, help="Только премиум вакансии")
-        parser.add_argument("--responses-count-enabled", default=False, action=argparse.BooleanOptionalAction, help="Включить счётчик откликов")
-        parser.add_argument("--search-field", nargs="+", help="Поля поиска (name, company_name и т.п.)")
-        parser.add_argument("--clusters", action=argparse.BooleanOptionalAction, help="Включить кластеры (по умолчанию None)")
-        #parser.add_argument("--describe-arguments", action=argparse.BooleanOptionalAction, help="Вернуть описание параметров запроса")
+        parser.add_argument(
+            "--sort-point-lat",
+            type=float,
+            help="Координата lat для сортировки по расстоянию",
+        )
+        parser.add_argument(
+            "--sort-point-lng",
+            type=float,
+            help="Координата lng для сортировки по расстоянию",
+        )
+        parser.add_argument(
+            "--no-magic",
+            default=False,
+            action=argparse.BooleanOptionalAction,
+            help="Отключить авторазбор текста запроса",
+        )
+        parser.add_argument(
+            "--premium",
+            default=False,
+            action=argparse.BooleanOptionalAction,
+            help="Только премиум вакансии",
+        )
+        parser.add_argument(
+            "--responses-count-enabled",
+            default=False,
+            action=argparse.BooleanOptionalAction,
+            help="Включить счётчик откликов",
+        )
+        parser.add_argument(
+            "--search-field", nargs="+", help="Поля поиска (name, company_name и т.п.)"
+        )
+        parser.add_argument(
+            "--clusters",
+            action=argparse.BooleanOptionalAction,
+            help="Включить кластеры (по умолчанию None)",
+        )
+        # parser.add_argument("--describe-arguments", action=argparse.BooleanOptionalAction, help="Вернуть описание параметров запроса")
 
     def run(
         self, args: Namespace, api_client: ApiClient, telemetry_client: TelemetryClient
@@ -245,7 +283,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
         self.sort_point_lat = args.sort_point_lat
         self.sort_point_lng = args.sort_point_lng
         self.clusters = args.clusters
-        #self.describe_arguments = args.describe_arguments
+        # self.describe_arguments = args.describe_arguments
         self.no_magic = args.no_magic
         self.premium = args.premium
         self._apply_similar()
@@ -366,7 +404,9 @@ class Operation(BaseOperation, GetResumeIdMixin):
                         telemetry_data["employers"][employer_id] = employer_data
 
                 if not do_apply:
-                    logger.debug("Останавливаем рассылку откликов, так как достигли лимита, попробуйте через сутки.")
+                    logger.debug(
+                        "Останавливаем рассылку откликов, так как достигли лимита, попробуйте через сутки."
+                    )
                     break
 
                 if relations:
@@ -455,13 +495,13 @@ class Operation(BaseOperation, GetResumeIdMixin):
             "per_page": per_page,
             "order_by": self.order_by,
         }
-        
+
         if self.search:
             params["text"] = self.search
         if self.schedule:
-            params['schedule'] = self.schedule
+            params["schedule"] = self.schedule
         if self.experience:
-            params['experience'] = self.experience
+            params["experience"] = self.experience
         if self.currency:
             params["currency"] = self.currency
         if self.salary:
@@ -471,7 +511,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
         if self.date_from:
             params["date_from"] = self.date_from
         if self.date_to:
-            params["date_to"] = self.date_to   
+            params["date_to"] = self.date_to
         if self.top_lat:
             params["top_lat"] = self.top_lat
         if self.bottom_lat:
@@ -512,7 +552,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
             params["premium"] = _bool(self.premium)
         if self.responses_count_enabled is not None:
             params["responses_count_enabled"] = _bool(self.responses_count_enabled)
-            
+
         return params
 
     def _get_vacancies(self, per_page: int = 100) -> list[VacancyItem]:
