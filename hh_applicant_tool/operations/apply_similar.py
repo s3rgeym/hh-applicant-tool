@@ -203,12 +203,6 @@ class Operation(BaseOperation, GetResumeIdMixin):
             help="Только премиум вакансии",
         )
         parser.add_argument(
-            "--responses-count-enabled",
-            default=False,
-            action=argparse.BooleanOptionalAction,
-            help="Включить счётчик откликов",
-        )
-        parser.add_argument(
             "--search-field", nargs="+", help="Поля поиска (name, company_name и т.п.)"
         )
         parser.add_argument(
@@ -550,8 +544,8 @@ class Operation(BaseOperation, GetResumeIdMixin):
             params["no_magic"] = _bool(self.no_magic)
         if self.premium is not None:
             params["premium"] = _bool(self.premium)
-        if self.responses_count_enabled is not None:
-            params["responses_count_enabled"] = _bool(self.responses_count_enabled)
+        # if self.responses_count_enabled is not None:
+        #     params["responses_count_enabled"] = _bool(self.responses_count_enabled)
 
         return params
 
