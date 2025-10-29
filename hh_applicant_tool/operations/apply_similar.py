@@ -61,7 +61,6 @@ class Namespace(BaseNamespace):
     sort_point_lng: float | None
     no_magic: bool
     premium: bool
-    responses_count_enabled: bool
 
 
 def _bool(v: bool) -> str:
