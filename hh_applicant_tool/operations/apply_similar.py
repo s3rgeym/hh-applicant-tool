@@ -6,7 +6,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, TextIO
 
-from ..ai.blackbox import BlackboxChat, BlackboxError
+from ..ai.blackbox import BlackboxChat
+from ..ai.openai import OpenAIChat
 from ..api import ApiClient, ApiError
 from ..api.errors import LimitExceeded
 from ..main import BaseOperation
@@ -242,6 +243,19 @@ class Operation(BaseOperation, GetResumeIdMixin):
                 chat_payload=config["chat_payload"],
                 proxies=self.api_client.proxies or {},
             )
+        elif config := args.config.get("openai"):
+            model = "gpt-5.1"
+            system_prompt = "Напиши сопроводительное письмо для отклика на эту вакансию. Не используй placeholder'ы, твой ответ будет отправлен без обработки."
+            if "model" in config.keys():
+                model = config["model"]
+            if "system_prompt" in config.keys():
+                system_prompt = config["system_prompt"]
+            self.chat = OpenAIChat(
+                token=config["token"],
+                model=model,
+                system_prompt=system_prompt,
+                proxies=self.api_client.proxies or {},
+            )
 
         self.pre_prompt = args.pre_prompt
 
@@ -422,7 +436,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                             msg += message_placeholders["vacancy_name"]
                             logger.debug(msg)
                             msg = self.chat.send_message(msg)
-                        except BlackboxError as ex:
+                        except Exception as ex:
                             logger.error(ex)
                             continue
                     else:
@@ -568,3 +582,4 @@ class Operation(BaseOperation, GetResumeIdMixin):
                 time.sleep(interval)
 
         return rv
+
