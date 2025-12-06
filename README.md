@@ -292,6 +292,29 @@ https://hh.ru/employer/1918903
 
 ### Использование AI для генерации сопроводительного письма
 
+Пример рассылки откликов с генерированным письмом:
+
+```sh
+hh-applicant-tool apply-similar -f --ai
+```
+
+#### OpenAI/ChatGPT
+
+Отредактируйте конфиг:
+
+```json
+{
+  // ...
+  "openai": {
+    "token": "ВАШ_API_КЛЮЧ_OPENAI",
+    "model": "gpt-4o",
+    "system_prompt": "Вы опытный HR-специалист. Напишите идеальное сопроводительное письмо..."
+  }
+}
+```
+
+#### Эксперементальная поддержка BlackBox
+
 * Перейдите на сайт [blackbox.ai](https://www.blackbox.ai) и создайте чат.
 * В первом сообщении опишите свой опыт и тп.
 * Далее откройте devtools, нажав `F12`.
@@ -309,10 +332,6 @@ https://hh.ru/employer/1918903
             "chat_payload": <Сюда вставьте тело запроса типа {"messages":[{"id":"IXqdOx9","content":"Я программист fullstack-разработчик...","role":"user"}],"id":"IXqdOx9","previewToken":null,"userId":null,...,"webSearchModePrompt":false,"deepSearchMode":false}>
         }
     }
-    ```
-* Пример рассылки откликов с генерированным письмом:
-    ```sh
-    hh-applicant-tool apply-similar -f --ai
     ```
 
 ### Написание плагинов
