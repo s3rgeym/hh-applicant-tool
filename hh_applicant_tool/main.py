@@ -11,8 +11,9 @@ from typing import Literal, Sequence
 
 from .api import ApiClient
 from .color_log import ColorHandler
+from .constants import ANDROID_CLIENT_ID, ANDROID_CLIENT_SECRET
 from .telemetry_client import TelemetryClient
-from .utils import Config, get_config_path
+from .utils import Config, android_user_agent, get_config_path
 
 DEFAULT_CONFIG_PATH = (
     get_config_path() / (__package__ or "").replace("_", "-") / "config.json"
@@ -48,13 +49,16 @@ def get_proxies(args: Namespace) -> dict[Literal["http", "https"], str | None]:
 
 
 def get_api_client(args: Namespace) -> ApiClient:
-    token = args.config.get("token", {})
+    config = args.config
+    token = config.get("token", {})
     api = ApiClient(
+        client_id=config.get("client_id", ANDROID_CLIENT_ID),
+        client_secret=config.get("client_id", ANDROID_CLIENT_SECRET),
         access_token=token.get("access_token"),
         refresh_token=token.get("refresh_token"),
         access_expires_at=token.get("access_expires_at"),
         delay=args.delay,
-        user_agent=args.config["user_agent"],
+        user_agent=config["user_agent"] or android_user_agent(),
         proxies=get_proxies(args),
     )
     return api

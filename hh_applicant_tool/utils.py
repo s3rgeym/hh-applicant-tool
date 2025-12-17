@@ -6,6 +6,7 @@ import platform
 import random
 import re
 import sys
+import uuid
 from datetime import datetime
 from functools import partial
 from os import getenv
@@ -14,7 +15,6 @@ from threading import Lock
 from typing import Any
 
 from .constants import INVALID_ISO8601_FORMAT
-from .jsonc import parse_jsonc
 
 print_err = partial(print, file=sys.stderr, flush=True)
 
@@ -45,7 +45,9 @@ class Config(dict):
     def load(self) -> None:
         if self._config_path.exists():
             with self._lock:
-                with self._config_path.open("r", encoding="utf-8", errors="replace") as f:
+                with self._config_path.open(
+                    "r", encoding="utf-8", errors="replace"
+                ) as f:
                     self.update(json.load(f))
 
     def save(self, *args: Any, **kwargs: Any) -> None:
@@ -102,3 +104,16 @@ def parse_interval(interval: str) -> tuple[float, float]:
     else:
         min_interval = max_interval = float(interval)
     return min(min_interval, max_interval), max(min_interval, max_interval)
+
+
+def android_user_agent() -> str:
+    """Android Default"""
+    devices = "23053RN02A, 23053RN02Y, 23053RN02I, 23053RN02L, 23077RABDC".split(", ")
+    device = random.choice(devices)
+    minor = random.randint(100, 150)
+    patch = random.randint(10000, 15000)
+    android = random.randint(11, 15)
+    return (
+        f"ru.hh.android/7.{minor}.{patch}, Device: {device}, "
+        f"Android OS: {android} (UUID: {uuid.uuid4()})"
+    )
