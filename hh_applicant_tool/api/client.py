@@ -3,22 +3,16 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
-import uuid
 import time
 from dataclasses import dataclass
-from functools import partialmethod
+from functools import cached_property
 from threading import Lock
 from typing import Any, Literal
 from urllib.parse import urlencode
-from functools import cached_property
-import random
+
 import requests
 from requests import Response, Session
 
-from ..constants import (
-    ANDROID_CLIENT_ID,
-    ANDROID_CLIENT_SECRET,
-)
 from ..types import AccessToken
 from . import errors
 
@@ -48,22 +42,12 @@ class BaseClient:
             self.session = session = requests.session()
             session.headers.update(
                 {
-                    "user-agent": self.user_agent or self.default_user_agent(),
+                    "user-agent": self.user_agent or "Mozilla/5.0",
                     "x-hh-app-active": "true",
                     **self.additional_headers(),
                 }
             )
             logger.debug("Default Headers: %r", session.headers)
-
-    def default_user_agent(self) -> str:
-        devices = "23053RN02A, 23053RN02Y, 23053RN02I, 23053RN02L, 23077RABDC".split(
-            ", "
-        )
-        device = random.choice(devices)
-        minor = random.randint(100, 150)
-        patch = random.randint(10000, 15000)
-        android = random.randint(11, 15)
-        return f"ru.hh.android/7.{minor}.{patch}, Device: {device}, Android OS: {android} (UUID: {uuid.uuid4()})"
 
     def additional_headers(
         self,
@@ -102,7 +86,9 @@ class BaseClient:
                 allow_redirects=False,
             )
             try:
-                # У этих лошков сервер не отдает Content-Length, а кривое API отдает пустые ответы, например, при отклике на вакансии, и мы не можем узнать содержит ли ответ тело
+                # У этих лошков сервер не отдает Content-Length, а кривое API
+                # отдает пустые ответы, например, при отклике на вакансии,
+                # и мы не можем узнать содержит ли ответ тело
                 # 'Server': 'ddos-guard'
                 # ...
                 # 'Transfer-Encoding': 'chunked'
@@ -113,11 +99,14 @@ class BaseClient:
                     #     raise
                     rv = {}
             finally:
+                log_url = url
+                if not has_body and params:
+                    log_url += "?" + urlencode(params)
                 logger.debug(
                     "%d %-6s %s",
                     response.status_code,
                     method,
-                    url + ("?" + urlencode(params) if not has_body and params else ""),
+                    log_url,
                 )
                 self.previous_request_time = time.monotonic()
         self.raise_for_status(response, rv)
@@ -202,9 +191,12 @@ class OAuthClient(BaseClient):
         return self.request_access_token("/token", params)
 
     def refresh_access_token(self, refresh_token: str) -> AccessToken:
-        # refresh_token можно использовать только один раз и только по истечению срока действия access_token.
+        # refresh_token можно использовать только один раз и только по
+        # истечению срока действия access_token.
         return self.request_access_token(
-            "/token", grant_type="refresh_token", refresh_token=refresh_token
+            "/token",
+            grant_type="refresh_token",
+            refresh_token=refresh_token,
         )
 
 
@@ -214,9 +206,9 @@ class ApiClient(BaseClient):
     access_token: str | None = None
     refresh_token: str | None = None
     access_expires_at: int = 0
-    client_id: str = ANDROID_CLIENT_ID
-    client_secret: str = ANDROID_CLIENT_SECRET
     _: dataclasses.KW_ONLY
+    client_id: str | None = None
+    client_secret: str | None = None
     base_url: str = "https://api.hh.ru/"
 
     @property
@@ -258,14 +250,14 @@ class ApiClient(BaseClient):
         except errors.Forbidden as ex:
             if not self.is_access_expired or not self.refresh_token:
                 raise ex
-            logger.info("try refresh access_token")
+            logger.info("try to refresh access_token")
             # Пробуем обновить токен
             self.refresh_access_token()
             # И повторно отправляем запрос
             return do_request()
 
     def handle_access_token(self, token: AccessToken) -> None:
-        for field in ["access_token", "refresh_token", "access_expires_at"]:
+        for field in ("access_token", "refresh_token", "access_expires_at"):
             if field in token and hasattr(self, field):
                 setattr(self, field, token[field])
 
