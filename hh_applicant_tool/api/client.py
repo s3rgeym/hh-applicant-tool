@@ -44,7 +44,6 @@ class BaseClient:
                 {
                     "user-agent": self.user_agent or "Mozilla/5.0",
                     "x-hh-app-active": "true",
-                    **self.additional_headers(),
                 }
             )
             logger.debug("Default Headers: %r", session.headers)
@@ -82,6 +81,7 @@ class BaseClient:
                 method,
                 url,
                 **payload,
+                headers=self.additional_headers(),
                 proxies=self.proxies,
                 allow_redirects=False,
             )
