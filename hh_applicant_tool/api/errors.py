@@ -5,6 +5,7 @@ from requests import Request, Response
 from requests.adapters import CaseInsensitiveDict
 
 __all__ = (
+    "BadResponse",
     "ApiError",
     "BadGateway",
     "BadRequest",
@@ -16,7 +17,11 @@ __all__ = (
 )
 
 
-class ApiError(Exception):
+class BadResponse(Exception):
+    pass
+
+
+class ApiError(BadResponse):
     def __init__(self, response: Response, data: dict[str, Any]) -> None:
         self._response = response
         self._raw = data

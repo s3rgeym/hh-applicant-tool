@@ -8,7 +8,7 @@ from typing import Any, TextIO
 
 from ..ai.blackbox import BlackboxChat
 from ..ai.openai import OpenAIChat
-from ..api import ApiClient, ApiError
+from ..api import ApiClient, BadResponse
 from ..api.errors import LimitExceeded
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
@@ -474,7 +474,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
             except LimitExceeded:
                 print("⚠️ Достигли лимита рассылки")
                 do_apply = False
-            except ApiError as ex:
+            except BadResponse as ex:
                 logger.error(ex)
 
         print("📝 Отклики на вакансии разосланы!")
@@ -582,4 +582,3 @@ class Operation(BaseOperation, GetResumeIdMixin):
                 time.sleep(interval)
 
         return rv
-
