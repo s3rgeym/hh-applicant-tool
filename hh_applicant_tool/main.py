@@ -69,7 +69,7 @@ class HHApplicantTool:
 
     Исходники и предложения: <https://github.com/s3rgeym/hh-applicant-tool>
 
-    Группа поддержки: <https://t.me/otzyvy_headhunter>
+    Группа поддержки: <https://t.me/hh_applicant_tool>
     """
 
     class ArgumentFormatter(
