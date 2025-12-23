@@ -93,11 +93,11 @@ class BaseClient:
                 # ...
                 # 'Transfer-Encoding': 'chunked'
                 try:
-                    rv = response.json()
-                except json.decoder.JSONDecodeError:
-                    # if response.status_code not in [201, 204]:
-                    #     raise
-                    rv = {}
+                    rv = response.json() if response.text else {}
+                except json.decoder.JSONDecodeError as ex:
+                    raise errors.BadResponse(
+                        f"Can't decode JSON: {method} {url} ({response.status_code})"
+                    ) from ex
             finally:
                 log_url = url
                 if not has_body and params:
@@ -110,7 +110,9 @@ class BaseClient:
                 )
                 self.previous_request_time = time.monotonic()
         self.raise_for_status(response, rv)
-        assert 300 > response.status_code >= 200
+        assert 300 > response.status_code >= 200, (
+            f"Unexpected status code for {method} {url}: {response.status_code}"
+        )
         return rv
 
     def get(self, *args, **kwargs):
