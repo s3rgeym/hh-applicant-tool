@@ -29,7 +29,6 @@ class OpenAIChat:
     def default_headers(self) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self.token}",
-            "Content-Type": "application/json",
         }
 
     def send_message(self, message: str) -> str:
