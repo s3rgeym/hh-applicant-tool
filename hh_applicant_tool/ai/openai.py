@@ -17,12 +17,14 @@ class OpenAIChat:
         token: str,
         model: str,
         system_prompt: str,
-        proxies: dict[str, str] = {}
+        proxies: dict[str, str] | None = None,
+        session: requests.Session | None = None
     ):
         self.token = token
         self.model = model
         self.system_prompt = system_prompt
         self.proxies = proxies
+        self.session = session or requests.session()
 
     def default_headers(self) -> dict[str, str]:
         return {
@@ -49,7 +51,7 @@ class OpenAIChat:
         }
 
         try:
-            response = requests.post(
+            response = self.session.post(
                 self.chat_endpoint,
                 json=payload,
                 headers=self.default_headers(),
@@ -59,9 +61,12 @@ class OpenAIChat:
             response.raise_for_status()
 
             data = response.json()
+            if 'error' in data:
+                raise OpenAIError(data['error']['message'])
+            
             assistant_message = data["choices"][0]["message"]["content"]
 
             return assistant_message
 
         except requests.exceptions.RequestException as ex:
-            raise OpenAIError(f"OpenAI API Error: {str(ex)}") from ex
+            raise OpenAIError(str(ex)) from ex
