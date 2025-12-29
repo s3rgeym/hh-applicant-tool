@@ -37,7 +37,6 @@ class Operation(BaseOperation):
         parser.add_argument(
             "--blacklist-discard",
             help="Если установлен, то заблокирует работодателя в случае отказа, чтобы его вакансии не отображались в возможных",
-            type=bool,
             action=argparse.BooleanOptionalAction,
         )
 
