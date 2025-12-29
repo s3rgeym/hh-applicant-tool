@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hh-applicant-tool"
-version = "0.6.17"
+version = "0.6.18"
 description = ""
 # Впишите себя, кто причастен к каким-либо изменениям
 authors = ["Senior YAML Developer <yamldeveloper@proton.me>"]
