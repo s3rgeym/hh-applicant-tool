@@ -33,8 +33,6 @@ class Operation(BaseOperation):
             "-p",
             "--show-path",
             "--path",
-            type=bool,
-            default=False,
             action=argparse.BooleanOptionalAction,
             help="Вывести полный путь к конфигу",
         )
