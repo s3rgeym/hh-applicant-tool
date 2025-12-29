@@ -1,6 +1,18 @@
 import enum
 import logging
 from enum import auto
+import os
+
+
+if sys.platform == "win32":
+    import ctypes
+    kernel32 = ctypes.windll.kernel32
+    # 0x0004 = ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    # Берем дескриптор стандартного вывода (stdout)
+    handle = kernel32.GetStdHandle(-11) 
+    mode = ctypes.c_uint()
+    kernel32.GetConsoleMode(handle, ctypes.byref(mode))
+    kernel32.SetConsoleMode(handle, mode.value | 0x0004)
 
 
 class Color(enum.Enum):
