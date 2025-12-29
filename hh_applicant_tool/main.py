@@ -158,7 +158,7 @@ class HHApplicantTool:
                 logger.warning("Interrupted by user")
                 return 1
             except Exception as e:
-                logger.exception(e, exc_info=log_level >= logging.DEBUG)
+                logger.exception(e, exc_info=log_level <= logging.DEBUG)
                 return 1
         parser.print_help(file=sys.stderr)
         return 2
