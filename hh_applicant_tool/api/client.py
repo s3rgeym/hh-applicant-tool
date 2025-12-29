@@ -215,7 +215,7 @@ class ApiClient(BaseClient):
 
     @property
     def is_access_expired(self) -> bool:
-        return time.time() > (self.access_expires_at or 0)
+        return time.time() >= (self.access_expires_at or 0)
 
     @cached_property
     def oauth_client(self) -> OAuthClient:
