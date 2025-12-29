@@ -31,8 +31,6 @@ class Operation(BaseOperation):
         )
         parser.add_argument(
             "--all",
-            type=bool,
-            default=False,
             action=argparse.BooleanOptionalAction,
             help="Удалить все отклики в тч с приглашениями",
         )
@@ -40,7 +38,6 @@ class Operation(BaseOperation):
             "--blacklist-discard",
             help="Если установлен, то заблокирует работодателя в случае отказа, чтобы его вакансии не отображались в возможных",
             type=bool,
-            default=False,
             action=argparse.BooleanOptionalAction,
         )
 
