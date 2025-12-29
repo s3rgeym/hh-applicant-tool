@@ -1,7 +1,7 @@
 import enum
 import logging
 from enum import auto
-import os
+import os, sys
 
 
 if sys.platform == "win32":
