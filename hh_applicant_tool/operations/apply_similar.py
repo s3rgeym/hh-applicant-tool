@@ -60,7 +60,7 @@ class Namespace(BaseNamespace):
     right_lng: float | None
     sort_point_lat: float | None
     sort_point_lng: float | None
-    no_magic: bool
+    magic: bool
     premium: bool
 
 
@@ -191,10 +191,10 @@ class Operation(BaseOperation, GetResumeIdMixin):
             help="Координата lng для сортировки по расстоянию",
         )
         parser.add_argument(
-            "--no-magic",
-            default=False,
+            "--magic",
+            default=True,
             action=argparse.BooleanOptionalAction,
-            help="Отключить авторазбор текста запроса",
+            help="Включить авторазбор текста запроса",
         )
         parser.add_argument(
             "--premium",
@@ -291,7 +291,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
         self.sort_point_lng = args.sort_point_lng
         self.clusters = args.clusters
         # self.describe_arguments = args.describe_arguments
-        self.no_magic = args.no_magic
+        self.no_magic = not args.magic
         self.premium = args.premium
         self._apply_similar()
 
