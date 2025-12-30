@@ -77,7 +77,7 @@ class BaseClient:
             has_body = method in ["POST", "PUT"]
             payload = {"data" if has_body else "params": params}
             headers = self.default_headers() | self.additional_headers()
-            logger.debug(f"request: {method = }, {url = }, {headers = }, params = {dict(list(params.items())[:3])}, proxies = {self.proxies}")
+            logger.debug(f"API request: {method = }, {url = }, {headers = }, params = {dict(list(params.items())[:3])}, proxies = {self.proxies}")
             response = self.session.request(
                 method,
                 url,
@@ -104,10 +104,10 @@ class BaseClient:
                 if not has_body and params:
                     log_url += "?" + urlencode(params)
                 logger.debug(
-                    "response: %d %s %s",
-                    response.status_code,
+                    "%s %s: %d",
                     method,
                     log_url,
+                    response.status_code,
                 )
                 self.previous_request_time = time.monotonic()
         self.raise_for_status(response, rv)
