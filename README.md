@@ -376,6 +376,14 @@ for id in $(jq -r 'select(.is_scam == true) | .employer.id' contacts.dump | sort
 done
 ```
 
+Синтаксис `call-api` немного похож на `httpie` или `curlie`:
+
+```sh
+hh-applicant-tool call-api [ -m {PUT|POST|DELETE} ] /path/to/endpoint [ key1=value1  [ ... keyN=valueN ] ]
+```
+
+Если используется метод `GET` или `DELETE` (или ничего не указано), то параметры будут переданы как query string.
+
 ### Добавление своих команд
 
 Утилита использует систему плагинов. Все они лежат в [operations](https://github.com/s3rgeym/hh-applicant-tool/tree/main/hh_applicant_tool/operations). Модули расположенные там автоматически добавляются как доступные команды. За основу для своего плагина можно взять [whoami.py](https://github.com/s3rgeym/hh-applicant-tool/tree/main/hh_applicant_tool/operations/whoami.py).
