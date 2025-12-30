@@ -5,6 +5,10 @@ import sys
 from typing import Any
 from ..utils import print_err
 
+from ..api import ApiClient  # noqa: E402
+from ..main import BaseOperation, Namespace  # noqa: E402
+
+logger = logging.getLogger(__package__)
 
 QT_IMPORTED = False
 
@@ -35,11 +39,6 @@ except ImportError as ex:
     class QWebEngineView:
         pass
 
-
-from ..api import ApiClient  # noqa: E402
-from ..main import BaseOperation, Namespace  # noqa: E402
-
-logger = logging.getLogger(__package__)
 
 
 class HHAndroidUrlSchemeHandler(QWebEngineUrlSchemeHandler):
