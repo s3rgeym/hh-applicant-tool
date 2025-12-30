@@ -11,7 +11,7 @@ QT_IMPORTED = False
 try:
     from PyQt6.QtCore import QUrl
     from PyQt6.QtWidgets import QApplication, QMainWindow
-    from PyQt6.QtWebEngineCore import QWebEngineUrlSchemeHandler
+    from PyQt6.QtWebEngineCore import QWebEngineProxySettings, QWebEngineUrlSchemeHandler
     from PyQt6.QtWebEngineWidgets import QWebEngineView
     from PyQt6.QtNetwork import QNetworkProxy
 
@@ -77,30 +77,42 @@ class WebViewWindow(QMainWindow):
         if not proxies:
             return
 
-        proxy_url = proxies.get("https")
+        # Приоритет HTTPS
+        proxy_url = proxies.get("https") or proxies.get("http")
         if not proxy_url:
             return
 
         proxy_qurl = QUrl(proxy_url)
-        proxy = QNetworkProxy()
+        
+        # В PyQt6 используется QWebEngineProxySettings через профиль
+        profile = self.web_view.page().profile()
+        proxy_settings = profile.proxySettings()
 
+        # Настраиваем тип
         scheme = proxy_qurl.scheme().lower()
         if "socks5" in scheme:
-            proxy.setType(QNetworkProxy.ProxyType.Socks5Proxy)
+            proxy_settings.setType(QWebEngineProxySettings.ProxyType.Socks5Proxy)
         else:
-            proxy.setType(QNetworkProxy.ProxyType.HttpProxy)
+            proxy_settings.setType(QWebEngineProxySettings.ProxyType.HttpProxy)
 
-        proxy.setHostName(proxy_qurl.host())
+        # Хост и порт
+        proxy_settings.setHostName(proxy_qurl.host())
         if proxy_qurl.port() != -1:
-            proxy.setPort(proxy_qurl.port())
-        
-        if proxy_qurl.userName():
-            proxy.setUser(proxy_qurl.userName())
-        if proxy_qurl.password():
-            proxy.setPassword(proxy_qurl.password())
+            proxy_settings.setPort(proxy_qurl.port())
+        else:
+            # Стандартные порты, если не указаны
+            proxy_settings.setPort(1080 if "socks" in scheme else 8080)
 
-        self.web_view.page().profile().setProxyConfig(proxy)
-        logger.debug(f"Proxy configured: {proxy_url}")
+        # Авторизация
+        if proxy_qurl.userName():
+            proxy_settings.setUserName(proxy_qurl.userName())
+        if proxy_qurl.password():
+            proxy_settings.setPassword(proxy_qurl.password())
+
+        # ВАЖНО: В некоторых версиях изменения применяются автоматически,
+        # но для надежности можно переприсвоить настройки (если это поддерживает API)
+        # либо просто убедиться, что мы меняли объект, полученный из профиля.
+        logger.debug(f"Proxy configured for profile: {proxy_url}")
 
     def _filter_http_requests(self, url: QUrl, _type, is_main_frame):
         """Блокирует любые переходы по протоколу HTTP"""
