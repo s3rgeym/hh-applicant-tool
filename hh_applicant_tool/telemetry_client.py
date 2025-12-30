@@ -27,7 +27,7 @@ class TelemetryClient:
     """Клиент для отправки телеметрии на сервер."""
 
     server_address: str = "https://hh-applicant-tool.mooo.com:54157/"
-    default_delay: float = 0.334  # Задержка по умолчанию в секундах
+    default_delay: float = 0.56  # Задержка по умолчанию в секундах
 
     def __init__(
         self,
