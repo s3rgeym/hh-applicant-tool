@@ -16,7 +16,8 @@ try:
     from PyQt6.QtNetwork import QNetworkProxy
 
     QT_IMPORTED = True
-except ImportError:
+except ImportError as ex:
+    logger.debug(ex)
     # Заглушки чтобы на сервере не нужно было ставить сотни мегабайт qt-говна
 
     class QUrl:
