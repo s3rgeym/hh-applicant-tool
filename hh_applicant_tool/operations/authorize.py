@@ -56,12 +56,13 @@ class HHAndroidUrlSchemeHandler(QWebEngineUrlSchemeHandler):
 
     def _register_hhandroid_scheme(self) -> None:
         scheme = QWebEngineUrlScheme(HH_ANDROID_SCHEME.encode())
+        scheme.setSyntax(QWebEngineUrlScheme.Syntax.Path)
         scheme.setFlags(
             QWebEngineUrlScheme.Flag.SecureScheme |
             QWebEngineUrlScheme.Flag.LocalScheme |
-            QWebEngineUrlScheme.Flag.LocalAccessAllowed
+            QWebEngineUrlScheme.Flag.LocalAccessAllowed |
+            QWebEngineUrlScheme.Flag.CorsEnabled
         )
-        scheme.setSyntax(QWebEngineUrlScheme.Syntax.HostAndPort)
         QWebEngineUrlScheme.registerScheme(scheme)
 
 
