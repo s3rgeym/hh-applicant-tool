@@ -77,7 +77,7 @@ class BaseClient:
             has_body = method in ["POST", "PUT"]
             payload = {"data" if has_body else "params": params}
             headers = self.default_headers() | self.additional_headers()
-            logger.debug(f"request info: {method = }, {url = }, {headers = }, proxies = {self.proxies}, params = {repr(params)[:50]}")
+            logger.debug(f"request info: {method = }, {url = }, {headers = }, proxies = {self.proxies}, params = {repr(params)[:255]}")
             response = self.session.request(
                 method,
                 url,
