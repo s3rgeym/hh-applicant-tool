@@ -17,6 +17,7 @@ QT_IMPORTED = False
 try:
     from PyQt6.QtCore import QUrl
     from PyQt6.QtWidgets import QApplication, QMainWindow
+    from PyQt6.QtWebEngineCore import QWebEngineUrlScheme
     from PyQt6.QtWebEngineCore import QWebEngineUrlSchemeHandler
     from PyQt6.QtWebEngineWidgets import QWebEngineView
 
