@@ -8,6 +8,8 @@ from ..utils import print_err
 from ..api import ApiClient  # noqa: E402
 from ..main import BaseOperation, Namespace  # noqa: E402
 
+HH_ANDROID_SCHEME = "hhandroid"
+
 logger = logging.getLogger(__package__)
 
 QT_IMPORTED = False
@@ -43,12 +45,23 @@ except ImportError as ex:
 class HHAndroidUrlSchemeHandler(QWebEngineUrlSchemeHandler):
     def __init__(self, parent: "WebViewWindow") -> None:
         super().__init__()
+        self._register_hhandroid_scheme()
         self.parent = parent
 
     def requestStarted(self, info: Any) -> None:
         url = info.requestUrl().toString()
-        if url.startswith("hhandroid://"):
+        if url.startswith(f"{HH_ANDROID_SCHEME}://"):
             self.parent.handle_redirect_uri(url)
+
+    def _register_hhandroid_scheme(self) -> None:
+        scheme = QWebEngineUrlScheme(HH_ANDROID_SCHEME.encode())
+        scheme.setFlags(
+            QWebEngineUrlScheme.Flag.SecureScheme |
+            QWebEngineUrlScheme.Flag.LocalScheme |
+            QWebEngineUrlScheme.Flag.LocalAccessAllowed
+        )
+        scheme.setSyntax(QWebEngineUrlScheme.Syntax.HostAndPort)
+        QWebEngineUrlScheme.registerScheme(scheme)
 
 
 class WebViewWindow(QMainWindow):
@@ -62,7 +75,7 @@ class WebViewWindow(QMainWindow):
         self.hhandroid_handler = HHAndroidUrlSchemeHandler(self)
         
         profile = self.web_view.page().profile()
-        profile.installUrlSchemeHandler(b"hhandroid", self.hhandroid_handler)
+        profile.installUrlSchemeHandler(HH_ANDROID_SCHEME.encode(), self.hhandroid_handler)
         
         self.web_view.page().acceptNavigationRequest = self._filter_http_requests
 
@@ -102,14 +115,13 @@ class Operation(BaseOperation):
             )
             sys.exit(1)
 
+        app = QApplication(sys.argv)
         proxies = api_client.proxies
         if proxy_url := proxies.get("https"):
             chromium_flags = f"--proxy-server={proxy_url}"
             logger.debug(f"{chromium_flags = }")
             import os
             os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = chromium_flags
-
-        app = QApplication(sys.argv)
         window = WebViewWindow(api_client=api_client)
         window.show()
 
