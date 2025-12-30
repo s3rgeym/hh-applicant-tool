@@ -29,7 +29,6 @@ ALLOWED_METHODS = Literal["GET", "POST", "PUT", "DELETE"]
 class BaseClient:
     base_url: str
     _: dataclasses.KW_ONLY
-    # TODO: сделать генерацию User-Agent'а как в приложении
     user_agent: str | None = None
     proxies: dict | None = None
     session: Session | None = None
@@ -231,11 +230,11 @@ class ApiClient(BaseClient):
     def additional_headers(
         self,
     ) -> dict[str, str]:
-        return (
-            {"authorization": f"Bearer {self.access_token}"}
-            if self.access_token
-            else {}
-        )
+        if not self.access_token:
+            return {}
+        # Это очень интересно, что access token'ы начинаются с USER, т.е. API может содержать какую-то уязвимость, связанную с этим
+        assert self.access_token.startswith("USER")
+        return {"authorization": f"Bearer {self.access_token}"}
 
     # Реализовано автоматическое обновление токена
     def request(
