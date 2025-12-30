@@ -25,7 +25,7 @@ logger = logging.getLogger(__package__)
 class BaseOperation:
     def setup_parser(self, parser: argparse.ArgumentParser) -> None: ...
 
-    def run(self, args: argparse.Namespace) -> None | int:
+    def run(self, args: argparse.Namespace, api_client: ApiClient, telemetry_client: TelemetryClient) -> None | int:
         raise NotImplementedError()
 
 
@@ -41,11 +41,25 @@ class Namespace(argparse.Namespace):
     disable_telemetry: bool
 
 
-def get_proxies(args: Namespace) -> dict[Literal["http", "https"], str | None]:
-    return {
-        "http": args.config["proxy_url"] or getenv("HTTP_PROXY") or getenv("http_proxy"),
-        "https": args.config["proxy_url"] or getenv("HTTPS_PROXY") or getenv("https_proxy"),
-    }
+def get_proxies(args: Namespace) -> dict[str, str]:
+    proxy_url = args.proxy_url or args.config.get("proxy_url")
+    
+    if proxy_url:
+        return {
+            "http": proxy_url,
+            "https": proxy_url,
+        }
+    
+    proxies = {}
+    http_env = getenv("HTTP_PROXY") or getenv("http_proxy")
+    https_env = getenv("HTTPS_PROXY") or getenv("https_proxy") or http_env
+    
+    if http_env:
+        proxies["http"] = http_env
+    if https_env:
+        proxies["https"] = https_env
+        
+    return proxies
 
 
 def get_api_client(args: Namespace) -> ApiClient:
