@@ -39,6 +39,8 @@ class BaseClient:
         self.lock = Lock()
         if not self.session:
             self.session = requests.session()
+        if self.proxies:
+            logger.debug(f"client proxies: {self.proxies}")
 
     def default_headers(self) -> dict[str, str]:
         return {
@@ -76,7 +78,7 @@ class BaseClient:
             has_body = method in ["POST", "PUT"]
             payload = {"data" if has_body else "params": params}
             headers = self.default_headers() | self.additional_headers()
-            logger.debug(f"request info: {method = }, {url = }, {headers = }, proxies = {self.proxies}, params = {repr(params)[:255]}")
+            logger.debug(f"request info: {method = }, {url = }, {headers = }, params = {repr(params)[:255]}")
             response = self.session.request(
                 method,
                 url,
