@@ -103,7 +103,9 @@ pip install 'hh-applicant-tool[qt]'
 $ hh-applicant-tool -vv authorize
 ```
 
-![image](https://github.com/user-attachments/assets/88961e31-4ea3-478f-8c43-914d6785bc3b)
+<img width="610" height="958" alt="image" src="https://github.com/user-attachments/assets/adf47113-df16-4500-aed5-a78d9a783d97" />
+
+> Пусть надпись "Поиск содрудников" не вводит в заблуждение — это форма авторизации соискателей. Просто есть долбоебы, которые в этом окне начинают лихорадочно тыкать по ссылкам, не понимая, что форма авторизации у них была перед носом.
 
 > В Windows не забудьте разрешить доступ к сети (Allow access) в всплывающем окне.
 
