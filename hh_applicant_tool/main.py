@@ -119,8 +119,22 @@ class HHApplicantTool:
         for _, module_name, _ in iter_modules([str(package_dir)]):
             mod = import_module(f"{__package__}.{OPERATIONS}.{module_name}")
             op: BaseOperation = mod.Operation()
+            # 1. Разбиваем имя модуля на части
+            words = module_name.split("_")
+
+            # 2. Формируем варианты имен
+            kebab_name = "-".join(words)  # call-api
+            
+            # camelCase: первое слово маленькими, остальные с большой
+            camel_case_name = words[0] + "".join(word.title() for word in words[1:])
+            
+            # flatcase: всё слитно и в нижнем регистре
+            flat_name = "".join(words)  # callapi
+
             op_parser = subparsers.add_parser(
-                module_name.replace("_", "-"),
+                kebab_name,
+                # Добавляем остальные варианты в псевдонимы
+                aliases=[camel_case_name, flat_name],
                 description=op.__doc__,
                 formatter_class=self.ArgumentFormatter,
             )
