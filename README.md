@@ -382,7 +382,7 @@ npx @redocly/cli preview -d docs/hhapi
 Синтаксис `call-api` немного похож на `httpie` или `curlie`:
 
 ```sh
-hh-applicant-tool call-api [ -m {PUT|POST|DELETE} ] /path/to/endpoint [ key1=value1  [ ... keyN=valueN ] ]
+hh-applicant-tool call-api [ -m {GET|POST|PUT|DELETE} ] /path/to/endpoint [ key1=value1  [ ... keyN=valueN ] ]
 ```
 
 Если используется метод `GET` или `DELETE` (или ничего не указано), то параметры будут переданы как query string. Во всех остальных случаях парметры передаются как `application/x-www-form-urlencoded` в теле запроса.
