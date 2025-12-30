@@ -43,8 +43,8 @@ class Namespace(argparse.Namespace):
 
 def get_proxies(args: Namespace) -> dict[Literal["http", "https"], str | None]:
     return {
-        "http": args.config["proxy_url"] or getenv("HTTP_PROXY"),
-        "https": args.config["proxy_url"] or getenv("HTTPS_PROXY"),
+        "http": args.config["proxy_url"] or getenv("HTTP_PROXY") or getenv("http_proxy"),
+        "https": args.config["proxy_url"] or getenv("HTTPS_PROXY") or getenv("https_proxy"),
     }
 
 
