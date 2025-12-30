@@ -104,6 +104,7 @@ class Operation(BaseOperation):
         proxies = api_client.proxies
         if proxy_url := proxies.get("https"):
             logger.debug(f"{proxy_url = }")
+            import os
             os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = f"--proxy-server={proxy_url}"
 
         app = QApplication(sys.argv)
