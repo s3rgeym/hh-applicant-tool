@@ -17,7 +17,6 @@ try:
     from PyQt6.QtWidgets import QApplication, QMainWindow
     from PyQt6.QtWebEngineCore import QWebEngineUrlSchemeHandler
     from PyQt6.QtWebEngineWidgets import QWebEngineView
-    from PyQt6.QtNetwork import QNetworkProxy
 
     QT_IMPORTED = True
 except ImportError as ex:
