@@ -1,9 +1,9 @@
 [tool.poetry]
 name = "hh-applicant-tool"
-version = "0.7.1"
+version = "0.7.2"
 description = "HH-Applicant-Tool: An automation utility for HeadHunter (hh.ru) designed to streamline the job search process by auto-applying to relevant vacancies and periodically refreshing resumes to stay at the top of recruiter searches."
-homepage = "https://github.com/ваш_логин/hh-applicant-tool"
-repository = "https://github.com/ваш_логин/hh-applicant-tool"
+homepage = "https://github.com/s3rgeym/hh-applicant-tool"
+repository = "https://github.com/s3rgeym/hh-applicant-tool"
 # Впишите себя, кто причастен к каким-либо изменениям
 authors = ["Senior YAML Developer <yamldeveloper@proton.me>"]
 readme = "README.md"
