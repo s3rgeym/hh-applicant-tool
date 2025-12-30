@@ -46,8 +46,8 @@ except ImportError as ex:
 class HHAndroidUrlSchemeHandler(QWebEngineUrlSchemeHandler):
     def __init__(self, parent: "WebViewWindow") -> None:
         super().__init__()
-        self._register_hhandroid_scheme()
         self.parent = parent
+        self._register_hhandroid_scheme()
 
     def requestStarted(self, info: Any) -> None:
         url = info.requestUrl().toString()
@@ -113,7 +113,7 @@ class Operation(BaseOperation):
     def run(self, args: Namespace, api_client: ApiClient, *_) -> None:
         if not QT_IMPORTED:
             print_err(
-                "❗Критиническая Ошибка: PyQt6 не был импортирован, возможно, вы долбоеб и забыли его установить, либо же криворукие разрабы этой либы опять все сломали..."
+                "❗Ошибка: PyQt6 не был импортирован, возможно, вы забыли его установить, либо же это ошибка самой библиотеки."
             )
             sys.exit(1)
 
@@ -121,9 +121,9 @@ class Operation(BaseOperation):
         if proxy_url := proxies.get("https"):
             import os
             
-            chromium_flags = f"--proxy-server={proxy_url}"
-            logger.debug(f"set {chromium_flags = }")
-            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = chromium_flags
+            qtwebengine_chromium_flags = f"--proxy-server={proxy_url}"
+            logger.debug(f"set {qtwebengine_chromium_flags = }")
+            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = qtwebengine_chromium_flags
 
         app = QApplication(sys.argv)
         window = WebViewWindow(api_client=api_client)
