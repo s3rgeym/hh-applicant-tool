@@ -39,15 +39,14 @@ class BaseClient:
     def __post_init__(self) -> None:
         self.lock = Lock()
         if not self.session:
-            self.session = session = requests.session()
-            session.headers.update(
-                {
-                    "user-agent": self.user_agent or "Mozilla/5.0",
-                    "x-hh-app-active": "true",
-                }
-            )
-            logger.debug("Default Headers: %r", session.headers)
+            self.session = requests.session()
 
+    def default_headers(self) -> dict[str, str]:
+        return {
+            "user-agent": self.user_agent or "Mozilla/5.0",
+            "x-hh-app-active": "true",
+        }
+    
     def additional_headers(
         self,
     ) -> dict[str, str]:
@@ -77,11 +76,13 @@ class BaseClient:
                 time.sleep(delay)
             has_body = method in ["POST", "PUT"]
             payload = {"data" if has_body else "params": params}
+            headers = self.default_headers() | self.additional_headers()
+            logger.debug(f"HH API Request: {method = }, {url = }, {headers = }, params = {dict(list(params)[:3])!r}")
             response = self.session.request(
                 method,
                 url,
                 **payload,
-                headers=self.additional_headers(),
+                headers=headers,
                 proxies=self.proxies,
                 allow_redirects=False,
             )
