@@ -104,7 +104,7 @@ class BaseClient:
                 if not has_body and params:
                     log_url += "?" + urlencode(params)
                 logger.debug(
-                    "%d %-6s %s",
+                    "%d %s %s",
                     response.status_code,
                     method,
                     log_url,
