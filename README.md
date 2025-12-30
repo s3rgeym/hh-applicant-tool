@@ -362,10 +362,10 @@ hh-applicant-tool apply-similar -f --ai
 hh-applicant-tool get-employer-contacts --export -f jsonl > contacts.dump
 
 # Теперь блокируем всех мошенников
-jq -r 'select(.is_scam == true) | .employer.id' contacts.dump | xargs -I {} hh-applicant-tool call-api -m PUT /employers/blacklisted/{}
+jq -r 'select(.is_scam == true) | .employer.id' contacts.dump | sort -u | xargs -I {} hh-applicant-tool call-api -m PUT /employers/blacklisted/{}
 
 # И императивная версия
-for id in $(jq -r 'select(.is_scam == true) | .employer.id' contacts.dump); do
+for id in $(jq -r 'select(.is_scam == true) | .employer.id' contacts.dump | sort -u); do
     hh-applicant-tool call-api -m PUT "/employers/blacklisted/$id"
 done
 ```
