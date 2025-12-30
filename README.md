@@ -355,6 +355,6 @@ hh-applicant-tool apply-similar -f --ai
 
 Для создания своих плагинов прочитайте документацию:
 
-- [HH.RU OpenAPI](https://api.hh.ru/openapi/redoc)
+- [HH.RU OpenAPI](https://github.com/s3rgeym/hhru) (с официального сайта документация по методам API для соискателей исчезла после 15.12.2025)
 
 Для тестирования запросов к API используйте команду `call-api` и `jq` для вывода JSON в удобочитаемом формате.
