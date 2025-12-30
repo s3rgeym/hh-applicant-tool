@@ -13,6 +13,7 @@ try:
     from PyQt6.QtWidgets import QApplication, QMainWindow
     from PyQt6.QtWebEngineCore import QWebEngineUrlSchemeHandler
     from PyQt6.QtWebEngineWidgets import QWebEngineView
+    from PyQt6.QtNetwork import QNetworkProxy
 
     QT_IMPORTED = True
 except ImportError:
@@ -55,17 +56,58 @@ class WebViewWindow(QMainWindow):
     def __init__(self, api_client: ApiClient) -> None:
         super().__init__()
         self.api_client = api_client
-        # Настройка WebEngineView
+        
         self.web_view = QWebEngineView()
+        self._setup_proxy()
+        
         self.setCentralWidget(self.web_view)
         self.setWindowTitle("Авторизация на HH.RU")
         self.hhandroid_handler = HHAndroidUrlSchemeHandler(self)
-        # Установка перехватчика запросов и обработчика кастомной схемы
+        
         profile = self.web_view.page().profile()
         profile.installUrlSchemeHandler(b"hhandroid", self.hhandroid_handler)
-        # Настройки окна для мобильного вида
+        
+        self.web_view.page().acceptNavigationRequest = self._filter_http_requests
+
         self.resize(480, 800)
         self.web_view.setUrl(QUrl(api_client.oauth_client.authorize_url))
+
+    def _setup_proxy(self):
+        proxies = self.api_client.proxies
+        if not proxies:
+            return
+
+        proxy_url = proxies.get("https")
+        if not proxy_url:
+            return
+
+        proxy_qurl = QUrl(proxy_url)
+        proxy = QNetworkProxy()
+
+        scheme = proxy_qurl.scheme().lower()
+        if "socks5" in scheme:
+            proxy.setType(QNetworkProxy.ProxyType.Socks5Proxy)
+        else:
+            proxy.setType(QNetworkProxy.ProxyType.HttpProxy)
+
+        proxy.setHostName(proxy_qurl.host())
+        if proxy_qurl.port() != -1:
+            proxy.setPort(proxy_qurl.port())
+        
+        if proxy_qurl.userName():
+            proxy.setUser(proxy_qurl.userName())
+        if proxy_qurl.password():
+            proxy.setPassword(proxy_qurl.password())
+
+        self.web_view.page().profile().setProxyConfig(proxy)
+        logger.debug(f"Proxy configured: {proxy_url}")
+
+    def _filter_http_requests(self, url: QUrl, _type, is_main_frame):
+        """Блокирует любые переходы по протоколу HTTP"""
+        if url.scheme().lower() == "http":
+            logger.warning(f"🚫 Заблокирован небезопасный запрос: {url.toString()}")
+            return False
+        return True
 
     def handle_redirect_uri(self, redirect_uri: str) -> None:
         logger.debug(f"handle redirect uri: {redirect_uri}")
