@@ -15,7 +15,7 @@ QT_IMPORTED = False
 try:
     from PyQt6.QtCore import QUrl
     from PyQt6.QtWidgets import QApplication, QMainWindow
-    from PyQt6.QtWebEngineCore import QWebEngineProxySettings, QWebEngineUrlSchemeHandler
+    from PyQt6.QtWebEngineCore import QWebEngineUrlSchemeHandler
     from PyQt6.QtWebEngineWidgets import QWebEngineView
     from PyQt6.QtNetwork import QNetworkProxy
 
@@ -83,36 +83,30 @@ class WebViewWindow(QMainWindow):
             return
 
         proxy_qurl = QUrl(proxy_url)
-        
-        # В PyQt6 используется QWebEngineProxySettings через профиль
-        profile = self.web_view.page().profile()
-        proxy_settings = profile.proxySettings()
+        proxy = QNetworkProxy()
 
-        # Настраиваем тип
+        # Настраиваем тип прокси
         scheme = proxy_qurl.scheme().lower()
         if "socks5" in scheme:
-            proxy_settings.setType(QWebEngineProxySettings.ProxyType.Socks5Proxy)
+            proxy.setType(QNetworkProxy.ProxyType.Socks5Proxy)
         else:
-            proxy_settings.setType(QWebEngineProxySettings.ProxyType.HttpProxy)
+            proxy.setType(QNetworkProxy.ProxyType.HttpProxy)
 
         # Хост и порт
-        proxy_settings.setHostName(proxy_qurl.host())
+        proxy.setHostName(proxy_qurl.host())
         if proxy_qurl.port() != -1:
-            proxy_settings.setPort(proxy_qurl.port())
+            proxy.setPort(proxy_qurl.port())
         else:
-            # Стандартные порты, если не указаны
-            proxy_settings.setPort(1080 if "socks" in scheme else 8080)
+            proxy.setPort(1080 if "socks" in scheme else 8080)
 
-        # Авторизация
+        # Авторизация (логин/пароль)
         if proxy_qurl.userName():
-            proxy_settings.setUserName(proxy_qurl.userName())
+            proxy.setUser(proxy_qurl.userName())
         if proxy_qurl.password():
-            proxy_settings.setPassword(proxy_qurl.password())
+            proxy.setPassword(proxy_qurl.password())
 
-        # ВАЖНО: В некоторых версиях изменения применяются автоматически,
-        # но для надежности можно переприсвоить настройки (если это поддерживает API)
-        # либо просто убедиться, что мы меняли объект, полученный из профиля.
-        logger.debug(f"Proxy configured for profile: {proxy_url}")
+        self.web_view.page().profile().setProxyConfig(proxy, proxy_qurl)        
+        logger.debug(f"Proxy set: {proxy_url}")
 
     def _filter_http_requests(self, url: QUrl, _type, is_main_frame):
         """Блокирует любые переходы по протоколу HTTP"""
