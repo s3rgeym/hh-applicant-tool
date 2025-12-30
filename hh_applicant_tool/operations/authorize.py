@@ -104,9 +104,10 @@ class Operation(BaseOperation):
 
         proxies = api_client.proxies
         if proxy_url := proxies.get("https"):
-            logger.debug(f"{proxy_url = }")
+            chromium_flags = f"--proxy-server={proxy_url}"
+            logger.debug(f"{chromium_flags = }")
             import os
-            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = f"--proxy-server={proxy_url}"
+            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = chromium_flags
 
         app = QApplication(sys.argv)
         window = WebViewWindow(api_client=api_client)
