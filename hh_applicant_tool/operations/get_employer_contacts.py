@@ -57,7 +57,7 @@ class Operation(BaseOperation):
             "-f",
             "--format",
             default="html",
-            choices=["html", "jsonl"],
+            choices=["html", "json", "jsonl"],
             help="Формат вывода",
         )
 
@@ -76,13 +76,25 @@ class Operation(BaseOperation):
                 if per_page * page >= res["total"]:
                     break
                 page += 1
-            if args.format == "jsonl":
+            if args.format.startswith("json"):
                 import json, sys
-
-                for contact in contact_persons:
+                is_json = args.format == "json"
+                total_contacts = len(contact_persons)
+                
+                if is_json:
+                    sys.stdout.write("[")
+                    
+                for index, contact in enumerate(contact_persons):
+                    if is_json and index > 0:
+                        sys.stdout.write(",")
+                        
                     json.dump(contact, sys.stdout, ensure_ascii=False)
-                    sys.stdout.write("\n")
-                    sys.stdout.flush()
+
+                    if not is_json:
+                        sys.stdout.write("\n")
+                    
+                if is_json:
+                    sys.stdout.write("]\n")
             else:
                 print(generate_html_report(contact_persons))
             return
@@ -192,6 +204,17 @@ def generate_html_report(data: list[dict]) -> str:
             color: #6c757d;
             font-style: italic;
         }
+        .scam-warning {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            font-weight: bold;
+            text-align: center;
+            text-transform: uppercase;
+        }
     </style>
 </head>
 <body>
@@ -219,8 +242,12 @@ def generate_html_report(data: list[dict]) -> str:
             if "username" in tu
         ]
 
+        html_content += '<div class="person-card">'
+
+        if item.get('is_scam'):
+            html_content += '<div class="scam-warning">⚠️ ВНИМАНИЕ: Подозрение на мошенничество!</div>'
+
         html_content += f"""\
-        <div class="person-card">
             <h2>{name}</h2>
             <p><strong>Email:</strong> <a href="mailto:{email}">{email}</a></p>
         """
@@ -282,8 +309,10 @@ def print_contacts(data: dict) -> None:
 
 def print_contact(contact: dict, is_last_contact: bool) -> None:
     """Вывод информации о конкретном контакте."""
+    is_scam = contact.get("is_scam", False)
     prefix = "└──" if is_last_contact else "├──"
-    print(f" {prefix} 🧑 {contact.get('name', 'Имя скрыто')}")
+    scam_label = " ⚠️ [МОШЕННИК]" if is_scam else ""
+    print(f" {prefix} 🧑 {contact.get('name', 'Имя скрыто')}{scam_label}")
     prefix2 = "    " if is_last_contact else " │   "
     print(f"{prefix2}├── 📧 Email: {contact.get('email', 'н/д')}")
     employer = contact.get("employer") or {}
