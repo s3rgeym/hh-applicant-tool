@@ -56,7 +56,7 @@ class WebViewWindow(QMainWindow):
         super().__init__()
         self.api_client = api_client
         
-        self.web_view = QWebEngineView()   
+        self.web_view = QWebEngineView()
         self.setCentralWidget(self.web_view)
         self.setWindowTitle("Авторизация на HH.RU")
         self.hhandroid_handler = HHAndroidUrlSchemeHandler(self)
@@ -67,7 +67,9 @@ class WebViewWindow(QMainWindow):
         self.web_view.page().acceptNavigationRequest = self._filter_http_requests
 
         self.resize(480, 800)
-        self.web_view.setUrl(QUrl(api_client.oauth_client.authorize_url))
+        oauth_url = api_client.oauth_client.authorize_url
+        logger.debug(f"{oauth_url = }")
+        self.web_view.setUrl(QUrl(oauth_url))
 
     def _filter_http_requests(self, url: QUrl, _type, is_main_frame):
         """Блокирует любые переходы по протоколу HTTP"""
