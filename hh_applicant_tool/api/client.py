@@ -223,6 +223,8 @@ class ApiClient(BaseClient):
         return OAuthClient(
             client_id=self.client_id,
             client_secret=self.client_secret,
+            user_agent=self.user_agent,
+            proxies=dict(self.proxies or {}),
             session=self.session,
         )
 
