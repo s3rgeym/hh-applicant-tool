@@ -57,9 +57,7 @@ class WebViewWindow(QMainWindow):
         super().__init__()
         self.api_client = api_client
         
-        self.web_view = QWebEngineView()
-        self._setup_proxy()
-        
+        self.web_view = QWebEngineView()   
         self.setCentralWidget(self.web_view)
         self.setWindowTitle("Авторизация на HH.RU")
         self.hhandroid_handler = HHAndroidUrlSchemeHandler(self)
@@ -71,42 +69,6 @@ class WebViewWindow(QMainWindow):
 
         self.resize(480, 800)
         self.web_view.setUrl(QUrl(api_client.oauth_client.authorize_url))
-
-    def _setup_proxy(self):
-        proxies = self.api_client.proxies
-        if not proxies:
-            return
-
-        # Приоритет HTTPS
-        proxy_url = proxies.get("https") or proxies.get("http")
-        if not proxy_url:
-            return
-
-        proxy_qurl = QUrl(proxy_url)
-        proxy = QNetworkProxy()
-
-        # Настраиваем тип прокси
-        scheme = proxy_qurl.scheme().lower()
-        if "socks5" in scheme:
-            proxy.setType(QNetworkProxy.ProxyType.Socks5Proxy)
-        else:
-            proxy.setType(QNetworkProxy.ProxyType.HttpProxy)
-
-        # Хост и порт
-        proxy.setHostName(proxy_qurl.host())
-        if proxy_qurl.port() != -1:
-            proxy.setPort(proxy_qurl.port())
-        else:
-            proxy.setPort(1080 if "socks" in scheme else 8080)
-
-        # Авторизация (логин/пароль)
-        if proxy_qurl.userName():
-            proxy.setUser(proxy_qurl.userName())
-        if proxy_qurl.password():
-            proxy.setPassword(proxy_qurl.password())
-
-        self.web_view.page().profile().setProxyConfig(proxy, proxy_qurl)        
-        logger.debug(f"Proxy set: {proxy_url}")
 
     def _filter_http_requests(self, url: QUrl, _type, is_main_frame):
         """Блокирует любые переходы по протоколу HTTP"""
@@ -138,6 +100,11 @@ class Operation(BaseOperation):
                 "❗Критиническая Ошибка: PyQt6 не был импортирован, возможно, вы долбоеб и забыли его установить, либо же криворукие разрабы этой либы опять все сломали..."
             )
             sys.exit(1)
+
+        proxies = api_client.proxies
+        if proxy_url := proxies.get("https"):
+            logger.debug(f"{proxy_url = }")
+            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = f"--proxy-server={proxy_url}"
 
         app = QApplication(sys.argv)
         window = WebViewWindow(api_client=api_client)
