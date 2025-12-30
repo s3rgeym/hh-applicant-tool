@@ -4,6 +4,7 @@ import random
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, TextIO
 
 from ..ai.blackbox import BlackboxChat
@@ -29,6 +30,7 @@ logger = logging.getLogger(__package__)
 class Namespace(BaseNamespace):
     resume_id: str | None
     message_list: TextIO
+    ignore_employers: Path | None
     force_message: bool
     use_ai: bool
     pre_prompt: str
@@ -85,6 +87,12 @@ class Operation(BaseOperation, GetResumeIdMixin):
             "--message-list",
             help="Путь до файла, где хранятся сообщения для отклика на вакансии. Каждое сообщение — с новой строки.",
             type=argparse.FileType("r", encoding="utf-8", errors="replace"),
+        )
+        parser.add_argument(
+            "--ignore-employers",
+            help="Путь к файлу со списком ID игнорируемых работодателей (по одному ID на строку)",
+            type=Path,
+            default=None,
         )
         parser.add_argument(
             "-f",
@@ -234,6 +242,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
         self.telemetry_client = telemetry_client
         self.resume_id = args.resume_id or self._get_resume_id()
         self.application_messages = self._get_application_messages(args.message_list)
+        self.ignored_employers = self._get_ignored_employers(args.ignore_employers)
         self.chat = None
 
         if config := args.config.get("blackbox"):
@@ -304,6 +313,16 @@ class Operation(BaseOperation, GetResumeIdMixin):
             ]
         return application_messages
 
+    def _get_ignored_employers(self, file_path: Path | None) -> set[str]:
+        ignored = set()
+        if file_path is not None:
+            with file_path.open("r", encoding="utf-8") as f:
+                for line in f:
+                    if clean_id := line.strip():
+                        ignored.add(int(clean_id))
+            logger.info("Загружено %d ID игнорируемых работодателей", len(ignored))
+        return ignored
+
     def _apply_similar(self) -> None:
         telemetry_client = self.telemetry_client
         telemetry_data = defaultdict(dict)
@@ -345,7 +364,6 @@ class Operation(BaseOperation, GetResumeIdMixin):
         }
 
         do_apply = True
-        complained_employers = set()
 
         for vacancy in vacancies:
             try:
@@ -375,13 +393,13 @@ class Operation(BaseOperation, GetResumeIdMixin):
                     continue
 
                 relations = vacancy.get("relations", [])
-                employer_id = vacancy.get("employer", {}).get("id")
+                employer_id = int(vacancy.get("employer", {}).get("id", 0))
 
                 if (
                     self.enable_telemetry
                     and employer_id
                     and employer_id not in telemetry_data["employers"]
-                    and employer_id not in complained_employers
+                    and employer_id not in self.ignored_employers
                     and (
                         not relations
                         or parse_invalid_datetime(vacancy["created_at"])
@@ -404,7 +422,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                             % employer_id
                         )
 
-                        complained_employers.add(employer_id)
+                        self.ignored_employers.add(employer_id)
 
                     elif do_apply:
                         telemetry_data["employers"][employer_id] = employer_data
