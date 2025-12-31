@@ -48,7 +48,6 @@ class HHAndroidUrlSchemeHandler(QWebEngineUrlSchemeHandler):
     def __init__(self, parent: "WebViewWindow") -> None:
         super().__init__()
         self.parent = parent
-        self._register_hhandroid_scheme()
 
     def requestStarted(self, info: Any) -> None:
         url = info.requestUrl().toString()
