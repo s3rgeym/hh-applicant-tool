@@ -94,14 +94,13 @@ class Operation(BaseOperation):
                 await self._login_step(page, username)
                 await self._code_step(page)
 
-                logger.info("Ожидание redirect hhandroid://")
+                logger.info(f"Ожидание перенаправления на {HH_ANDROID_SCHEME}://")
 
-                code = await code_future  # Wait indefinitely
+                code = await code_future
+
                 page.remove_listener("request", handle_request)
 
-                if not code:
-                    logger.error("Не удалось получить код из redirect URI")
-                    return
+                assert code
 
                 logger.debug("OAuth code: %s", code)
 

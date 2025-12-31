@@ -254,8 +254,17 @@ $ hh-applicant-tool update-resumes
 $ hh-applicant-tool clear-negotiations --blacklist-discard
 
 # Экспортировать в HTML, контакты работодателей, которые когда-либо высылали вам
-# приглашение
+# приглашение (видны изменения номеров)
 $ hh-applicant-tool get-employer-contacts --export -f html > report.html
+
+# Редактировать конфиг в стандартном редакторе
+$ hh-applicant-tool config
+
+# Вывести значение из конфига
+$ hh-applicant-tool config -k token.access_token
+
+# Установить значение в конфиге
+hh-applicant-tool config --set openai.model gpt-4o
 ```
 
 Можно вызвать любой метод API:
