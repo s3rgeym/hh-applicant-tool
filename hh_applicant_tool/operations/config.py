@@ -138,11 +138,8 @@ class Operation(BaseOperation):
             elif system == "Darwin":  # macOS
                 subprocess.run(["open", filepath], check=True)
             else:  # Linux and other Unix-like
-                editor = os.getenv("EDITOR")
-                if editor:
-                    subprocess.run([editor, filepath], check=True)
-                else:
-                    subprocess.run(["xdg-open", filepath], check=True)
+                editor = os.getenv("EDITOR", "xdg-open")
+                subprocess.run([editor, filepath], check=True)
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             logger.error("Не удалось открыть редактор. Ошибка: %s", e)
             logger.info("Пожалуйста, откройте файл вручную: %s", filepath)
