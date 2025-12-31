@@ -78,21 +78,22 @@ class Operation(BaseOperation):
                 page += 1
             if args.format.startswith("json"):
                 import json, sys
+
                 is_json = args.format == "json"
                 total_contacts = len(contact_persons)
-                
+
                 if is_json:
                     sys.stdout.write("[")
-                    
+
                 for index, contact in enumerate(contact_persons):
                     if is_json and index > 0:
                         sys.stdout.write(",")
-                        
+
                     json.dump(contact, sys.stdout, ensure_ascii=False)
 
                     if not is_json:
                         sys.stdout.write("\n")
-                    
+
                 if is_json:
                     sys.stdout.write("]\n")
             else:
@@ -244,7 +245,7 @@ def generate_html_report(data: list[dict]) -> str:
 
         html_content += '<div class="person-card">'
 
-        if item.get('is_scam'):
+        if item.get("is_scam"):
             html_content += '<div class="scam-warning">⚠️ ВНИМАНИЕ: Подозрение на мошенничество!</div>'
 
         html_content += f"""\
@@ -312,11 +313,36 @@ def print_contact(contact: dict, is_last_contact: bool) -> None:
     is_scam = contact.get("is_scam", False)
     prefix = "└──" if is_last_contact else "├──"
     scam_label = " ⚠️ [МОШЕННИК]" if is_scam else ""
+
     print(f" {prefix} 🧑 {contact.get('name', 'Имя скрыто')}{scam_label}")
+
     prefix2 = "    " if is_last_contact else " │   "
+
     print(f"{prefix2}├── 📧 Email: {contact.get('email', 'н/д')}")
+
+    # 📞 Телефоны (вложенный список)
+    phones = contact.get("phone_numbers") or []
+    print(f"{prefix2}├── 📞 Телефоны:")
+    if phones:
+        for i, phone in enumerate(phones):
+            p = "└──" if i == len(phones) - 1 else "├──"
+            print(f"{prefix2}│   {p} {phone['phone_number']}")
+    else:
+        print(f"{prefix2}│   └── н/д")
+
+    # 💬 Telegram (вложенный список)
+    telegram_usernames = contact.get("telegram_usernames") or []
+    print(f"{prefix2}├── 💬 Telegram:")
+    if telegram_usernames:
+        for i, tg in enumerate(telegram_usernames):
+            p = "└──" if i == len(telegram_usernames) - 1 else "├──"
+            print(f"{prefix2}│   {p} {tg['username']}")
+    else:
+        print(f"{prefix2}│   └── н/д")
+
     employer = contact.get("employer") or {}
     print(f"{prefix2}├── 🏢 Работодатель: {employer.get('name', 'н/д')}")
     print(f"{prefix2}├── 🏠 Город: {employer.get('area', 'н/д')}")
     print(f"{prefix2}└── 🌐 Сайт: {employer.get('site_url', 'н/д')}")
+
     print(prefix2)
