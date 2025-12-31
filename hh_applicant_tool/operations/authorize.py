@@ -20,6 +20,7 @@ try:
     from PyQt6.QtWebEngineCore import QWebEngineUrlScheme
     from PyQt6.QtWebEngineCore import QWebEngineUrlSchemeHandler
     from PyQt6.QtWebEngineWidgets import QWebEngineView
+    from PyQt6.QtWebEngineCore import QWebEngineSettings
 
     QT_IMPORTED = True
 except ImportError as ex:
@@ -72,6 +73,10 @@ class WebViewWindow(QMainWindow):
         self.api_client = api_client
         
         self.web_view = QWebEngineView()
+        self.web_view.settings().setUnknownUrlSchemePolicy(
+            QWebEngineSettings.UnknownUrlSchemePolicy.AllowAllUnknownUrlSchemes
+        )
+        
         self.setCentralWidget(self.web_view)
         self.setWindowTitle("Авторизация на HH.RU")
         self.hhandroid_handler = HHAndroidUrlSchemeHandler(self)
