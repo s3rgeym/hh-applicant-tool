@@ -55,16 +55,16 @@ class HHAndroidUrlSchemeHandler(QWebEngineUrlSchemeHandler):
         if url.startswith(f"{HH_ANDROID_SCHEME}://"):
             self.parent.handle_redirect_uri(url)
 
-    def _register_hhandroid_scheme(self) -> None:
-        scheme = QWebEngineUrlScheme(HH_ANDROID_SCHEME.encode())
-        scheme.setSyntax(QWebEngineUrlScheme.Syntax.Path)
-        scheme.setFlags(
-            QWebEngineUrlScheme.Flag.SecureScheme |
-            QWebEngineUrlScheme.Flag.LocalScheme |
-            QWebEngineUrlScheme.Flag.LocalAccessAllowed |
-            QWebEngineUrlScheme.Flag.CorsEnabled
-        )
-        QWebEngineUrlScheme.registerScheme(scheme)
+def register_hhandroid_scheme() -> None:
+    scheme = QWebEngineUrlScheme(HH_ANDROID_SCHEME.encode())
+    scheme.setSyntax(QWebEngineUrlScheme.Syntax.Path)
+    scheme.setFlags(
+        QWebEngineUrlScheme.Flag.SecureScheme |
+        QWebEngineUrlScheme.Flag.LocalScheme |
+        QWebEngineUrlScheme.Flag.LocalAccessAllowed |
+        QWebEngineUrlScheme.Flag.CorsEnabled
+    )
+    QWebEngineUrlScheme.registerScheme(scheme)
 
 
 class WebViewWindow(QMainWindow):
@@ -130,6 +130,7 @@ class Operation(BaseOperation):
             logger.debug(f"set {qtwebengine_chromium_flags = }")
             os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = qtwebengine_chromium_flags
 
+        register_hhandroid_scheme()
         app = QApplication(sys.argv)
         window = WebViewWindow(api_client=api_client)
         window.show()
