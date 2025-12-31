@@ -146,6 +146,8 @@ js: crbug/1173575, non-JS module files deprecated.
 pip install --force-reinstall pyqt6==6.X.X pyqt6-webengine==6.X.X
 ```
 
+Версии этих пакетов должны быть одинаковыми или отличаться минороной версией (последняя цифра через точку), причем `version pyqt6-webengine >= version pyqt6`. 
+
 Проверка авторизации:
 
 ```bash
