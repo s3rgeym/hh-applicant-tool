@@ -134,6 +134,9 @@ class Operation(BaseOperation):
 
         await page.wait_for_selector('div[data-qa="account-login-code-input"]')
 
+        print("📨 Код был отправлен. Проверьте почту или SMS.")
+        print()
+
         code_prompt = "📩 Введите полученный код: "
         code = (await asyncio.to_thread(input, code_prompt)).strip()
 

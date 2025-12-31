@@ -826,10 +826,7 @@ files = [
     {file = "wrapt-1.17.3.tar.gz", hash = "sha256:f66eb08feaa410fe4eebd17f2a2c8e2e46d3476e9f8c783daa8e09e0faa666d0"},
 ]
 
-[extras]
-qt = ["pyqt6", "pyqt6-webengine"]
-
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "cbadb92e17fd5420cf2e98a20fe7d8a56349c6d2809ee7780586d94a73254aa4"
+content-hash = "9cde64323c011e9c633ed54ac349f7b7c9d518056fe3caffcc752eea3492b8b8"
