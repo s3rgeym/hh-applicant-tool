@@ -257,14 +257,20 @@ $ hh-applicant-tool clear-negotiations --blacklist-discard
 # приглашение (видны изменения номеров)
 $ hh-applicant-tool get-employer-contacts --export -f html > report.html
 
-# Редактировать конфиг в стандартном редакторе
+# Посмотреть содержимое конфига
 $ hh-applicant-tool config
+
+# Редактировать конфиг в стандартном редакторе
+$ hh-applicant-tool config -e
 
 # Вывести значение из конфига
 $ hh-applicant-tool config -k token.access_token
 
 # Установить значение в конфиге
-hh-applicant-tool config --set openai.model gpt-4o
+$ hh-applicant-tool config -s openai.model gpt-4o
+
+# Удалить значение из конфига
+$ hh-applicant-tool config -u proxy_url
 ```
 
 Можно вызвать любой метод API:
@@ -311,7 +317,7 @@ https://hh.ru/employer/1918903
 | **clear-negotiations**    | Удаляет отказы и отменяет заявки, которые долго висят                                                                                                                                                             |
 | **call-api**              | Вызов произвольного метода API с выводом результата.                                                                                                                                                              |
 | **refresh-token**         | Обновляет access_token.                                                                                                                                                                                           |
-| **config**                | Редактировать конфигурационный файл.                                                                                                                                                                              |
+| **config**                | Показывает содержимое конфига. С флагом -e открывает его для редактирования.                                                                                                                                      |
 | **install**               | Устанавливает зависимости, такие как браузер Chromium, необходимые для авторизации.                                                                                                                               |
 | **uninstall**             | Удаляет браузер Chromium, используемый для авторизации.                                                                                                                                                           |
 | **get-employer-contacts** | Получить список полученных вами контактов работодателей. Поддерживается так же экспорт в html/jsonl. Если хотите собирать контакты с нескольких акков, то укажите им одинаковый `client_telemetry_id` в конфигах. |
@@ -361,6 +367,12 @@ hh-applicant-tool apply-similar -f --ai
 #### OpenAI/ChatGPT
 
 Отредактируйте конфиг:
+
+```sh
+hh-applicant-tool config -e
+```
+
+Добавьте в него эти строки:
 
 ```json
 {

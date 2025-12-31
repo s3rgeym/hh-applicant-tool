@@ -17,7 +17,7 @@ class Namespace(BaseNamespace):
     show_path: bool
     key: str
     set: list[str]
-    view: bool
+    edit: bool
     unset: str
 
 
@@ -55,7 +55,10 @@ def del_value(data: dict[str, Any], path: str) -> bool:
 
 
 class Operation(BaseOperation):
-    """Операции с конфигурационным файлом"""
+    """
+    Операции с конфигурационным файлом.
+    По умолчанию выводит содержимое конфига.
+    """
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         group = parser.add_mutually_exclusive_group()
@@ -65,6 +68,12 @@ class Operation(BaseOperation):
             "--path",
             action="store_true",
             help="Вывести полный путь к конфигу",
+        )
+        group.add_argument(
+            "-e",
+            "--edit",
+            action="store_true",
+            help="Открыть конфигурационный файл в редакторе",
         )
         group.add_argument("-k", "--key", help="Вывести отдельное значение из конфига")
         group.add_argument(
@@ -77,18 +86,8 @@ class Operation(BaseOperation):
         group.add_argument(
             "-u", "--unset", metavar="KEY", help="Удалить ключ из конфига"
         )
-        group.add_argument(
-            "-V",
-            "--view",
-            action="store_true",
-            help="Вывести содержимое конфига в консоль",
-        )
 
     def run(self, args: Namespace, *_) -> None:
-        if args.view:
-            print(json.dumps(args.config, indent=2, ensure_ascii=False))
-            return
-
         if args.set:
             key, value_str = args.set
             try:
@@ -121,8 +120,14 @@ class Operation(BaseOperation):
         config_path = str(args.config._config_path)
         if args.show_path:
             print(config_path)
-        else:
+            return
+
+        if args.edit:
             self._open_editor(config_path)
+            return
+
+        # Default action: show content
+        print(json.dumps(args.config, indent=2, ensure_ascii=False))
 
     def _open_editor(self, filepath: str) -> None:
         """Открывает файл в редакторе по умолчанию в зависимости от ОС."""
