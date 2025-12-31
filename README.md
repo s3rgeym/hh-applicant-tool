@@ -134,6 +134,18 @@ $ hh-applicant-tool -vv authorize
 
 > В Windows не забудьте разрешить доступ к сети (Allow access) в всплывающем окне.
 
+Наиболее частой ошибкой в Windows на этом этапе является высирание ошибок из-за несовместимости определенных версий PyQT6 с системой (в Windows 7 и Windows 8 он вообще вроде не работает):
+
+```sh
+js: crbug/1173575, non-JS module files deprecated.
+```
+
+Единственное решение в таких случаях попробовать поустанавливать предыдущие или более новые версии `pyqt6` и `pytq6-webengine`:
+
+```sh
+pip install --force-reinstall pyqt6==6.X.X pyqt6-webengine==6.X.X
+```
+
 Проверка авторизации:
 
 ```bash
