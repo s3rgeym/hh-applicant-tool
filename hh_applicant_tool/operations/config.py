@@ -1,5 +1,4 @@
 import argparse
-import ast
 import json
 import logging
 import os
@@ -54,6 +53,17 @@ def del_value(data: dict[str, Any], path: str) -> bool:
     return False
 
 
+def parse_scalar(value: str) -> bool | int | float | str:
+    if value == "null":
+        return None
+    if value in ["true", "false"]:
+        return value.startswith("t")
+    try:
+        return float(value) if "." in value else int(value)
+    except ValueError:
+        return value
+
+
 class Operation(BaseOperation):
     """
     Операции с конфигурационным файлом.
@@ -89,15 +99,8 @@ class Operation(BaseOperation):
 
     def run(self, args: Namespace, *_) -> None:
         if args.set:
-            key, value_str = args.set
-            try:
-                # Пытаемся преобразовать значение в Python-объект (число, bool, etc)
-                value = ast.literal_eval(value_str)
-            except (ValueError, SyntaxError):
-                # Если не получилось, оставляем как есть (строка)
-                value = value_str
-
-            set_value(args.config, key, value)
+            key, value = args.set
+            set_value(args.config, key, parse_scalar(value))
             args.config.save()
             logger.info("Значение '%s' для ключа '%s' сохранено.", value, key)
             return
