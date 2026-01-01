@@ -139,7 +139,7 @@ pip install hh-applicant-tool
 
 #### Установка зависимостей
 
-После вышеописанного нужно установить зависимости:
+После вышеописанного нужно установить зависимости в виде Chromium и каких-то отладочных скриптов:
 
 ```sh
 $ hh-applicant-tool install
@@ -159,7 +159,7 @@ $ hh-applicant-tool authorize '<ваш телефон или email>' -p '<пар
 [E] BrowserType.launch: Executable doesn't exist at...
 ```
 
-Если не помните пароль или др. причины:
+Если не помните пароль или др. причины, то можно авторизоваться с помощью одноразового кода:
 
 ```bash
 $ hh-applicant-tool authorize '<ваш телефон или email>'
