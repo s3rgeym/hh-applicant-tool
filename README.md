@@ -180,7 +180,7 @@ $ hh-applicant-tool authorize '<ваш телефон или email>'
 Если же при вводе правильных данных возникает ошибка авторизщции, то скорее всего требуется ввод капчи:
 
 ```sh
-hh-applicant-tool authorize --no-headless [ ... ]
+hh-applicant-tool authorize --no-headless [ добавь нужные аргументы ]
 ```
 
 Проверка авторизации:
