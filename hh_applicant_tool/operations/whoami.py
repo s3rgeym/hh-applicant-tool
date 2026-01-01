@@ -1,6 +1,5 @@
 # Этот модуль можно использовать как образец для других
 import argparse
-import json
 import logging
 
 from ..api import ApiClient
@@ -22,4 +21,14 @@ class Operation(BaseOperation):
 
     def run(self, args: Namespace, api_client: ApiClient, _) -> None:
         result = api_client.get("/me")
-        print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+        full_name = " ".join(
+            filter(
+                None,
+                [
+                    result.get("last_name"),
+                    result.get("first_name"),
+                    result.get("middle_name"),
+                ],
+            )
+        )
+        print(full_name)

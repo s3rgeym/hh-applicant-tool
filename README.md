@@ -165,35 +165,7 @@ $ hh-applicant-tool authorize '<ваш телефон или email>'
 
 ```bash
 $ hh-applicant-tool whoami
-{
-  "auth_type": "applicant",
-  "counters": {
-    "new_resume_views": 1488,
-    "resumes_count": 1,
-    "unread_negotiations": 228
-  },
-  "email": "vasya.pupkin@gmail.com",
-  "employer": null,
-  "first_name": "Вася",
-  "id": "1234567890",
-  "is_admin": false,
-  "is_anonymous": false,
-  "is_applicant": true,
-  "is_application": false,
-  "is_employer": false,
-  "is_in_search": true,
-  "last_name": "Пупкин",
-  "manager": null,
-  "mid_name": null,
-  "middle_name": null,
-  "negotiations_url": "https://api.hh.ru/negotiations",
-  "personal_manager": null,
-  "phone": "79012345678",
-  "profile_videos": {
-    "items": []
-  },
-  "resumes_url": "https://api.hh.ru/resumes/mine"
-}
+Иванов Иван Иванович
 ```
 
 В случае успешной авторизации токены будут сохранены в `config.json`:
@@ -201,11 +173,9 @@ $ hh-applicant-tool whoami
 ```json
 {
   "token": {
-    "access_token": "...",
-    "created_at": 1678151427,
-    "expires_in": 1209599,
+    "access_token": "...",,
     "refresh_token": "...",
-    "token_type": "bearer"
+    // ...
   }
 }
 ```
