@@ -459,6 +459,15 @@ for id in $(jq -r 'select(.is_scam == true) | .employer.id' contacts.dump | sort
 done
 ```
 
+Та же стандартная команда `whoami` может быть заменена на такой вызов:
+
+```sh
+# Лидирующий слеш в /me не обязателен
+hh-applicant-tool call-api me | jq
+```
+
+В принципе любой функционал можно реализовать только с помощью одной этой команды, но если хочется чего-то особенно, можно добавить свои команды.
+
 ### Добавление своих команд
 
 Утилита использует систему плагинов. Все они лежат в [operations](https://github.com/s3rgeym/hh-applicant-tool/tree/main/hh_applicant_tool/operations). Модули расположенные там автоматически добавляются как доступные команды. За основу для своего плагина можно взять [whoami.py](https://github.com/s3rgeym/hh-applicant-tool/tree/main/hh_applicant_tool/operations/whoami.py).
