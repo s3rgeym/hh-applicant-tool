@@ -134,15 +134,11 @@ class Operation(BaseOperation):
 
     def _open_editor(self, filepath: str) -> None:
         """Открывает файл в редакторе по умолчанию в зависимости от ОС."""
-        system = platform.system()
-        try:
-            if system == "Windows":
+        match platform.system():
+            case "Windows":
                 os.startfile(filepath)
-            elif system == "Darwin":  # macOS
+            case "Darwin":  # macOS
                 subprocess.run(["open", filepath], check=True)
-            else:  # Linux and other Unix-like
+            case _:  # Linux и остальные (аналог else)
                 editor = os.getenv("EDITOR", "xdg-open")
                 subprocess.run([editor, filepath], check=True)
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            logger.error("Не удалось открыть редактор. Ошибка: %s", e)
-            logger.info("Пожалуйста, откройте файл вручную: %s", filepath)
