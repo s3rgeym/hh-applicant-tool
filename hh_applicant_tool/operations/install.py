@@ -15,7 +15,7 @@ class Namespace(BaseNamespace):
 
 
 class Operation(BaseOperation):
-    """Установит Chromium"""
+    """Установит Chromium и другие зависимости"""
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
