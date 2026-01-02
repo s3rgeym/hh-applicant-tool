@@ -512,7 +512,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
             if self.dry_run:
                 # С --dry-run можно посмотреть что отправляется
                 logger.info(
-                    "Dry Run: Данные телеметрии для отправки на сервер: %r",
+                    "dry-run: данные телеметрии для отправки на сервер: %r",
                     telemetry_data,
                 )
                 return
