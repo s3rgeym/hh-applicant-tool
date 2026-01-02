@@ -20,7 +20,7 @@ class Operation(BaseOperation):
         pass
 
     def run(self, args: Namespace, api_client: ApiClient, _) -> None:
-        result = api_client.get("/me")
+        result = api_client.get("me")
         full_name = " ".join(
             filter(
                 None,
@@ -33,5 +33,8 @@ class Operation(BaseOperation):
         )
         counters = result["counters"]
         print(
-            f"#{result['id']} {full_name or '—'} ({result['auth_type']}) [ Просмотры: +{counters['new_resume_views']} | Непрочитанных: +{counters['unread_negotiations']} ]"
+            f"#{result['id']}",
+            full_name or "—",
+            f"({result['auth_type']})",
+            f"[ Резюме: {counters['resumes_count']} | Просмотры: +{counters['new_resume_views']} | Непрочитанных: +{counters['unread_negotiations']} ]",
         )
