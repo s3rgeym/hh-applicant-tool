@@ -45,14 +45,15 @@ class ColorHandler(logging.StreamHandler):
 
 
 class RedactingFilter(logging.Filter):
-    def __init__(self, patterns: list[str]):
+    def __init__(self, patterns: list[str], placeholder="***"):
         super().__init__()
-        self.regex = re.compile(f"({'|'.join(patterns)})") if patterns else None
+        self.pattern = re.compile(f"({'|'.join(patterns)})") if patterns else None
+        self.placeholder = placeholder
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if self.regex:
+        if self.pattern:
             msg = record.getMessage()
-            msg = self.regex.sub("[REDACTED]", msg)
+            msg = self.pattern.sub(self.placeholder, msg)
             record.msg, record.args = msg, ()
 
         return True
