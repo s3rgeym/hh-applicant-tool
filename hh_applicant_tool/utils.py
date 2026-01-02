@@ -66,6 +66,9 @@ class Config(dict):
 
     __getitem__ = dict.get
 
+    def __repr__(self) -> str:
+        return str(self._config_path)
+
 
 def truncate_string(s: str, limit: int = 75, ellipsis: str = "…") -> str:
     return s[:limit] + bool(s[limit:]) * ellipsis

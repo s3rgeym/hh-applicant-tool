@@ -17,8 +17,8 @@ from .telemetry_client import TelemetryClient
 from .utils import Config, android_user_agent, fix_windows_color_output, get_config_path
 
 CONFIG_DIR = get_config_path() / (__package__ or "").replace("_", "-")
-CONFIG_PATH = CONFIG_DIR / "config.json"
-LOG_PATH = CONFIG_DIR / "log.txt"
+DEFAULT_CONFIG_PATH = CONFIG_DIR / "config.json"
+DEFAULT_LOG_PATH = CONFIG_DIR / "log.txt"
 
 logger = logging.getLogger(__package__)
 
@@ -45,6 +45,7 @@ class Namespace(argparse.Namespace):
     user_agent: str
     proxy_url: str
     disable_telemetry: bool
+    log_file: Path
 
 
 class HHApplicantTool:
@@ -71,7 +72,7 @@ class HHApplicantTool:
             "--config",
             help="Путь до файла конфигурации",
             type=Config,
-            default=Config(CONFIG_PATH),
+            default=Config(DEFAULT_CONFIG_PATH),
         )
         parser.add_argument(
             "-v",
@@ -87,15 +88,25 @@ class HHApplicantTool:
             default=0.334,
             help="Задержка между запросами к API HH",
         )
-        parser.add_argument("--user-agent", help="User-Agent для каждого запроса")
         parser.add_argument(
-            "--proxy-url", help="Прокси, используемый для запросов к API"
+            "--user-agent",
+            help="User-Agent для каждого запроса",
+        )
+        parser.add_argument(
+            "--proxy-url",
+            help="Прокси, используемый для запросов и авторизации",
         )
         parser.add_argument(
             "--disable-telemetry",
             default=False,
             action=argparse.BooleanOptionalAction,
             help="Отключить телеметрию",
+        )
+        parser.add_argument(
+            "--log-file",
+            type=Path,
+            default=DEFAULT_LOG_PATH,
+            help="Путь до файла лога",
         )
         subparsers = parser.add_subparsers(help="commands")
         package_dir = Path(__file__).resolve().parent / OPERATIONS
@@ -171,6 +182,7 @@ class HHApplicantTool:
         # [C] Critical Error Occurred
         color_handler.setFormatter(logging.Formatter("[%(levelname).1s] %(message)s"))
         color_handler.setLevel(log_level)
+
         CONFIG_DIR.mkdir(
             parents=True,
             exist_ok=True,
@@ -178,9 +190,9 @@ class HHApplicantTool:
 
         # Логи
         file_handler = RotatingFileHandler(
-            LOG_PATH,
-            maxBytes=10 * 1 << 20,
-            backupCount=1,
+            args.log_file,
+            maxBytes=5 * 1 << 20,
+            # backupCount=1,
             encoding="utf-8",
         )
         file_handler.setFormatter(
@@ -222,6 +234,7 @@ class HHApplicantTool:
                 # 0 or None = success
                 res = args.run(args, api_client, telemetry_client)
                 if (token := api_client.get_access_token()) != args.config["token"]:
+                    logger.info("token updated!")
                     args.config.save(token=token)
                 return res
             except KeyboardInterrupt:
