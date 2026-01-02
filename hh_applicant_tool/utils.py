@@ -125,7 +125,7 @@ def android_user_agent() -> str:
 
 
 def fix_windows_color_output() -> None:
-    kernel32 = ctypes.windll.kernel32
+    kernel32 = ctypes.windll.kernel32  # ty:ignore[unresolved-attribute]
     # 0x0004 = ENABLE_VIRTUAL_TERMINAL_PROCESSING
     # Берем дескриптор стандартного вывода (stdout)
     handle = kernel32.GetStdHandle(-11)

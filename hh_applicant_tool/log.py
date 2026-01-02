@@ -2,6 +2,7 @@ import enum
 import logging
 import re
 from enum import auto
+from typing import Callable
 
 
 class Color(enum.Enum):
@@ -45,7 +46,12 @@ class ColorHandler(logging.StreamHandler):
 
 
 class RedactingFilter(logging.Filter):
-    def __init__(self, patterns: list[str], placeholder="***"):
+    def __init__(
+        self,
+        patterns: list[str],
+        # По умолчанию количество звездочек равно оригинальной строке
+        placeholder: str | Callable = lambda m: "*" * len(m.group(0)),
+    ):
         super().__init__()
         self.pattern = re.compile(f"({'|'.join(patterns)})") if patterns else None
         self.placeholder = placeholder
