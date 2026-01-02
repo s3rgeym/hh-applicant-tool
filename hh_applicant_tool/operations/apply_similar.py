@@ -392,10 +392,11 @@ class Operation(BaseOperation, GetResumeIdMixin):
                     )
                     continue
 
-                if vacancy.get("response_url"):
+                if redirect_url := vacancy.get("response_url"):
                     logger.warning(
-                        "Пропускаем вакансию с перенаправлением: %s",
+                        "Пропускаем вакансию %s с перенаправлением: %s",
                         vacancy["alternate_url"],
+                        redirect_url,
                     )
                     continue
 
