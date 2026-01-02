@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import re
 import sys
 from importlib import import_module
 from logging.handlers import RotatingFileHandler
@@ -12,30 +11,16 @@ from pkgutil import iter_modules
 from typing import Sequence
 
 from .api import ApiClient
-from .color_log import ColorHandler
 from .constants import ANDROID_CLIENT_ID, ANDROID_CLIENT_SECRET
+from .log import ColorHandler, RedactingFilter
 from .telemetry_client import TelemetryClient
-from .utils import Config, android_user_agent, get_config_path
+from .utils import Config, android_user_agent, fix_windows_color_output, get_config_path
 
 CONFIG_DIR = get_config_path() / (__package__ or "").replace("_", "-")
 CONFIG_PATH = CONFIG_DIR / "config.json"
 LOG_PATH = CONFIG_DIR / "log.txt"
 
 logger = logging.getLogger(__package__)
-
-
-class RedactingFilter(logging.Filter):
-    def __init__(self, patterns: list[str]):
-        super().__init__()
-        self.regex = re.compile(f"({'|'.join(patterns)})") if patterns else None
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        if self.regex:
-            msg = record.getMessage()
-            msg = self.regex.sub("[REDACTED]", msg)
-            record.msg, record.args = msg, ()
-
-        return True
 
 
 class BaseOperation:
@@ -178,9 +163,7 @@ class HHApplicantTool:
         parser.set_defaults(run=None)
         return parser
 
-    def run(self, argv: Sequence[str] | None) -> None | int:
-        parser = self.create_parser()
-        args = parser.parse_args(argv, namespace=Namespace())
+    def _setup_logger(self, args: Namespace) -> None:
         # В лог-файл пишем все!
         logger.setLevel(logging.DEBUG)
 
@@ -198,7 +181,7 @@ class HHApplicantTool:
         # Логи
         file_handler = RotatingFileHandler(
             LOG_PATH,
-            maxBytes=5 * 1 << 20,
+            maxBytes=10 * 1 << 20,
             backupCount=1,
             encoding="utf-8",
         )
@@ -209,14 +192,23 @@ class HHApplicantTool:
 
         redactor = RedactingFilter(
             [
-                "USER[A-Z0-9]{60,}",
-                r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}",
+                "USER[A-Z0-9]{60,}",  # токены
+                r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}",  # telemetry client id
             ]
         )
 
         for h in [color_handler, file_handler]:
             h.addFilter(redactor)
             logger.addHandler(h)
+
+    def run(self, argv: Sequence[str] | None) -> None | int:
+        parser = self.create_parser()
+        args = parser.parse_args(argv, namespace=Namespace())
+
+        if sys.platform == "win32":
+            fix_windows_color_output()
+
+        self._setup_logger(args)
 
         if args.run:
             try:
@@ -238,7 +230,7 @@ class HHApplicantTool:
                 logger.warning("Interrupted by user")
                 return 1
             except Exception as e:
-                logger.exception(e, exc_info=log_level <= logging.DEBUG)
+                logger.exception(e, exc_info=True)
                 return 1
         parser.print_help(file=sys.stderr)
         return 2
