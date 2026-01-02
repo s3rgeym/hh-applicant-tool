@@ -99,9 +99,19 @@ class BaseClient:
                 log_url = url
                 if params:
                     encoded_params = "&".join(
-                        f"{k}={str(v).replace('&', '%26').replace('=', '%3D')}"
-                        for k, v in params.items()
+                        f"{k}={
+                            str(v)
+                            .replace('%', '%25')
+                            .replace('&', '%26')
+                            .replace('=', '%3D')
+                            .replace('?', '%3F')
+                            .replace('#', '%23')
+                            .replace('[', '%5B')
+                            .replace(']', '%5D')
+                        }"
+                        for k, v in (params or {}).items()
                     )
+
                     log_url += (("?", "&")["?" in url], " ")[has_body] + encoded_params
                 logger.debug(
                     "%d %s %.2000s",
