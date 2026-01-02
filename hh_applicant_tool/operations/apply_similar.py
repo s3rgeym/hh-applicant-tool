@@ -392,6 +392,13 @@ class Operation(BaseOperation, GetResumeIdMixin):
                     )
                     continue
 
+                if vacancy.get("response_url"):
+                    logger.warning(
+                        "Пропускаем вакансию с перенаправлением: %s",
+                        vacancy["alternate_url"],
+                    )
+                    continue
+
                 relations = vacancy.get("relations", [])
                 employer_id = int(vacancy.get("employer", {}).get("id", 0))
 
@@ -473,7 +480,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
 
                 if self.dry_run:
                     logger.info(
-                        "Dry Run: Отправка отклика на вакансию %s с параметрами: %s",
+                        "dry-run: Отправка отклика на вакансию %s с параметрами: %s",
                         vacancy["alternate_url"],
                         params,
                     )
