@@ -8,7 +8,7 @@ from ..api import ApiClient
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse
-from ..utils import truncate_string
+from ..utils import shorten
 
 logger = logging.getLogger(__package__)
 
@@ -30,7 +30,7 @@ class Operation(BaseOperation):
             [
                 (
                     x["id"],
-                    truncate_string(x["title"]),
+                    shorten(x["title"]),
                     x["status"]["name"].title(),
                 )
                 for x in resumes["items"]

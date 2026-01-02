@@ -9,7 +9,7 @@ from typing import Any, TextIO
 
 from ..ai.blackbox import BlackboxChat
 from ..ai.openai import OpenAIChat
-from ..api import ApiClient, BadResponse
+from ..api import ApiClient, BadResponse, Redirect
 from ..api.errors import LimitExceeded
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
@@ -21,7 +21,7 @@ from ..utils import (
     parse_interval,
     parse_invalid_datetime,
     random_text,
-    truncate_string,
+    shorten,
 )
 
 logger = logging.getLogger(__package__)
@@ -85,12 +85,12 @@ class Operation(BaseOperation, GetResumeIdMixin):
         parser.add_argument(
             "-L",
             "--message-list",
-            help="Путь до файла, где хранятся сообщения для отклика на вакансии. Каждое сообщение — с новой строки.",
+            help="Путь до файла, где хранятся сообщения для отклика на вакансии. Каждое сообщение — с новой строки.",  # noqa: E501
             type=argparse.FileType("r", encoding="utf-8", errors="replace"),
         )
         parser.add_argument(
             "--ignore-employers",
-            help="Путь к файлу со списком ID игнорируемых работодателей (по одному ID на строку)",
+            help="Путь к файлу со списком ID игнорируемых работодателей (по одному ID на строку)",  # noqa: E501
             type=Path,
             default=None,
         )
@@ -113,7 +113,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
             "--pre-prompt",
             "--prompt",
             help="Добавочный промпт для генерации сопроводительного письма",
-            default="Сгенерируй сопроводительное письмо не более 5-7 предложений от моего имени для вакансии",
+            default="Сгенерируй сопроводительное письмо не более 5-7 предложений от моего имени для вакансии",  # noqa: E501
         )
         parser.add_argument(
             "--apply-interval",
@@ -123,7 +123,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
         )
         parser.add_argument(
             "--page-interval",
-            help="Интервал перед получением следующей страницы рекомендованных вакансий в секундах (X, X-Y)",
+            help="Интервал перед получением следующей страницы рекомендованных вакансий в секундах (X, X-Y)",  # noqa: E501
             default="1-3",
             type=parse_interval,
         )
@@ -148,7 +148,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
 
         parser.add_argument(
             "--schedule",
-            help="Тип графика. Возможные значения: fullDay, shift, flexible, remote, flyInFlyOut для полного дня, сменного графика, гибкого графика, удаленной работы и вахтового метода",
+            help="Тип графика. Возможные значения: fullDay, shift, flexible, remote, flyInFlyOut для полного дня, сменного графика, гибкого графика, удаленной работы и вахтового метода",  # noqa: E501
             type=str,
             default=None,
         )
@@ -160,7 +160,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
         )
         parser.add_argument(
             "--experience",
-            help="Уровень опыта работы в вакансии. Возможные значения: noExperience, between1And3, between3And6, moreThan6",
+            help="Уровень опыта работы в вакансии. Возможные значения: noExperience, between1And3, between3And6, moreThan6",  # noqa: E501
             type=str,
             default=None,
         )
@@ -217,7 +217,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
             action=argparse.BooleanOptionalAction,
             help="Включить кластеры (по умолчанию None)",
         )
-        # parser.add_argument("--describe-arguments", action=argparse.BooleanOptionalAction, help="Вернуть описание параметров запроса")
+        # parser.add_argument("--describe-arguments", action=argparse.BooleanOptionalAction, help="Вернуть описание параметров запроса")  # noqa: E501
 
     def run(
         self, args: Namespace, api_client: ApiClient, telemetry_client: TelemetryClient
@@ -225,7 +225,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
         self.enable_telemetry = True
         if args.disable_telemetry:
             # print(
-            #     "👁️ Телеметрия используется только для сбора данных о работодателях и их вакансиях, персональные данные пользователей не передаются на сервер."
+            #     "👁️ Телеметрия используется только для сбора данных о работодателях и их вакансиях, персональные данные пользователей не передаются на сервер."  # noqa: E501
             # )
             # if (
             #     input("Вы действительно хотите отключить телеметрию (д/Н)? ")
@@ -253,7 +253,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
             )
         elif config := args.config.get("openai"):
             model = "gpt-5.1"
-            system_prompt = "Напиши сопроводительное письмо для отклика на эту вакансию. Не используй placeholder'ы, твой ответ будет отправлен без обработки."
+            system_prompt = "Напиши сопроводительное письмо для отклика на эту вакансию. Не используй placeholder'ы, твой ответ будет отправлен без обработки."  # noqa: E501
             if "model" in config.keys():
                 model = config["model"]
             if "system_prompt" in config.keys():
@@ -309,7 +309,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
         else:
             application_messages = [
                 "{Меня заинтересовала|Мне понравилась} ваша вакансия %(vacancy_name)s",
-                "{Прошу рассмотреть|Предлагаю рассмотреть} {мою кандидатуру|мое резюме} на вакансию %(vacancy_name)s",
+                "{Прошу рассмотреть|Предлагаю рассмотреть} {мою кандидатуру|мое резюме} на вакансию %(vacancy_name)s",  # noqa: E501
             ]
         return application_messages
 
@@ -417,6 +417,12 @@ class Operation(BaseOperation, GetResumeIdMixin):
                         "area": employer.get("area", {}).get("name"),  # город
                     }
                     if "got_rejection" in relations:
+                        logger.debug(
+                            "Получили отказ от https://hh.ru/employer/%s на вакансию %s",  # noqa: E501
+                            employer_id,
+                            vacancy["alternate_url"],
+                        )
+
                         print(
                             "🚨 Вы получили отказ от https://hh.ru/employer/%s"
                             % employer_id
@@ -429,7 +435,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
 
                 if not do_apply:
                     logger.debug(
-                        "Останавливаем рассылку откликов, так как достигли лимита, попробуйте через сутки."
+                        "Останавливаем рассылку откликов, так как достигли лимита, попробуйте через сутки."  # noqa: E501
                     )
                     break
 
@@ -479,15 +485,21 @@ class Operation(BaseOperation, GetResumeIdMixin):
                 )
                 time.sleep(interval)
 
-                res = self.api_client.post("/negotiations", params)
-                assert res == {}
-                print(
-                    "📨 Отправили отклик",
-                    vacancy["alternate_url"],
-                    "(",
-                    truncate_string(vacancy["name"]),
-                    ")",
-                )
+                try:
+                    res = self.api_client.post("/negotiations", params)
+                    assert res == {}
+                    logger.debug("Отправили отклик: %s", vacancy["alternate_url"])
+                    print(
+                        "📨 Отправили отклик",
+                        vacancy["alternate_url"],
+                        "(",
+                        shorten(vacancy["name"]),
+                        ")",
+                    )
+                except Redirect:
+                    logger.warning(
+                        f"Игнорирую перенаправление на тестовое задание: {vacancy['alternate_url']}"  # noqa: E501
+                    )
             except LimitExceeded:
                 print("⚠️ Достигли лимита рассылки")
                 do_apply = False

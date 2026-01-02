@@ -131,7 +131,7 @@ class BaseClient:
     @staticmethod
     def raise_for_status(response: Response, data: dict) -> None:
         match response.status_code:
-            case 301 | 302:
+            case status if 300 <= status <= 308:
                 raise errors.Redirect(response, data)
             case 400:
                 if errors.ApiError.is_limit_exceeded(data):

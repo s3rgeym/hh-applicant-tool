@@ -13,6 +13,11 @@ class Namespace(BaseNamespace):
     pass
 
 
+def fmt_plus(n: int) -> str:
+    assert n >= 0
+    return f"+{n}" if n else "0"
+
+
 class Operation(BaseOperation):
     """Выведет текущего пользователя"""
 
@@ -33,8 +38,8 @@ class Operation(BaseOperation):
         )
         counters = result["counters"]
         print(
-            f"#{result['id']}",
-            full_name or "—",
-            f"({result['auth_type']})",
-            f"[ Резюме: {counters['resumes_count']} | Просмотры: +{counters['new_resume_views']} | Непрочитанных: +{counters['unread_negotiations']} ]",
+            f"🆔 {result['id']} {full_name or 'Анонимный аккаунт'} "
+            f"[ 📄 {counters['resumes_count']} "
+            f"| 👁️  {fmt_plus(counters['new_resume_views'])} "
+            f"| ✉️  {fmt_plus(counters['unread_negotiations'])} ]"
         )
