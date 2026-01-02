@@ -31,4 +31,7 @@ class Operation(BaseOperation):
                 ],
             )
         )
-        print(full_name)
+        counters = result["counters"]
+        print(
+            f"#{result['id']} {full_name or '—'} ({result['auth_type']}) [ Просмотры: +{counters['new_resume_views']} | Непрочитанных: +{counters['unread_negotiations']} ]"
+        )
