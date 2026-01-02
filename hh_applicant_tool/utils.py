@@ -71,7 +71,7 @@ class Config(dict):
         return str(self._config_path)
 
 
-def truncate_string(s: str, limit: int = 75, ellipsis: str = "…") -> str:
+def shorten(s: str, limit: int = 75, ellipsis: str = "…") -> str:
     return s[:limit] + bool(s[limit:]) * ellipsis
 
 

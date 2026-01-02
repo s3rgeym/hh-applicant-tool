@@ -8,7 +8,7 @@ from ..constants import INVALID_ISO8601_FORMAT
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse
-from ..utils import print_err, truncate_string
+from ..utils import print_err, shorten
 
 logger = logging.getLogger(__package__)
 
@@ -86,12 +86,12 @@ class Operation(BaseOperation):
                     state["name"].lower(),
                     vacancy["alternate_url"],
                     "(",
-                    truncate_string(vacancy["name"]),
+                    shorten(vacancy["name"]),
                     ")",
                 )
                 if is_discard and args.blacklist_discard:
                     employer = vacancy.get("employer", {})
-                    if not employer or 'id' not in employer:
+                    if not employer or "id" not in employer:
                         # Работодатель удален или скрыт
                         continue
                     try:
@@ -101,7 +101,7 @@ class Operation(BaseOperation):
                             "🚫 Заблокировали",
                             employer["alternate_url"],
                             "(",
-                            truncate_string(employer["name"]),
+                            shorten(employer["name"]),
                             ")",
                         )
                     except ClientError as ex:
