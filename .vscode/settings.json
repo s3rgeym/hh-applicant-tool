@@ -1,6 +1,13 @@
 {
   "python.formatting.provider": "black",
-  "python.formatting.blackArgs": ["--line-length", "79"],
+  "python.formatting.blackArgs": [
+    "--line-length",
+    "79"
+  ],
   "editor.wordWrap": "on",
-  "rewrap.wrappingColumn": 72
+  "rewrap.wrappingColumn": 72,
+  "cSpell.words": [
+    "hhandroid",
+    "pincode"
+  ]
 }

@@ -160,7 +160,7 @@ class Operation(BaseOperation):
                 if args.password:
                     await self._direct_login(page, args.password)
                 else:
-                    await self._ontetime_code_login(page)
+                    await self._onetime_code_login(page)
 
                 # Шаг 3: Ожидание OAuth кода
                 logger.debug("Ожидание появления OAuth кода в трафике (таймаут 30с)...")
@@ -196,7 +196,7 @@ class Operation(BaseOperation):
         await page.press(self.SEL_PASSWORD_INPUT, "Enter")
         logger.debug("Форма с паролем отправлена")
 
-    async def _ontetime_code_login(self, page) -> None:
+    async def _onetime_code_login(self, page) -> None:
         logger.info("Вход по одноразовому коду...")
         await page.press(self.SEL_LOGIN_INPUT, "Enter")
 

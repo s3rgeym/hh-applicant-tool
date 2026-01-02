@@ -1,7 +1,5 @@
 import argparse
 import logging
-from os import getenv
-import pathlib
 import sys
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
@@ -9,6 +7,7 @@ from ..telemetry_client import TelemetryClient
 from typing import TextIO
 
 logger = logging.getLogger(__package__)
+
 
 class Namespace(BaseNamespace):
     username: str | None
