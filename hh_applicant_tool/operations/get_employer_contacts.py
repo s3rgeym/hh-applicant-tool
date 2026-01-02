@@ -6,16 +6,16 @@ import sys
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..telemetry_client import TelemetryClient
+from typing import TextIO
 
 logger = logging.getLogger(__package__)
-
 
 class Namespace(BaseNamespace):
     username: str | None
     password: str | None
     search: str | None
     export: bool
-    output: argparse.FileType("w") | None
+    output: TextIO
 
 
 class Operation(BaseOperation):
@@ -65,7 +65,8 @@ class Operation(BaseOperation):
         parser.add_argument(
             "-o",
             "--output",
-            type=argparse.FileType("w", encoding="utf-8"),
+            default="-",
+            type=argparse.FileType("w", errors="ignore", encoding="utf-8"),
             help="Файл для сохранения экспортированных контактов (по умолчанию: stdout)",
         )
 
