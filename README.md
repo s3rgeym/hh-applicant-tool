@@ -289,6 +289,9 @@ $ hh-applicant-tool clear-negotiations --blacklist-discard
 # приглашение (видны изменения номеров)
 $ hh-applicant-tool get-employer-contacts --export -f html > report.html
 
+# В Windows нужно использовать флаг -o из-за ошибки chardet, когда он неправильно определяет кодировку
+$ hh-applicant-tool get-employer-contacts --export -f html -o report.html
+
 # Посмотреть содержимое конфига
 $ hh-applicant-tool config
 
