@@ -1,10 +1,11 @@
 import argparse
 import logging
 import sys
+from typing import TextIO
+
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..telemetry_client import TelemetryClient
-from typing import TextIO
 
 logger = logging.getLogger(__package__)
 
@@ -66,7 +67,7 @@ class Operation(BaseOperation):
             "--output",
             default="-",
             type=argparse.FileType("w", errors="ignore", encoding="utf-8"),
-            help="Файл для сохранения экспортированных контактов (по умолчанию: stdout)",
+            help="Файл для сохранения экспортированных контактов",
         )
 
     def run(self, args: Namespace, _, telemetry_client: TelemetryClient) -> None:

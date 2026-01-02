@@ -22,8 +22,8 @@ class Namespace(BaseNamespace):
 
 def get_value(data: dict[str, Any], path: str) -> Any:
     for key in path.split("."):
-        if isinstance(data, dict) and key in data:
-            data = data[key]
+        if isinstance(data, dict):
+            data = data.get(key)
         else:
             return None
     return data
@@ -37,27 +37,26 @@ def set_value(data: dict[str, Any], path: str, value: Any) -> None:
     data[keys[-1]] = value
 
 
-def del_value(data: dict[str, Any], path: str) -> bool:
+def del_value(data: dict[str, Any], path: str) -> None:
     """Удаляет значение из вложенного словаря по ключу в виде строки."""
     keys = path.split(".")
     for key in keys[:-1]:
-        if isinstance(data, dict) and key in data:
-            data = data[key]
-        else:
-            return False  # Key path does not exist
+        if not isinstance(data, dict) or key not in data:
+            return False
+        data = data[key]
 
-    final_key = keys[-1]
-    if isinstance(data, dict) and final_key in data:
-        del data[final_key]
+    try:
+        del data[keys[-1]]
         return True
-    return False
+    except KeyError:
+        return False
 
 
 def parse_scalar(value: str) -> bool | int | float | str:
     if value == "null":
         return None
     if value in ["true", "false"]:
-        return 't' in value
+        return "t" in value
     try:
         return float(value) if "." in value else int(value)
     except ValueError:
@@ -91,7 +90,7 @@ class Operation(BaseOperation):
             "--set",
             nargs=2,
             metavar=("KEY", "VALUE"),
-            help="Установить значение в конфиге (например, --set openai.model gpt-4o)",
+            help="Установить значение в конфиг, например, --set openai.model gpt-4o",
         )
         group.add_argument(
             "-u", "--unset", metavar="KEY", help="Удалить ключ из конфига"

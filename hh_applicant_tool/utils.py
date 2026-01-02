@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import json
 import platform
@@ -117,3 +118,13 @@ def android_user_agent() -> str:
         f"ru.hh.android/7.{minor}.{patch}, Device: {device}, "
         f"Android OS: {android} (UUID: {uuid.uuid4()})"
     )
+
+
+def fix_windows_color_output() -> None:
+    kernel32 = ctypes.windll.kernel32
+    # 0x0004 = ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    # Берем дескриптор стандартного вывода (stdout)
+    handle = kernel32.GetStdHandle(-11)
+    mode = ctypes.c_uint()
+    kernel32.GetConsoleMode(handle, ctypes.byref(mode))
+    kernel32.SetConsoleMode(handle, mode.value | 0x0004)
