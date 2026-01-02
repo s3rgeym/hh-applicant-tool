@@ -47,43 +47,6 @@ class Namespace(argparse.Namespace):
     disable_telemetry: bool
 
 
-def get_proxies(args: Namespace) -> dict[str, str]:
-    proxy_url = args.proxy_url or args.config.get("proxy_url")
-
-    if proxy_url:
-        return {
-            "http": proxy_url,
-            "https": proxy_url,
-        }
-
-    proxies = {}
-    http_env = getenv("HTTP_PROXY") or getenv("http_proxy")
-    https_env = getenv("HTTPS_PROXY") or getenv("https_proxy") or http_env
-
-    if http_env:
-        proxies["http"] = http_env
-    if https_env:
-        proxies["https"] = https_env
-
-    return proxies
-
-
-def get_api_client(args: Namespace) -> ApiClient:
-    config = args.config
-    token = config.get("token", {})
-    api = ApiClient(
-        client_id=config.get("client_id", ANDROID_CLIENT_ID),
-        client_secret=config.get("client_id", ANDROID_CLIENT_SECRET),
-        access_token=token.get("access_token"),
-        refresh_token=token.get("refresh_token"),
-        access_expires_at=token.get("access_expires_at"),
-        delay=args.delay,
-        user_agent=config["user_agent"] or android_user_agent(),
-        proxies=get_proxies(args),
-    )
-    return api
-
-
 class HHApplicantTool:
     """Утилита для автоматизации действий соискателя на сайте hh.ru.
 
@@ -163,6 +126,41 @@ class HHApplicantTool:
         parser.set_defaults(run=None)
         return parser
 
+    def _get_proxies(self, args: Namespace) -> dict[str, str]:
+        proxy_url = args.proxy_url or args.config.get("proxy_url")
+
+        if proxy_url:
+            return {
+                "http": proxy_url,
+                "https": proxy_url,
+            }
+
+        proxies = {}
+        http_env = getenv("HTTP_PROXY") or getenv("http_proxy")
+        https_env = getenv("HTTPS_PROXY") or getenv("https_proxy") or http_env
+
+        if http_env:
+            proxies["http"] = http_env
+        if https_env:
+            proxies["https"] = https_env
+
+        return proxies
+
+    def _get_api_client(self, args: Namespace) -> ApiClient:
+        config = args.config
+        token = config.get("token", {})
+        api = ApiClient(
+            client_id=config.get("client_id", ANDROID_CLIENT_ID),
+            client_secret=config.get("client_id", ANDROID_CLIENT_SECRET),
+            access_token=token.get("access_token"),
+            refresh_token=token.get("refresh_token"),
+            access_expires_at=token.get("access_expires_at"),
+            delay=args.delay,
+            user_agent=config["user_agent"] or android_user_agent(),
+            proxies=self._get_proxies(args),
+        )
+        return api
+
     def _setup_logger(self, args: Namespace) -> None:
         # В лог-файл пишем все!
         logger.setLevel(logging.DEBUG)
@@ -216,7 +214,7 @@ class HHApplicantTool:
                     import uuid
 
                     args.config.save(telemetry_client_id=str(uuid.uuid4()))
-                api_client = get_api_client(args)
+                api_client = self._get_api_client(args)
                 telemetry_client = TelemetryClient(
                     telemetry_client_id=args.config["telemetry_client_id"],
                     proxies=api_client.proxies.copy(),
