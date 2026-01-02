@@ -9,7 +9,7 @@ import re
 import sys
 import uuid
 from datetime import datetime
-from functools import partial
+from functools import cache, partial
 from os import getenv
 from pathlib import Path
 from threading import Lock
@@ -20,13 +20,14 @@ from .constants import INVALID_ISO8601_FORMAT
 print_err = partial(print, file=sys.stderr, flush=True)
 
 
+@cache
 def get_config_path() -> Path:
     match platform.system():
         case "Windows":
             return Path(getenv("APPDATA", Path.home() / "AppData" / "Roaming"))
-        case "Darwin":  # macOS
+        case "Darwin":
             return Path.home() / "Library" / "Application Support"
-        case _:  # Linux and etc
+        case _:
             return Path(getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
 
 

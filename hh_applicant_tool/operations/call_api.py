@@ -15,7 +15,6 @@ class Namespace(BaseNamespace):
     method: str
     endpoint: str
     params: list[str]
-    pretty_print: bool
 
 
 class Operation(BaseOperation):
@@ -30,7 +29,7 @@ class Operation(BaseOperation):
             default=[],
         )
         parser.add_argument(
-            "-m", "--method", "--meth", default="GET", help="HTTP Метод"
+            "-m", "--method", "--meth", "-X", default="GET", help="HTTP Метод"
         )
 
     def run(self, args: Namespace, api_client: ApiClient, *_) -> None:

@@ -41,17 +41,13 @@ class BaseClient:
             self.session = requests.session()
         if self.proxies:
             logger.debug(f"client proxies: {self.proxies}")
+        logger.debug(f"default headers: {self.default_headers()}")
 
     def default_headers(self) -> dict[str, str]:
         return {
             "user-agent": self.user_agent or "Mozilla/5.0",
             "x-hh-app-active": "true",
         }
-    
-    def additional_headers(
-        self,
-    ) -> dict[str, str]:
-        return {}
 
     def request(
         self,
@@ -77,13 +73,12 @@ class BaseClient:
                 time.sleep(delay)
             has_body = method in ["POST", "PUT"]
             payload = {"data" if has_body else "params": params}
-            headers = self.default_headers() | self.additional_headers()
-            logger.debug(f"request info: {method = }, {url = }, {headers = }, params = {repr(params)[:255]}")
+            # logger.debug(f"request info: {method = }, {url = }, {headers = }, params = {repr(params)[:255]}")
             response = self.session.request(
                 method,
                 url,
                 **payload,
-                headers=headers,
+                headers=self.default_headers(),
                 proxies=self.proxies,
                 allow_redirects=False,
             )
@@ -102,13 +97,17 @@ class BaseClient:
                     ) from ex
             finally:
                 log_url = url
-                if not has_body and params:
-                    log_url += "?" + urlencode(params)
+                if params:
+                    encoded_params = "&".join(
+                        f"{k}={str(v).replace('&', '%26').replace('=', '%3D')}"
+                        for k, v in params.items()
+                    )
+                    log_url += (("?", "&")["?" in url], " ")[has_body] + encoded_params
                 logger.debug(
-                    "%s %s: %d",
+                    "%d %s %.2000s",
+                    response.status_code,
                     method,
                     log_url,
-                    response.status_code,
                 )
                 self.previous_request_time = time.monotonic()
         self.raise_for_status(response, rv)
@@ -229,14 +228,15 @@ class ApiClient(BaseClient):
             session=self.session,
         )
 
-    def additional_headers(
+    def default_headers(
         self,
     ) -> dict[str, str]:
+        headers = super().default_headers()
         if not self.access_token:
-            return {}
+            return headers
         # Это очень интересно, что access token'ы начинаются с USER, т.е. API может содержать какую-то уязвимость, связанную с этим
         assert self.access_token.startswith("USER")
-        return {"authorization": f"Bearer {self.access_token}"}
+        return headers | {"authorization": f"Bearer {self.access_token}"}
 
     # Реализовано автоматическое обновление токена
     def request(
