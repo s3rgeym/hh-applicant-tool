@@ -2,6 +2,7 @@ import argparse
 import logging
 from os import getenv
 import pathlib
+import sys
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..telemetry_client import TelemetryClient
@@ -14,13 +15,14 @@ class Namespace(BaseNamespace):
     password: str | None
     search: str | None
     export: bool
+    output: argparse.FileType("w") | None
 
 
 class Operation(BaseOperation):
     """Выведет контакты работодателей, которые высылали вам приглашения"""
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
-        # parser.add_argument(
+        # parser.add_argument
         #     "-u",
         #     "--username",
         #     type=str,
@@ -60,6 +62,12 @@ class Operation(BaseOperation):
             choices=["html", "json", "jsonl"],
             help="Формат вывода",
         )
+        parser.add_argument(
+            "-o",
+            "--output",
+            type=argparse.FileType("w", encoding="utf-8"),
+            help="Файл для сохранения экспортированных контактов (по умолчанию: stdout)",
+        )
 
     def run(self, args: Namespace, _, telemetry_client: TelemetryClient) -> None:
         if args.export:
@@ -76,28 +84,33 @@ class Operation(BaseOperation):
                 if per_page * page >= res["total"]:
                     break
                 page += 1
+
+            output_file = args.output if args.output else sys.stdout
+
             if args.format.startswith("json"):
-                import json, sys
+                import json
 
                 is_json = args.format == "json"
-                total_contacts = len(contact_persons)
 
                 if is_json:
-                    sys.stdout.write("[")
+                    output_file.write("[")
 
                 for index, contact in enumerate(contact_persons):
                     if is_json and index > 0:
-                        sys.stdout.write(",")
+                        output_file.write(",")
 
-                    json.dump(contact, sys.stdout, ensure_ascii=False)
+                    json.dump(contact, output_file, ensure_ascii=False)
 
                     if not is_json:
-                        sys.stdout.write("\n")
+                        output_file.write("\n")
 
                 if is_json:
-                    sys.stdout.write("]\n")
+                    output_file.write("]\n")
             else:
-                print(generate_html_report(contact_persons))
+                output_file.write(generate_html_report(contact_persons))
+
+            if args.output:
+                args.output.close()
             return
 
         res = telemetry_client.get_telemetry(
