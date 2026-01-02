@@ -109,15 +109,9 @@ class BaseClient:
                 self.previous_request_time = time.monotonic()
         self.raise_for_status(response, rv)
 
-        if response.status_code == 303:
-            logger.debug(
-                "HH returned 303 for %s %s, treating as success",
-                method,
-                url,
-            )
-            return {}
+        allowed_statuses = {200, 201, 303}
 
-        assert 300 > response.status_code >= 200, (
+        assert response.status_code in allowed_statuses, (
             f"Unexpected status code for {method} {url}: {response.status_code}"
         )
         return rv
