@@ -95,9 +95,9 @@ class Operation(BaseOperation):
             "-u", "--unset", metavar="KEY", help="Удалить ключ из конфига"
         )
         group.add_argument(
-            "-S",
+            "-p",
             "--show-path",
-            "--show",
+            "--path",
             action="store_true",
             help="Вывести полный путь к конфигу",
         )
