@@ -280,7 +280,7 @@ $ hh-applicant-tool apply-similar
 $ hh-applicant-tool update-resumes
 
 # Чистим заявки и баним за отказы говноконторы
-$ hh-applicant-tool clear-negotiations --blacklist-discard
+$ hh-applicant-tool check-negotiations --clean --blacklist-discard
 
 # Просмотр лога в реальном времени
 $ hh-applicant-tool log -f
