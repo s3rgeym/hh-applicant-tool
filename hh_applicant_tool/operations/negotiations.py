@@ -62,7 +62,7 @@ class Operation(BaseOperation):
             "-r",
             "--report",
             type=argparse.FileType("w", encoding="utf-8"),
-            help="Файл для отчета по ПРИГЛАШЕНИЯМ (если не указан, не создается)",
+            help="Сохранить приглашения в csv-файл",
         )
         parser.add_argument(
             "-d",
@@ -144,38 +144,14 @@ class Operation(BaseOperation):
                         delay=random.uniform(*args.delay_interval),
                     )
                     self.applicant_tool.save_vacancy(full_vacancy)
-
-                    print(state["name"], full_vacancy["alternate_url"])
-                    print("Название вакансии:", full_vacancy["name"])
-
-                    print(
-                        "Организация:",
-                        full_vacancy.get("employer", {}).get("name", "Неизвестен"),
-                    )
                     salary = full_vacancy.get("salary") or {}
-                    print(
-                        "Зарплата от",
-                        salary.get("from") or "—",
-                        "до",
-                        salary.get("to") or "—",
-                        salary.get("currency") or "—",
-                    )
                     contacts = full_vacancy.get("contacts") or {}
-
-                    if email := contacts.get("email"):
-                        print("Email:", email)
-
                     # Собираем телефоны через запятую
                     phones_str = ", ".join(
                         p["formatted"]
                         for p in contacts.get("phones", [])
                         if p.get("number")
                     )
-
-                    if phones_str:
-                        print("Телефон:", phones_str)
-
-                    print()
 
                     if csv_writer:
                         csv_writer.writerow(
@@ -195,6 +171,30 @@ class Operation(BaseOperation):
                             }
                         )
                         args.report.flush()  # Данные пишутся сразу, не ждем конца работы
+                    else:
+                        print(state["name"], full_vacancy["alternate_url"])
+                        print("Название вакансии:", full_vacancy["name"])
+
+                        print(
+                            "Организация:",
+                            full_vacancy.get("employer", {}).get("name", "Неизвестен"),
+                        )
+
+                        print(
+                            "Зарплата от",
+                            salary.get("from") or "—",
+                            "до",
+                            salary.get("to") or "—",
+                            salary.get("currency") or "—",
+                        )
+
+                        if email := contacts.get("email"):
+                            print("Email:", email)
+
+                        if phones_str:
+                            print("Телефон:", phones_str)
+
+                        print()
 
                 # ЧИСТКА (если включен флаг -x)
                 if args.cleanup:
