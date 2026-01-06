@@ -26,6 +26,8 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Вызвать произвольный метод API <https://github.com/hhru/api>."""
 
+    __aliases__ = ("api",)
+
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("endpoint", help="Путь до эндпоинта API")
         parser.add_argument(

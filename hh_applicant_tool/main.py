@@ -153,7 +153,7 @@ class HHApplicantTool:
         parser.add_argument(
             "--profile-id",
             "--profile",
-            help="Используемый профиль — поддиректория в --config-dir",
+            help="Используемый профиль — подкаталог в --config-dir",
             default=DEFAULT_PROFILE_ID,
         )
         parser.add_argument(
@@ -181,14 +181,15 @@ class HHApplicantTool:
 
             # 2. Формируем варианты имен
             kebab_name = "-".join(words)  # call-api
-            aliases = []
+            aliases = set()
+            aliases.update(getattr(op, "__aliases__", []))
 
             if kebab_name != module_name:
                 # camelCase: первое слово маленькими, остальные с большой
-                aliases.append(words[0] + "".join(word.title() for word in words[1:]))
+                aliases.add(words[0] + "".join(word.title() for word in words[1:]))
 
                 # flatcase: всё слитно и в нижнем регистре
-                aliases.append("".join(words))
+                aliases.add("".join(words))
 
             op_parser = subparsers.add_parser(
                 kebab_name,
@@ -423,12 +424,19 @@ class HHApplicantTool:
                 if self.api_client.access_token != self.config.get("token", {}).get(
                     "access_token"
                 ):
-                    logger.info("access token updated!")
+                    logger.info("Токен был обновлен.")
                     self.config.save(token=self.api_client.get_access_token())
 
                 return res
             except KeyboardInterrupt:
-                logger.warning("Interrupted by user")
+                logger.warning("Выполнение прервано пользователем!")
+                return 1
+            except sqlite3.Error as ex:
+                db_path = self.config_path / DEFAULT_DATABASE_FILENAME
+                logger.exception(ex)
+                logger.warning(
+                    f"Возможно, база данных повреждена, попробуйте удалить: {db_path}"
+                )
                 return 1
             except Exception as e:
                 logger.exception(e, exc_info=True)
