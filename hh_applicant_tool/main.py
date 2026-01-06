@@ -11,7 +11,7 @@ from logging.handlers import RotatingFileHandler
 from os import getenv
 from pathlib import Path
 from pkgutil import iter_modules
-from typing import Sequence
+from typing import Any, Sequence
 
 from .api import ApiClient
 from .constants import ANDROID_CLIENT_ID, ANDROID_CLIENT_SECRET
@@ -22,7 +22,7 @@ DEFAULT_CONFIG_DIR = get_config_path() / (__package__ or "").replace("_", "-")
 DEFAULT_CONFIG_FILENAME = "config.json"
 DEFAULT_LOG_FILENAME = "log.txt"
 DEFAULT_DATABASE_FILENAME = "data"
-DEFAULT_PROFILE_ID = "default"
+DEFAULT_PROFILE_ID = "."
 
 logger = logging.getLogger(__package__)
 
@@ -224,7 +224,7 @@ class HHApplicantTool:
 
     @property
     def config_path(self) -> Path:
-        return self.args.config_dir / self.args.profile_id
+        return (self.args.config_dir / self.args.profile_id).resolve()
 
     @cached_property
     def config(self) -> Config:
