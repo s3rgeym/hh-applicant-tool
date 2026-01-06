@@ -136,11 +136,11 @@ class HHApplicantTool:
             formatter_class=self.ArgumentFormatter,
         )
         parser.add_argument(
-            "-p",
-            "--profile-id",
-            "--profile",
-            help="Используемый профиль — поддиректория в --config-dir",
-            default=DEFAULT_PROFILE_ID,
+            "-v",
+            "--verbosity",
+            help="При использовании от одного и более раз увеличивает количество отладочной информации в выводе",  # noqa: E501
+            action="count",
+            default=0,
         )
         parser.add_argument(
             "-c",
@@ -151,18 +151,17 @@ class HHApplicantTool:
             default=DEFAULT_CONFIG_DIR,
         )
         parser.add_argument(
-            "-v",
-            "--verbosity",
-            help="При использовании от одного и более раз увеличивает количество отладочной информации в выводе",  # noqa: E501
-            action="count",
-            default=0,
+            "--profile-id",
+            "--profile",
+            help="Используемый профиль — поддиректория в --config-dir",
+            default=DEFAULT_PROFILE_ID,
         )
         parser.add_argument(
             "-d",
             "--delay",
             type=float,
             default=0.334,
-            help="Задержка между запросами к API HH",
+            help="Задержка между запросами к API HH по умолчанию",
         )
         parser.add_argument(
             "--user-agent",
