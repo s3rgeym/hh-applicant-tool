@@ -30,6 +30,8 @@ async def ainput(prompt: str) -> str:
 class Operation(BaseOperation):
     """Авторизация через Playwright"""
 
+    __aliases__: list = ["auth"]
+
     # Селекторы
     SEL_LOGIN_INPUT = 'input[data-qa="login-input-username"]'
     SEL_EXPAND_PASSWORD_BTN = 'button[data-qa="expand-login-by_password"]'

@@ -27,6 +27,8 @@ def fmt_plus(n: int) -> str:
 class Operation(BaseOperation):
     """Выведет текущего пользователя"""
 
+    __aliases__: tuple[str] = ("id",)
+
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 

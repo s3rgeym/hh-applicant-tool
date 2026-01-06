@@ -25,6 +25,8 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Обновить все резюме"""
 
+    __aliases__ = ["update"]
+
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 

@@ -48,6 +48,8 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Ответ всем работодателям."""
 
+    __aliases__ = ["reply"]
+
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         # parser.add_argument(
         #     "reply_message",

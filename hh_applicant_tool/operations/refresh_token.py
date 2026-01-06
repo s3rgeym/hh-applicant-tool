@@ -4,10 +4,8 @@ import argparse
 import logging
 from typing import TYPE_CHECKING
 
-from ..api import ApiError
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
-from ..utils import print_err
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -22,6 +20,8 @@ class Namespace(BaseNamespace):
 
 class Operation(BaseOperation):
     """Получает новый access_token."""
+
+    __aliases__ = ["refresh"]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass

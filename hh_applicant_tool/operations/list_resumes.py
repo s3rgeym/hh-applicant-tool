@@ -25,6 +25,8 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Список резюме"""
 
+    __aliases__ = ("list", "ls")
+
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
