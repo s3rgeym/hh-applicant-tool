@@ -4,7 +4,6 @@ import argparse
 import logging
 import random
 import time
-from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
 
@@ -14,7 +13,6 @@ from ..api import BadResponse, Redirect
 from ..api.errors import ApiError, LimitExceeded
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
-from ..mixins import GetResumeIdMixin
 from ..types import ApiListResponse, VacancyItem
 from ..utils import (
     parse_interval,
@@ -76,7 +74,7 @@ def _join_list(items: list[Any] | None) -> str:
     return ",".join(f"{v}" for v in items) if items else ""
 
 
-class Operation(BaseOperation, GetResumeIdMixin):
+class Operation(BaseOperation):
     """Откликнуться на все подходящие вакансии.
 
     Описание фильтров для поиска вакансий: <https://api.hh.ru/openapi/redoc#tag/Poisk-vakansij-dlya-soiskatelya/operation/get-vacancies-similar-to-resume>
@@ -245,7 +243,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
         self.api_client = applicant_tool.api_client
         # self.telemetry_client = telemetry_client
         args = applicant_tool.args
-        self.resume_id = args.resume_id or self._get_resume_id()
+        self.resume_id = args.resume_id or applicant_tool.first_resume_id()
         self.application_messages = self._get_application_messages(args.message_list)
         self.ignored_employers = self._get_ignored_employers(args.ignore_employers)
         self.chat = None
@@ -324,7 +322,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
 
     def _apply_similar(self) -> None:
         # telemetry_client = self.telemetry_client
-        telemetry_data = defaultdict(dict)
+        # telemetry_data = defaultdict(dict)
         vacancies = self._get_vacancies()
 
         # if self.enable_telemetry:
@@ -361,6 +359,8 @@ class Operation(BaseOperation, GetResumeIdMixin):
 
         for vacancy in vacancies:
             try:
+                self.applicant_tool.save_vacancy(vacancy)
+
                 message_placeholders = {
                     "vacancy_name": vacancy.get("name", ""),
                     "employer_name": vacancy.get("employer", {}).get("name", ""),
@@ -408,6 +408,9 @@ class Operation(BaseOperation, GetResumeIdMixin):
                 #     }
                 #     telemetry_data["employers"][employer_id] = employer_data
 
+                # if employer_id := int(vacancy.get("employer", {}).get("id", 0)):
+                #     self.api_client.get(f"/employers/{employer_id}")
+
                 if relations:
                     logger.debug(
                         "Пропускаем вакансию с откликом: %s",
@@ -443,14 +446,6 @@ class Operation(BaseOperation, GetResumeIdMixin):
                     logger.debug(msg)
                     params["message"] = msg
 
-                if self.dry_run:
-                    logger.info(
-                        "dry-run: Отправка отклика на вакансию %s с параметрами: %s",
-                        vacancy["alternate_url"],
-                        params,
-                    )
-                    continue
-
                 # Задержка перед отправкой отклика
                 apply_interval = random.uniform(
                     self.apply_min_interval,
@@ -458,13 +453,19 @@ class Operation(BaseOperation, GetResumeIdMixin):
                 )
 
                 try:
-                    res = self.api_client.post(
-                        "/negotiations",
-                        params,
-                        delay=apply_interval,
-                    )
-                    assert res == {}
-                    logger.debug("Отправили отклик: %s", vacancy["alternate_url"])
+                    if not self.dry_run:
+                        res = self.api_client.post(
+                            "/negotiations",
+                            params,
+                            delay=apply_interval,
+                        )
+                        assert res == {}
+                        logger.debug("Отправили отклик: %s", vacancy["alternate_url"])
+                        self.applicant_tool.save_negotiation(
+                            vacancy_id=vacancy_id,
+                            resume_id=self.resume_id,
+                            message=params.get("message"),
+                        )
                     print(
                         "📨 Отправили отклик:",
                         vacancy["alternate_url"],
@@ -472,7 +473,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
                     )
                 except Redirect:
                     logger.warning(
-                        f"Игнорирую перенаправление на вн: {vacancy['alternate_url']}"  # noqa: E501
+                        f"Игнорирую перенаправление на форму: {vacancy['alternate_url']}"  # noqa: E501
                     )
             except LimitExceeded:
                 logger.info("Достигли лимита на отклики")

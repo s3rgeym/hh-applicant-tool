@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Tuple
 from ..api import ApiError
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
-from ..mixins import GetResumeIdMixin
 from ..utils import parse_interval, random_text
 
 if TYPE_CHECKING:
@@ -46,7 +45,7 @@ class Namespace(BaseNamespace):
     dry_run: bool
 
 
-class Operation(BaseOperation, GetResumeIdMixin):
+class Operation(BaseOperation):
     """Ответ всем работодателям."""
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
@@ -97,7 +96,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
         self.api_client = applicant_tool.api_client
         # self.telemetry_client = telemetry_client
         # self.enable_telemetry = not args.disable_telemetry
-        self.resume_id = self._get_resume_id()
+        self.resume_id = applicant_tool.first_resume_id()
         self.reply_min_interval, self.reply_max_interval = args.reply_interval
         self.reply_message = args.reply_message or applicant_tool.config.get(
             "reply_message"
