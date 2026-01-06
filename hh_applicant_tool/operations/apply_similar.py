@@ -5,7 +5,7 @@ import logging
 import random
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TextIO
+from typing import TYPE_CHECKING, TextIO
 
 from ..ai.base import AIError
 from ..ai.openai import OpenAIChat
@@ -15,6 +15,8 @@ from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse, VacancyItem
 from ..utils import (
+    bool2str,
+    list2str,
     parse_interval,
     random_text,
     shorten,
@@ -64,14 +66,8 @@ class Namespace(BaseNamespace):
     sort_point_lng: float | None
     no_magic: bool
     premium: bool
-
-
-def _bool(v: bool) -> str:
-    return str(v).lower()
-
-
-def _join_list(items: list[Any] | None) -> str:
-    return ",".join(f"{v}" for v in items) if items else ""
+    per_page: int
+    total_pages: int
 
 
 class Operation(BaseOperation):
@@ -83,6 +79,11 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
         parser.add_argument(
+            "--search",
+            help="Строка поиска для фильтрации вакансий, например, 'москва бухгалтер 100500'",
+            type=str,
+        )
+        parser.add_argument(
             "-L",
             "--message-list",
             help="Путь до файла, где хранятся сообщения для отклика на вакансии. Каждое сообщение — с новой строки.",  # noqa: E501
@@ -92,21 +93,18 @@ class Operation(BaseOperation):
             "--ignore-employers",
             help="Путь к файлу со списком ID игнорируемых работодателей (по одному ID на строку)",  # noqa: E501
             type=Path,
-            default=None,
         )
         parser.add_argument(
             "-f",
             "--force-message",
             "--force",
             help="Всегда отправлять сообщение при отклике",
-            default=False,
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
             "--use-ai",
             "--ai",
             help="Использовать AI для генерации сообщений",
-            default=False,
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
@@ -128,6 +126,32 @@ class Operation(BaseOperation):
             type=parse_interval,
         )
         parser.add_argument(
+            "--total-pages",
+            "--pages",
+            help="Количество обрабатываемых страниц поиска",  # noqa: E501
+            default=20,
+            type=int,
+        )
+        parser.add_argument(
+            "--per-page",
+            help="Сколько должно быть результатов на странице",  # noqa: E501
+            default=100,
+            type=int,
+        )
+        parser.add_argument(
+            "--dry-run",
+            help="Не отправлять отклики, а только выводить информацию",
+            action=argparse.BooleanOptionalAction,
+        )
+
+        # Дальше идут параметры в точности соответствующие параметрам запроса
+        # при поиске подходящих вакансий
+        search_params_group = parser.add_argument_group(
+            "Параметры поиска вакансий",
+            "Эти параметры напрямую соответствуют фильтрам поиска HeadHunter API",
+        )
+
+        search_params_group.add_argument(
             "--order-by",
             help="Сортировка вакансий",
             choices=[
@@ -137,118 +161,111 @@ class Operation(BaseOperation):
                 "relevance",
                 "distance",
             ],
-            default="relevance",
+            # default="relevance",
         )
-        parser.add_argument(
-            "--search",
-            help="Строка поиска для фильтрации вакансий, например, 'москва бухгалтер 100500'",
-            type=str,
-            default=None,
-        )
-
-        parser.add_argument(
-            "--schedule",
-            help="Тип графика. Возможные значения: fullDay, shift, flexible, remote, flyInFlyOut для полного дня, сменного графика, гибкого графика, удаленной работы и вахтового метода",  # noqa: E501
-            type=str,
-            default=None,
-        )
-        parser.add_argument(
-            "--dry-run",
-            help="Не отправлять отклики, а только выводить параметры запроса",
-            default=False,
-            action=argparse.BooleanOptionalAction,
-        )
-        parser.add_argument(
+        search_params_group.add_argument(
             "--experience",
-            help="Уровень опыта работы в вакансии. Возможные значения: noExperience, between1And3, between3And6, moreThan6",  # noqa: E501
+            help="Уровень опыта работы (noExperience, between1And3, between3And6, moreThan6)",
             type=str,
             default=None,
         )
-        parser.add_argument(
-            "--employment", nargs="+", help="Тип занятости (employment)"
+        search_params_group.add_argument(
+            "--schedule",
+            help="Тип графика (fullDay, shift, flexible, remote, flyInFlyOut)",
+            type=str,
         )
-        parser.add_argument("--area", nargs="+", help="Регион (area id)")
-        parser.add_argument("--metro", nargs="+", help="Станции метро (metro id)")
-        parser.add_argument("--professional-role", nargs="+", help="Проф. роль (id)")
-        parser.add_argument("--industry", nargs="+", help="Индустрия (industry id)")
-        parser.add_argument("--employer-id", nargs="+", help="ID работодателей")
-        parser.add_argument(
+        search_params_group.add_argument(
+            "--employment", nargs="+", help="Тип занятости"
+        )
+        search_params_group.add_argument("--area", nargs="+", help="Регион (area id)")
+        search_params_group.add_argument(
+            "--metro", nargs="+", help="Станции метро (metro id)"
+        )
+        search_params_group.add_argument(
+            "--professional-role", nargs="+", help="Проф. роль (id)"
+        )
+        search_params_group.add_argument(
+            "--industry", nargs="+", help="Индустрия (industry id)"
+        )
+        search_params_group.add_argument(
+            "--employer-id", nargs="+", help="ID работодателей"
+        )
+        search_params_group.add_argument(
             "--excluded-employer-id", nargs="+", help="Исключить работодателей"
         )
-        parser.add_argument("--currency", help="Код валюты (RUR, USD, EUR)")
-        parser.add_argument("--salary", type=int, help="Минимальная зарплата")
-        parser.add_argument(
+        search_params_group.add_argument(
+            "--currency", help="Код валюты (RUR, USD, EUR)"
+        )
+        search_params_group.add_argument(
+            "--salary", type=int, help="Минимальная зарплата"
+        )
+        search_params_group.add_argument(
             "--only-with-salary", default=False, action=argparse.BooleanOptionalAction
         )
-        parser.add_argument("--label", nargs="+", help="Метки вакансий (label)")
-        parser.add_argument("--period", type=int, help="Искать вакансии за N дней")
-        parser.add_argument("--date-from", help="Дата публикации с (YYYY-MM-DD)")
-        parser.add_argument("--date-to", help="Дата публикации по (YYYY-MM-DD)")
-        parser.add_argument("--top-lat", type=float, help="Гео: верхняя широта")
-        parser.add_argument("--bottom-lat", type=float, help="Гео: нижняя широта")
-        parser.add_argument("--left-lng", type=float, help="Гео: левая долгота")
-        parser.add_argument("--right-lng", type=float, help="Гео: правая долгота")
-        parser.add_argument(
+        search_params_group.add_argument(
+            "--label", nargs="+", help="Метки вакансий (label)"
+        )
+        search_params_group.add_argument(
+            "--period", type=int, help="Искать вакансии за N дней"
+        )
+        search_params_group.add_argument(
+            "--date-from", help="Дата публикации с (YYYY-MM-DD)"
+        )
+        search_params_group.add_argument(
+            "--date-to", help="Дата публикации по (YYYY-MM-DD)"
+        )
+        search_params_group.add_argument(
+            "--top-lat", type=float, help="Гео: верхняя широта"
+        )
+        search_params_group.add_argument(
+            "--bottom-lat", type=float, help="Гео: нижняя широта"
+        )
+        search_params_group.add_argument(
+            "--left-lng", type=float, help="Гео: левая долгота"
+        )
+        search_params_group.add_argument(
+            "--right-lng", type=float, help="Гео: правая долгота"
+        )
+        search_params_group.add_argument(
             "--sort-point-lat",
             type=float,
             help="Координата lat для сортировки по расстоянию",
         )
-        parser.add_argument(
+        search_params_group.add_argument(
             "--sort-point-lng",
             type=float,
             help="Координата lng для сортировки по расстоянию",
         )
-        parser.add_argument(
+        search_params_group.add_argument(
             "--no-magic",
             action="store_true",
             help="Отключить авторазбор текста запроса",
         )
-        parser.add_argument(
+        search_params_group.add_argument(
             "--premium",
             default=False,
             action=argparse.BooleanOptionalAction,
             help="Только премиум вакансии",
         )
-        parser.add_argument(
+        search_params_group.add_argument(
             "--search-field", nargs="+", help="Поля поиска (name, company_name и т.п.)"
         )
-        parser.add_argument(
-            "--clusters",
-            action=argparse.BooleanOptionalAction,
-            help="Включить кластеры (по умолчанию None)",
-        )
-        # parser.add_argument("--describe-arguments", action=argparse.BooleanOptionalAction, help="Вернуть описание параметров запроса")  # noqa: E501
 
     def run(
         self,
         applicant_tool: HHApplicantTool,
     ) -> None:
-        # self.enable_telemetry = True
-        # if args.disable_telemetry:
-        # print(
-        #     "👁️ Телеметрия используется только для сбора данных о работодателях и их вакансиях, персональные данные пользователей не передаются на сервер."  # noqa: E501
-        # )
-        # if (
-        #     input("Вы действительно хотите отключить телеметрию (д/Н)? ")
-        #     .lower()
-        #     .startswith(("д", "y"))
-        # ):
-        #     self.enable_telemetry = False
-        #     logger.info("Телеметрия отключена.")
-        # else:
-        #     logger.info("Спасибо за то что оставили телеметрию включенной!")
-        # self.enable_telemetry = False
-
         self.applicant_tool = applicant_tool
         self.api_client = applicant_tool.api_client
         # self.telemetry_client = telemetry_client
-        args = applicant_tool.args
+        args: Namespace = applicant_tool.args
         self.resume_id = args.resume_id or applicant_tool.first_resume_id()
         self.application_messages = self._get_application_messages(args.message_list)
         self.ignored_employers = self._get_ignored_employers(args.ignore_employers)
         self.chat = None
 
         if config := applicant_tool.config.get("openai"):
+            # Это не мой код, поэтому лень править
             model = "gpt-5.1"
             system_prompt = "Напиши сопроводительное письмо для отклика на эту вакансию. Не используй placeholder'ы, твой ответ будет отправлен без обработки."  # noqa: E501
             if "model" in config.keys():
@@ -294,10 +311,11 @@ class Operation(BaseOperation):
         self.right_lng = args.right_lng
         self.sort_point_lat = args.sort_point_lat
         self.sort_point_lng = args.sort_point_lng
-        self.clusters = args.clusters
-        # self.describe_arguments = args.describe_arguments
         self.no_magic = args.no_magic
         self.premium = args.premium
+
+        self.per_page = args.per_page
+        self.total_pages = args.total_pages
         self._apply_similar()
 
     def _get_application_messages(self, message_list: TextIO | None) -> list[str]:
@@ -503,10 +521,10 @@ class Operation(BaseOperation):
         #     except TelemetryError as ex:
         #         logger.error(ex)
 
-    def _get_search_params(self, page: int, per_page: int) -> dict:
+    def _get_search_params(self, page: int) -> dict:
         params = {
             "page": page,
-            "per_page": per_page,
+            "per_page": self.per_page,
             "order_by": self.order_by,
         }
 
@@ -539,41 +557,40 @@ class Operation(BaseOperation):
         if self.sort_point_lng:
             params["sort_point_lng"] = self.sort_point_lng
         if self.search_field:
-            params["search_field"] = _join_list(self.search_field)
+            params["search_field"] = list2str(self.search_field)
         if self.employment:
-            params["employment"] = _join_list(self.employment)
+            params["employment"] = list2str(self.employment)
         if self.area:
-            params["area"] = _join_list(self.area)
+            params["area"] = list2str(self.area)
         if self.metro:
-            params["metro"] = _join_list(self.metro)
+            params["metro"] = list2str(self.metro)
         if self.professional_role:
-            params["professional_role"] = _join_list(self.professional_role)
+            params["professional_role"] = list2str(self.professional_role)
         if self.industry:
-            params["industry"] = _join_list(self.industry)
+            params["industry"] = list2str(self.industry)
         if self.employer_id:
-            params["employer_id"] = _join_list(self.employer_id)
+            params["employer_id"] = list2str(self.employer_id)
         if self.excluded_employer_id:
-            params["excluded_employer_id"] = _join_list(self.excluded_employer_id)
+            params["excluded_employer_id"] = list2str(self.excluded_employer_id)
         if self.label:
-            params["label"] = _join_list(self.label)
-        if self.only_with_salary is not None:
-            params["only_with_salary"] = _bool(self.only_with_salary)
-        if self.clusters is not None:
-            params["clusters"] = _bool(self.clusters)
-        if self.no_magic is not None:
-            params["no_magic"] = _bool(self.no_magic)
-        if self.premium is not None:
-            params["premium"] = _bool(self.premium)
+            params["label"] = list2str(self.label)
+        if self.only_with_salary:
+            params["only_with_salary"] = bool2str(self.only_with_salary)
+        # if self.clusters:
+        #     params["clusters"] = bool2str(self.clusters)
+        if self.no_magic:
+            params["no_magic"] = bool2str(self.no_magic)
+        if self.premium:
+            params["premium"] = bool2str(self.premium)
         # if self.responses_count_enabled is not None:
-        #     params["responses_count_enabled"] = _bool(self.responses_count_enabled)
+        #     params["responses_count_enabled"] = bool2str(self.responses_count_enabled)
 
         return params
 
-    def _get_vacancies(self, per_page: int = 100) -> list[VacancyItem]:
+    def _get_vacancies(self) -> list[VacancyItem]:
         rv = []
-        # API отдает только 2000 результатов
-        for page in range(20):
-            params = self._get_search_params(page, per_page)
+        for page in range(self.total_pages):
+            params = self._get_search_params(page)
             res: ApiListResponse = self.api_client.get(
                 f"/resumes/{self.resume_id}/similar_vacancies", params
             )

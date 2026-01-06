@@ -25,7 +25,7 @@ class Namespace(BaseNamespace):
     all: bool
     dry_run: bool
     cleanup: bool
-    csv_report: Optional[argparse.FileType]
+    report: Optional[argparse.FileType]
     delay_interval: tuple[float, float]
 
 
@@ -60,7 +60,7 @@ class Operation(BaseOperation):
         )
         parser.add_argument(
             "-r",
-            "--csv-report",
+            "--report",
             type=argparse.FileType("w", encoding="utf-8"),
             help="Файл для отчета по ПРИГЛАШЕНИЯМ (если не указан, не создается)",
         )
@@ -91,7 +91,7 @@ class Operation(BaseOperation):
         csv_writer = None
 
         # 1. Сразу готовим CSV, чтобы писать в него "на лету"
-        if args.csv_report:
+        if args.report:
             fieldnames = [
                 "url",
                 "name",
@@ -104,9 +104,9 @@ class Operation(BaseOperation):
                 "contact_phones",
                 "updated_at",
             ]
-            csv_writer = csv.DictWriter(args.csv_report, fieldnames=fieldnames)
+            csv_writer = csv.DictWriter(args.report, fieldnames=fieldnames)
             csv_writer.writeheader()
-            args.csv_report.flush()
+            args.report.flush()
 
         while True:
             r: ApiListResponse = self.api_client.get(
@@ -125,59 +125,76 @@ class Operation(BaseOperation):
                 resume = item["resume"]
                 state = item["state"]
                 state_id = state["id"]
-                v_brief = item["vacancy"]
-                v_id = v_brief["id"]
+                vacancy = item["vacancy"]
+                vacancy_id = vacancy["id"]
 
                 # Синхронизация статуса в локальной БД
                 self.applicant_tool.database.execute(
                     "UPDATE negotiations SET status = ?"
                     "  WHERE vacancy_id = ? AND resume_id = ?",
-                    (state_id, v_id, resume["id"]),
+                    (state_id, vacancy_id, resume["id"]),
                 )
                 self.applicant_tool.database.commit()
 
                 # ОБРАБОТКА ПРИГЛАШЕНИЯ
                 if state_id in ["invitation", "interview"]:
-                    print(
-                        state["name"],
-                        v_brief["name"],
-                        v_brief["alternate_url"],
-                    )
-
                     # Получаем полные данные вакансии (с контактами)
                     full_vacancy = self.api_client.get(
-                        f"/vacancies/{v_id}", delay=random.uniform(*args.delay_interval)
+                        f"/vacancies/{vacancy_id}",
+                        delay=random.uniform(*args.delay_interval),
                     )
                     self.applicant_tool.save_vacancy(full_vacancy)
 
+                    print(state["name"], full_vacancy["alternate_url"])
+                    print("Название вакансии:", full_vacancy["name"])
+
+                    print(
+                        "Организация:",
+                        full_vacancy.get("employer", {}).get("name", "Неизвестен"),
+                    )
+                    salary = full_vacancy.get("salary") or {}
+                    print(
+                        "Зарплата от",
+                        salary.get("from") or "—",
+                        "до",
+                        salary.get("to") or "—",
+                        salary.get("currency") or "—",
+                    )
+                    contacts = full_vacancy.get("contacts") or {}
+
+                    if email := contacts.get("email"):
+                        print("Email:", email)
+
+                    # Собираем телефоны через запятую
+                    phones_str = ", ".join(
+                        p["formatted"]
+                        for p in contacts.get("phones", [])
+                        if p.get("number")
+                    )
+
+                    if phones_str:
+                        print("Телефон:", phones_str)
+
+                    print()
+
                     if csv_writer:
-                        sal = full_vacancy.get("salary") or {}
-                        con = full_vacancy.get("contacts") or {}
-
-                        # Собираем телефоны через запятую
-                        phones_str = ", ".join(
-                            p["formatted"]
-                            for p in con.get("phones", [])
-                            if p.get("number")
-                        )
-
                         csv_writer.writerow(
                             {
-                                "url": v_brief["alternate_url"],
+                                "url": full_vacancy["alternate_url"],
                                 "name": full_vacancy.get("name"),
                                 "employer": full_vacancy.get("employer", {}).get(
                                     "name"
                                 ),
-                                "salary_from": sal.get("from"),
-                                "salary_to": sal.get("to"),
-                                "currency": sal.get("currency"),
-                                "contact_name": con.get("name"),
-                                "contact_email": con.get("email"),
+                                "salary_from": salary.get("from"),
+                                "salary_to": salary.get("to"),
+                                "currency": salary.get("currency"),
+                                "contact_name": contacts.get("name"),
+                                "contact_email": contacts.get("email"),
                                 "contact_phones": phones_str,
                                 "updated_at": item.get("updated_at"),
                             }
                         )
-                        args.csv_report.flush()  # Данные пишутся сразу, не ждем конца работы
+                        args.report.flush()  # Данные пишутся сразу, не ждем конца работы
 
                 # ЧИСТКА (если включен флаг -x)
                 if args.cleanup:
@@ -198,16 +215,16 @@ class Operation(BaseOperation):
                                 with_decline_message=item.get("decline_allowed", False),
                                 delay=random.uniform(*args.delay_interval),
                             )
-                        print(f"❌ Удален отклик: {v_brief['name']}")
+                        print(f"❌ Удален отклик: {vacancy['name']}")
 
                         if is_discard and args.blacklist_discard:
-                            emp = v_brief.get("employer")
+                            emp = vacancy.get("employer")
                             if emp and emp.get("id") and not args.dry_run:
                                 self.api_client.put(
                                     f"/employers/blacklisted/{emp['id']}",
                                     delay=random.uniform(*args.delay_interval),
                                 )
-                                print(f"🚫 Блокировка: {emp['name']}")
+                                print(f"🚫 Заблокирован: {emp['name']}")
 
             page += 1
             if page >= r["pages"]:

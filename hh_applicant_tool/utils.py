@@ -132,3 +132,11 @@ def fix_windows_color_output() -> None:
     mode = ctypes.c_uint()
     kernel32.GetConsoleMode(handle, ctypes.byref(mode))
     kernel32.SetConsoleMode(handle, mode.value | 0x0004)
+
+
+def bool2str(v: bool) -> str:
+    return str(v).lower()
+
+
+def list2str(items: list[Any] | None) -> str:
+    return ",".join(f"{v}" for v in items) if items else ""
