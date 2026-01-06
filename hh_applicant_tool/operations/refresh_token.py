@@ -27,9 +27,5 @@ class Operation(BaseOperation):
         pass
 
     def run(self, applicant_tool: HHApplicantTool) -> None:
-        try:
-            applicant_tool.api_client.refresh_access_token()
-            print("✅ Токен обновлен!")
-        except ApiError as ex:
-            print_err("❗", ex)
-            return 1
+        applicant_tool.api_client.refresh_access_token()
+        print("✅ Токен обновлен!")
