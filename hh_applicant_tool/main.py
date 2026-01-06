@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sqlite3
 import sys
@@ -37,6 +38,72 @@ class BaseOperation:
 
 
 OPERATIONS = "operations"
+
+
+DATABASE_SCHEMA = """\
+CREATE TABLE IF NOT EXISTS vacancies (
+    id                    INTEGER PRIMARY KEY,
+    name                  TEXT NOT NULL,
+
+    employer_id           INTEGER,
+    employer_name         TEXT,
+
+    area_id               INTEGER,
+    area_name             TEXT,
+
+    workplace_city        TEXT,
+    workplace_lat         REAL,
+    workplace_lng         REAL,
+    workplace_raw         TEXT,
+
+    salary_from           INTEGER,
+    salary_to             INTEGER,
+    salary_currency       TEXT,
+    salary_gross          BOOLEAN,
+    salary_mode_id        TEXT,
+    salary_mode_name      TEXT,
+
+    experience_id         TEXT,
+    experience_name       TEXT,
+
+    schedule_id           TEXT,
+    schedule_name         TEXT,
+
+    employment_id         TEXT,
+    employment_name       TEXT,
+
+    work_format_id        TEXT,
+    work_format_name      TEXT,
+
+    working_hours_id      TEXT,
+    working_hours_name    TEXT,
+
+    working_days_id       TEXT,
+    working_days_name     TEXT,
+
+    published_at          TEXT,
+    created_at            TEXT,
+    initial_created_at    TEXT,
+
+    archived              BOOLEAN,
+    approved              BOOLEAN,
+
+    url                   TEXT,
+
+    raw_json              TEXT NOT NULL
+);
+
+
+CREATE TABLE IF NOT EXISTS negotiations (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    vacancy_id       INTEGER NOT NULL,
+    resume_id        TEXT NOT NULL,
+    message          TEXT,
+    applied_at       TEXT DEFAULT (DATETIME('now', 'localtime')),
+    status           TEXT DEFAULT 'response',
+    FOREIGN KEY (vacancy_id) REFERENCES vacancies (id)
+);
+"""
 
 
 class Namespace(argparse.Namespace):
@@ -170,7 +237,106 @@ class HHApplicantTool:
 
     @cached_property
     def database(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.config_path / DEFAULT_DATABASE_FILENAME)
+        db_path = self.config_path / DEFAULT_DATABASE_FILENAME
+        conn = sqlite3.connect(db_path)
+
+        # Инициализация именно вашей схемы
+        self._init_db(conn)
+
+        return conn
+
+    def save_negotiation(self, vacancy_id: int, resume_id: str, message: str) -> None:
+        """Фиксирует факт успешного отклика в базе."""
+        sql = """
+        INSERT INTO negotiations (vacancy_id, resume_id, message)
+        VALUES (?, ?, ?)
+        """
+        self.databas.execute(sql, (vacancy_id, resume_id, message))
+        self.databas.commit()
+
+    def save_vacancy(self, v: dict[str, Any]) -> None:
+        # Вложенные объекты
+        emp = v.get("employer") or {}
+        area = v.get("area") or {}
+        addr = v.get("address") or {}
+        sal = v.get("salary") or {}
+        sal_range = v.get("salary_range") or {}
+        sal_mode = sal_range.get("mode") or {}
+        exp = v.get("experience") or {}
+        sched = v.get("schedule") or {}
+        empl = v.get("employment") or {}
+
+        # Массивы: берем первый элемент для быстрой фильтрации в БД
+        w_format = v.get("work_format", [{}])[0] if v.get("work_format") else {}
+        w_hours = v.get("working_hours", [{}])[0] if v.get("working_hours") else {}
+        w_days = (
+            v.get("work_schedule_by_days", [{}])[0]
+            if v.get("work_schedule_by_days")
+            else {}
+        )
+
+        sql = """
+        INSERT OR REPLACE INTO vacancies (
+            id, name, employer_id, employer_name, area_id, area_name,
+            workplace_city, workplace_lat, workplace_lng, workplace_raw,
+            salary_from, salary_to, salary_currency, salary_gross,
+            salary_mode_id, salary_mode_name, experience_id, experience_name,
+            schedule_id, schedule_name, employment_id, employment_name,
+            work_format_id, work_format_name, working_hours_id, working_hours_name,
+            working_days_id, working_days_name, published_at, created_at,
+            initial_created_at, archived, approved, url, raw_json
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        """
+
+        params = (
+            v.get("id"),
+            v.get("name"),
+            emp.get("id"),
+            emp.get("name"),
+            area.get("id"),
+            area.get("name"),
+            addr.get("city"),
+            addr.get("lat"),
+            addr.get("lng"),
+            addr.get("raw"),
+            sal.get("from"),
+            sal.get("to"),
+            sal.get("currency"),
+            sal.get("gross"),
+            sal_mode.get("id"),
+            sal_mode.get("name"),
+            exp.get("id"),
+            exp.get("name"),
+            sched.get("id"),
+            sched.get("name"),
+            empl.get("id"),
+            empl.get("name"),
+            w_format.get("id"),
+            w_format.get("name"),
+            w_hours.get("id"),
+            w_hours.get("name"),
+            w_days.get("id"),
+            w_days.get("name"),
+            v.get("published_at"),
+            v.get("created_at"),
+            v.get("initial_created_at"),
+            v.get("archived"),
+            v.get("approved"),
+            v.get("alternate_url"),
+            json.dumps(v, ensure_ascii=False),
+        )
+
+        self.database.execute(sql, params)
+        self.database.commit()
+
+    def _init_db(self, conn: sqlite3.Connection) -> None:
+        """Создает таблицу vacancies в строгом соответствии с заданной схемой."""
+        conn.executescript(DATABASE_SCHEMA)
+        conn.commit()
+        logger.debug("Database initialized with the provided schema.")
 
     @cached_property
     def api_client(self) -> ApiClient:
@@ -194,6 +360,10 @@ class HHApplicantTool:
 
     def get_resumes(self) -> dict:
         return self.api_client.get("/resumes/mine")
+
+    def first_resume_id(self):
+        resumes = self.api_client.get("/resumes/mine")
+        return resumes["items"][0]["id"]
 
     def _setup_logger(self) -> None:
         args = self.args
@@ -250,11 +420,13 @@ class HHApplicantTool:
         if self.args.run:
             try:
                 res = self.args.run(self)
-                if (token := self.api_client.get_access_token()) != self.config[
-                    "token"
-                ]:
-                    logger.info("token updated!")
-                    self.config.save(token=token)
+
+                if self.api_client.access_token != self.config.get("token", {}).get(
+                    "access_token"
+                ):
+                    logger.info("access token updated!")
+                    self.config.save(token=self.api_client.get_access_token())
+
                 return res
             except KeyboardInterrupt:
                 logger.warning("Interrupted by user")
