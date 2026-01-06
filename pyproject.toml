@@ -7,7 +7,7 @@ repository = "https://github.com/s3rgeym/hh-applicant-tool"
 # Впишите себя, кто причастен к каким-либо изменениям
 authors = ["Senior YAML Developer <yamldeveloper@proton.me>"]
 readme = "README.md"
-packages = [{include = "applicant_tool"}]
+packages = [{include = "hh_applicant_tool"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
