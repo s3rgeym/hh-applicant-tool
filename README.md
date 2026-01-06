@@ -279,6 +279,9 @@ $ hh-applicant-tool apply-similar
 # Поднимаем резюме
 $ hh-applicant-tool update-resumes
 
+# Проверяем отклики и сохраняем отчет о приглпшениях
+$ hh-applicant-tool check-negotiations -r report.csv
+
 # Чистим заявки и баним за отказы говноконторы
 $ hh-applicant-tool check-negotiations --clean --blacklist-discard
 
