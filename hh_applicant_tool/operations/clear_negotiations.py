@@ -1,7 +1,9 @@
-# Этот модуль можно использовать как образец для других
+from __future__ import annotations
+
 import argparse
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 
 from ..api import ApiClient, ClientError
 from ..constants import INVALID_ISO8601_FORMAT
@@ -10,6 +12,10 @@ from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse
 from ..utils import print_err, shorten
 
+if TYPE_CHECKING:
+    from ..main import HHApplicantTool
+
+
 logger = logging.getLogger(__package__)
 
 
@@ -17,6 +23,7 @@ class Namespace(BaseNamespace):
     older_than: int
     blacklist_discard: bool
     all: bool
+    dry_rub: bool
 
 
 class Operation(BaseOperation):
@@ -39,6 +46,11 @@ class Operation(BaseOperation):
             help="Если установлен, то заблокирует работодателя в случае отказа, чтобы его вакансии не отображались в возможных",
             action=argparse.BooleanOptionalAction,
         )
+        parser.add_argument(
+            "--dry-run",
+            help="Запустить, но реально ничего не делать",
+            action=argparse.BooleanOptionalAction,
+        )
 
     def _get_active_negotiations(self, api_client: ApiClient) -> list[dict]:
         rv = []
@@ -54,7 +66,9 @@ class Operation(BaseOperation):
                 break
         return rv
 
-    def run(self, args: Namespace, api_client: ApiClient, *_) -> None:
+    def run(self, applicant_tool: HHApplicantTool) -> None:
+        args = applicant_tool.args
+        api_client = applicant_tool.api_client
         negotiations = self._get_active_negotiations(api_client)
         print("Всего активных:", len(negotiations))
         for item in negotiations:
@@ -75,19 +89,18 @@ class Operation(BaseOperation):
                 )
             ):
                 decline_allowed = item.get("decline_allowed") or False
-                r = api_client.delete(
-                    f"/negotiations/active/{item['id']}",
-                    with_decline_message=decline_allowed,
-                )
-                assert {} == r
+                if not args.dry_run:
+                    r = api_client.delete(
+                        f"/negotiations/active/{item['id']}",
+                        with_decline_message=decline_allowed,
+                    )
+                    assert {} == r
                 vacancy = item["vacancy"]
                 print(
                     "❌ Удалили",
                     state["name"].lower(),
                     vacancy["alternate_url"],
-                    "(",
                     shorten(vacancy["name"]),
-                    ")",
                 )
                 if is_discard and args.blacklist_discard:
                     employer = vacancy.get("employer", {})
@@ -95,15 +108,16 @@ class Operation(BaseOperation):
                         # Работодатель удален или скрыт
                         continue
                     try:
-                        r = api_client.put(f"/employers/blacklisted/{employer['id']}")
-                        assert not r
+                        if not args.dry_run:
+                            r = api_client.put(
+                                f"/employers/blacklisted/{employer['id']}"
+                            )
+                            assert not r
                         print(
                             "🚫 Заблокировали",
                             employer["alternate_url"],
-                            "(",
                             shorten(employer["name"]),
-                            ")",
                         )
                     except ClientError as ex:
-                        print_err("❗ Ошибка:", ex)
-        print("🧹 Чистка заявок завершена!")
+                        print_err("❗", ex)
+        print("✅ Чистка заявок завершена!")

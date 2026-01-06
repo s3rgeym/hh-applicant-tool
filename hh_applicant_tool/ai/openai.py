@@ -2,10 +2,12 @@ import logging
 
 import requests
 
+from .base import AIError
+
 logger = logging.getLogger(__package__)
 
 
-class OpenAIError(Exception):
+class OpenAIError(AIError):
     pass
 
 
@@ -18,7 +20,7 @@ class OpenAIChat:
         model: str,
         system_prompt: str,
         proxies: dict[str, str] | None = None,
-        session: requests.Session | None = None
+        session: requests.Session | None = None,
     ):
         self.token = token
         self.model = model
@@ -32,21 +34,14 @@ class OpenAIChat:
         }
 
     def send_message(self, message: str) -> str:
-
         payload = {
             "model": self.model,
             "messages": [
-                {
-                    "role": "system",
-                    "content": self.system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": message
-                }
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": message},
             ],
             "temperature": 0.7,
-            "max_completion_tokens": 1000
+            "max_completion_tokens": 1000,
         }
 
         try:
@@ -55,14 +50,14 @@ class OpenAIChat:
                 json=payload,
                 headers=self.default_headers(),
                 proxies=self.proxies,
-                timeout=30
+                timeout=30,
             )
             response.raise_for_status()
 
             data = response.json()
-            if 'error' in data:
-                raise OpenAIError(data['error']['message'])
-            
+            if "error" in data:
+                raise OpenAIError(data["error"]["message"])
+
             assistant_message = data["choices"][0]["message"]["content"]
 
             return assistant_message

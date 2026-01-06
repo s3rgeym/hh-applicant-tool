@@ -1,19 +1,24 @@
 from __future__ import annotations
-import os
+
 import argparse
 import logging
+import os
 import random
+import re
 import time
-from typing import Tuple
+from itertools import count
+from typing import TYPE_CHECKING, Tuple
 
-from ..api import ApiError, ApiClient
+from ..api import ApiError
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..mixins import GetResumeIdMixin
 from ..utils import parse_interval, random_text
-from ..telemetry_client import TelemetryClient, TelemetryError
-import re
-from itertools import count
+
+if TYPE_CHECKING:
+    from ..main import HHApplicantTool
+    # from ..telemetry_client import TelemetryClient, TelemetryError
+
 
 try:
     import readline
@@ -86,15 +91,17 @@ class Operation(BaseOperation, GetResumeIdMixin):
             action=argparse.BooleanOptionalAction,
         )
 
-    def run(
-        self, args: Namespace, api_client: ApiClient, telemetry_client: TelemetryClient
-    ) -> None:
-        self.api_client = api_client
-        self.telemetry_client = telemetry_client
-        self.enable_telemetry = not args.disable_telemetry
+    def run(self, applicant_tool: HHApplicantTool) -> None:
+        args = applicant_tool.args
+        self.applicant_tool = applicant_tool
+        self.api_client = applicant_tool.api_client
+        # self.telemetry_client = telemetry_client
+        # self.enable_telemetry = not args.disable_telemetry
         self.resume_id = self._get_resume_id()
         self.reply_min_interval, self.reply_max_interval = args.reply_interval
-        self.reply_message = args.reply_message or args.config["reply_message"]
+        self.reply_message = args.reply_message or applicant_tool.config.get(
+            "reply_message"
+        )
         # assert self.reply_message, "`reply_message` должен быть передан чеерез аргументы или настройки"
         self.max_pages = args.max_pages
         self.dry_run = args.dry_run
@@ -115,7 +122,7 @@ class Operation(BaseOperation, GetResumeIdMixin):
     def _reply_chats(self) -> None:
         blacklisted = self._get_blacklisted()
         logger.debug(f"{blacklisted = }")
-        me = self.me = self.api_client.get("/me")
+        me = self.me = self.applicant_tool.get_me()
 
         telemetry_data = {"links": []}
 
@@ -190,28 +197,28 @@ class Operation(BaseOperation, GetResumeIdMixin):
 
                     page = messages_res["pages"] - 1
 
-                if self.enable_telemetry:
-                    # Собираем ссылки на тестовые задания
-                    for message in message_history:
-                        if message.startswith("-> "):
-                            continue
-                        # Тестовые задания и тп
-                        for link in GOOGLE_DOCS_RE.findall(message):
-                            document_data = {
-                                "vacancy_url": vacancy.get("alternate_url"),
-                                "vacancy_name": vacancy.get("name"),
-                                "salary": (
-                                    f"{salary.get('from', '...')}-{salary.get('to', '...')} {salary.get('currency', 'RUR')}"  # noqa: E501
-                                    if salary
-                                    else None
-                                ),
-                                "employer_url": vacancy.get("employer", {}).get(
-                                    "alternate_url"
-                                ),
-                                "link": link,
-                            }
+                # if self.enable_telemetry:
+                #     # Собираем ссылки на тестовые задания
+                #     for message in message_history:
+                #         if message.startswith("-> "):
+                #             continue
+                #         # Тестовые задания и тп
+                #         for link in GOOGLE_DOCS_RE.findall(message):
+                #             document_data = {
+                #                 "vacancy_url": vacancy.get("alternate_url"),
+                #                 "vacancy_name": vacancy.get("name"),
+                #                 "salary": (
+                #                     f"{salary.get('from', '...')}-{salary.get('to', '...')} {salary.get('currency', 'RUR')}"  # noqa: E501
+                #                     if salary
+                #                     else None
+                #                 ),
+                #                 "employer_url": vacancy.get("employer", {}).get(
+                #                     "alternate_url"
+                #                 ),
+                #                 "link": link,
+                #             }
 
-                            telemetry_data["links"].append(document_data)
+                #             telemetry_data["links"].append(document_data)
 
                 if os.getenv("TEST_SEND_TELEMETRY") in ["1", "y", "Y"]:
                     continue
@@ -303,12 +310,12 @@ class Operation(BaseOperation, GetResumeIdMixin):
             except ApiError as ex:
                 logger.error(ex)
 
-        if self.enable_telemetry and len(telemetry_data["links"]) > 0:
-            logger.debug(telemetry_data)
-            try:
-                self.telemetry_client.send_telemetry("/docs", telemetry_data)
-            except TelemetryError as ex:
-                logger.warning(ex, exc_info=True)
+        # if self.enable_telemetry and len(telemetry_data["links"]) > 0:
+        #     logger.debug(telemetry_data)
+        #     try:
+        #         self.telemetry_client.send_telemetry("/docs", telemetry_data)
+        #     except TelemetryError as ex:
+        #         logger.warning(ex, exc_info=True)
 
         print("📝 Сообщения разосланы!")
 

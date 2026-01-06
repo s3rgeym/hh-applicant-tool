@@ -1,17 +1,19 @@
-# -*- coding: utf-8 -*-
-# mypy: disable-error-code=disable-error-code
-#
-# MyPy не может найти этот модуль, но это нормально
-# так как опционально и может быть не установлен
+from __future__ import annotations
+
 import argparse
 import logging
 import os
 import shutil
 import subprocess
 import sys
+from typing import TYPE_CHECKING
 
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
+
+if TYPE_CHECKING:
+    from ..main import HHApplicantTool
+
 
 logger = logging.getLogger(__package__)
 
@@ -32,8 +34,8 @@ class Operation(BaseOperation):
             help="Следить за файлом (режим follow, аналог less +F)",
         )
 
-    def run(self, args: Namespace, _, __) -> None:
-        log_path = args.log_file
+    def run(self, applicant_tool: HHApplicantTool) -> None:
+        log_path = applicant_tool.log_file
 
         if not os.path.exists(log_path):
             logger.error("Файл лога не найден: %s", log_path)
@@ -58,7 +60,7 @@ class Operation(BaseOperation):
             # -R позволяет отображать цвета (ANSI codes)
             # -S отключает перенос строк (удобно для логов)
             cmd.extend(["-R", "-S"])
-            if args.follow:
+            if applicant_tool.args.follow:
                 # В less режим слежения включается через команду +F
                 cmd.append("+F")
 

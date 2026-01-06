@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sqlite3
 import sys
+from functools import cached_property
 from importlib import import_module
 from logging.handlers import RotatingFileHandler
 from os import getenv
@@ -13,12 +15,13 @@ from typing import Sequence
 from .api import ApiClient
 from .constants import ANDROID_CLIENT_ID, ANDROID_CLIENT_SECRET
 from .log import ColorHandler, RedactingFilter
-from .telemetry_client import TelemetryClient
 from .utils import Config, android_user_agent, fix_windows_color_output, get_config_path
 
-CONFIG_DIR = get_config_path() / (__package__ or "").replace("_", "-")
-DEFAULT_CONFIG_PATH = CONFIG_DIR / "config.json"
-DEFAULT_LOG_PATH = CONFIG_DIR / "log.txt"
+DEFAULT_CONFIG_DIR = get_config_path() / (__package__ or "").replace("_", "-")
+DEFAULT_CONFIG_FILENAME = "config.json"
+DEFAULT_LOG_FILENAME = "log.txt"
+DEFAULT_DATABASE_FILENAME = "data"
+DEFAULT_PROFILE_ID = "default"
 
 logger = logging.getLogger(__package__)
 
@@ -28,9 +31,7 @@ class BaseOperation:
 
     def run(
         self,
-        args: argparse.Namespace,
-        api_client: ApiClient,
-        telemetry_client: TelemetryClient,
+        applicant_tool: HHApplicantTool,
     ) -> None | int:
         raise NotImplementedError()
 
@@ -39,13 +40,13 @@ OPERATIONS = "operations"
 
 
 class Namespace(argparse.Namespace):
-    config: Config
+    profile_id: str
+    config_dir: Path
     verbosity: int
     delay: float
     user_agent: str
     proxy_url: str
     disable_telemetry: bool
-    log_file: Path
 
 
 class HHApplicantTool:
@@ -53,7 +54,7 @@ class HHApplicantTool:
 
     Исходники и предложения: <https://github.com/s3rgeym/hh-applicant-tool>
 
-    Группа поддержки: <https://t.me/hh_applicant_tool>
+    Группа поддержки: <https://t.me/applicant_tool>
     """
 
     class ArgumentFormatter(
@@ -68,16 +69,24 @@ class HHApplicantTool:
             formatter_class=self.ArgumentFormatter,
         )
         parser.add_argument(
+            "-p",
+            "--profile-id",
+            "--profile",
+            help="Используемый профиль — поддиректория в --config-dir",
+            default=DEFAULT_PROFILE_ID,
+        )
+        parser.add_argument(
             "-c",
+            "--config-dir",
             "--config",
-            help="Путь до файла конфигурации",
-            type=Config,
-            default=Config(DEFAULT_CONFIG_PATH),
+            help="Путь до директории с конфигом",
+            type=Path,
+            default=DEFAULT_CONFIG_DIR,
         )
         parser.add_argument(
             "-v",
             "--verbosity",
-            help="При использовании от одного и более раз увеличивает количество отладочной информации в выводе",
+            help="При использовании от одного и более раз увеличивает количество отладочной информации в выводе",  # noqa: E501
             action="count",
             default=0,
         )
@@ -96,18 +105,6 @@ class HHApplicantTool:
             "--proxy-url",
             help="Прокси, используемый для запросов и авторизации",
         )
-        parser.add_argument(
-            "--disable-telemetry",
-            default=False,
-            action=argparse.BooleanOptionalAction,
-            help="Отключить телеметрию",
-        )
-        parser.add_argument(
-            "--log-file",
-            type=Path,
-            default=DEFAULT_LOG_PATH,
-            help="Путь до файла лога",
-        )
         subparsers = parser.add_subparsers(help="commands")
         package_dir = Path(__file__).resolve().parent / OPERATIONS
         for _, module_name, _ in iter_modules([str(package_dir)]):
@@ -118,17 +115,19 @@ class HHApplicantTool:
 
             # 2. Формируем варианты имен
             kebab_name = "-".join(words)  # call-api
+            aliases = []
 
-            # camelCase: первое слово маленькими, остальные с большой
-            camel_case_name = words[0] + "".join(word.title() for word in words[1:])
+            if kebab_name != module_name:
+                # camelCase: первое слово маленькими, остальные с большой
+                aliases.append(words[0] + "".join(word.title() for word in words[1:]))
 
-            # flatcase: всё слитно и в нижнем регистре
-            flat_name = "".join(words)  # callapi
+                # flatcase: всё слитно и в нижнем регистре
+                aliases.append("".join(words))
 
             op_parser = subparsers.add_parser(
                 kebab_name,
                 # Добавляем остальные варианты в псевдонимы
-                aliases=[camel_case_name, flat_name],
+                aliases=aliases,
                 description=op.__doc__,
                 formatter_class=self.ArgumentFormatter,
             )
@@ -137,8 +136,8 @@ class HHApplicantTool:
         parser.set_defaults(run=None)
         return parser
 
-    def _get_proxies(self, args: Namespace) -> dict[str, str]:
-        proxy_url = args.proxy_url or args.config.get("proxy_url")
+    def _get_proxies(self) -> dict[str, str]:
+        proxy_url = self.args.proxy_url or self.config.get("proxy_url")
 
         if proxy_url:
             return {
@@ -157,8 +156,26 @@ class HHApplicantTool:
 
         return proxies
 
-    def _get_api_client(self, args: Namespace) -> ApiClient:
-        config = args.config
+    @property
+    def config_path(self) -> Path:
+        return self.args.config_dir / self.args.profile_id
+
+    @cached_property
+    def config(self) -> Config:
+        return Config(self.config_path / DEFAULT_CONFIG_FILENAME)
+
+    @cached_property
+    def log_file(self) -> Path:
+        return self.config_path / DEFAULT_LOG_FILENAME
+
+    @cached_property
+    def database(self) -> sqlite3.Connection:
+        return sqlite3.connect(self.config_path / DEFAULT_DATABASE_FILENAME)
+
+    @cached_property
+    def api_client(self) -> ApiClient:
+        args = self.args
+        config = self.config
         token = config.get("token", {})
         api = ApiClient(
             client_id=config.get("client_id", ANDROID_CLIENT_ID),
@@ -168,11 +185,19 @@ class HHApplicantTool:
             access_expires_at=token.get("access_expires_at"),
             delay=args.delay,
             user_agent=config["user_agent"] or android_user_agent(),
-            proxies=self._get_proxies(args),
+            proxies=self._get_proxies(),
         )
         return api
 
-    def _setup_logger(self, args: Namespace) -> None:
+    def get_me(self) -> dict:
+        return self.api_client.get("/me")
+
+    def get_resumes(self) -> dict:
+        return self.api_client.get("/resumes/mine")
+
+    def _setup_logger(self) -> None:
+        args = self.args
+
         # В лог-файл пишем все!
         logger.setLevel(logging.DEBUG)
 
@@ -183,14 +208,9 @@ class HHApplicantTool:
         color_handler.setFormatter(logging.Formatter("[%(levelname).1s] %(message)s"))
         color_handler.setLevel(log_level)
 
-        CONFIG_DIR.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
         # Логи
         file_handler = RotatingFileHandler(
-            args.log_file,
+            self.log_file,
             maxBytes=5 * 1 << 20,
             # backupCount=1,
             encoding="utf-8",
@@ -202,8 +222,9 @@ class HHApplicantTool:
 
         redactor = RedactingFilter(
             [
-                "USER[A-Z0-9]{60,}",  # токены
-                r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}",  # telemetry client id
+                r"\bUSER[A-Z0-9]{60}\b",
+                r"\b[a-fA-F0-9]{32}\b",  # request_id, возвращаемый сервером содержит хеш от айпи  # noqa: E501
+                ANDROID_CLIENT_SECRET,
             ]
         )
 
@@ -213,29 +234,27 @@ class HHApplicantTool:
 
     def run(self, argv: Sequence[str] | None) -> None | int:
         parser = self.create_parser()
-        args = parser.parse_args(argv, namespace=Namespace())
+        self.args = parser.parse_args(argv, namespace=Namespace())
 
         if sys.platform == "win32":
             fix_windows_color_output()
 
-        self._setup_logger(args)
+        # Создаем путь до конфига
+        self.config_path.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
-        if args.run:
+        self._setup_logger()
+
+        if self.args.run:
             try:
-                if not args.config["telemetry_client_id"]:
-                    import uuid
-
-                    args.config.save(telemetry_client_id=str(uuid.uuid4()))
-                api_client = self._get_api_client(args)
-                telemetry_client = TelemetryClient(
-                    telemetry_client_id=args.config["telemetry_client_id"],
-                    proxies=api_client.proxies.copy(),
-                )
-                # 0 or None = success
-                res = args.run(args, api_client, telemetry_client)
-                if (token := api_client.get_access_token()) != args.config["token"]:
+                res = self.args.run(self)
+                if (token := self.api_client.get_access_token()) != self.config[
+                    "token"
+                ]:
                     logger.info("token updated!")
-                    args.config.save(token=token)
+                    self.config.save(token=token)
                 return res
             except KeyboardInterrupt:
                 logger.warning("Interrupted by user")

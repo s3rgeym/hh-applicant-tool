@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 page=0
 per_page=100
 while true; do
-  output=$(python -m hh_applicant_tool -vv call-api /negotiations "page=$page" "per_page=$per_page")
+  output=$(python -m applicant_tool -vv call-api /negotiations "page=$page" "per_page=$per_page")
   jq -r '.items[].vacancy.employer.url' <<< "$output"
   pages=$(jq .pages <<< "$output")
   ((++page))

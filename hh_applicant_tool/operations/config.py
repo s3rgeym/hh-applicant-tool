@@ -1,13 +1,19 @@
+from __future__ import annotations
+
 import argparse
 import json
 import logging
 import os
 import platform
 import subprocess
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
+
+if TYPE_CHECKING:
+    from ..main import HHApplicantTool
+
 
 logger = logging.getLogger(__package__)
 
@@ -72,13 +78,6 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         group = parser.add_mutually_exclusive_group()
         group.add_argument(
-            "-p",
-            "--show-path",
-            "--path",
-            action="store_true",
-            help="Вывести полный путь к конфигу",
-        )
-        group.add_argument(
             "-e",
             "--edit",
             action="store_true",
@@ -95,31 +94,40 @@ class Operation(BaseOperation):
         group.add_argument(
             "-u", "--unset", metavar="KEY", help="Удалить ключ из конфига"
         )
+        group.add_argument(
+            "-S",
+            "--show-path",
+            "--show",
+            action="store_true",
+            help="Вывести полный путь к конфигу",
+        )
 
-    def run(self, args: Namespace, *_) -> None:
+    def run(self, applicant_tool: HHApplicantTool) -> None:
+        args = applicant_tool.args
+        config = applicant_tool.config
         if args.set:
             key, value = args.set
-            set_value(args.config, key, parse_scalar(value))
-            args.config.save()
+            set_value(config, key, parse_scalar(value))
+            config.save()
             logger.info("Значение '%s' для ключа '%s' сохранено.", value, key)
             return
 
         if args.unset:
             key = args.unset
-            if del_value(args.config, key):
-                args.config.save()
+            if del_value(config, key):
+                config.save()
                 logger.info("Ключ '%s' удален из конфига.", key)
             else:
                 logger.warning("Ключ '%s' не найден в конфиге.", key)
             return
 
         if args.key:
-            value = get_value(args.config, args.key)
+            value = get_value(config, args.key)
             if value is not None:
                 print(value)
             return
 
-        config_path = str(args.config._config_path)
+        config_path = str(config._config_path)
         if args.show_path:
             print(config_path)
             return
@@ -129,7 +137,7 @@ class Operation(BaseOperation):
             return
 
         # Default action: show content
-        print(json.dumps(args.config, indent=2, ensure_ascii=False))
+        print(json.dumps(config, indent=2, ensure_ascii=False))
 
     def _open_editor(self, filepath: str) -> None:
         """Открывает файл в редакторе по умолчанию в зависимости от ОС."""

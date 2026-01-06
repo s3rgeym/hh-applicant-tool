@@ -37,11 +37,11 @@ class BaseClient:
 
     def __post_init__(self) -> None:
         self.lock = Lock()
+        # logger.debug(f"user agent: {self.user_agent}")
         if not self.session:
             self.session = requests.session()
-        if self.proxies:
-            logger.debug(f"client proxies: {self.proxies}")
-        logger.debug(f"default headers: {self.default_headers()}")
+        # if self.proxies:
+        #     logger.debug(f"client proxies: {self.proxies}")
 
     def default_headers(self) -> dict[str, str]:
         return {

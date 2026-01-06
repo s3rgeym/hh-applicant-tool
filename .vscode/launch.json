@@ -8,41 +8,45 @@
       "name": "Authorize",
       "type": "python",
       "request": "launch",
-      "module": "hh_applicant_tool",
-      "args": ["-vv", "authorize"],
+      "module": "applicant_tool",
+      "args": [
+        "-vv",
+        "authorize"
+      ],
       "justMyCode": true
     },
     {
       "name": "Apply Similar Vaciancies",
       "type": "python",
       "request": "launch",
-      "module": "hh_applicant_tool",
-      "args": ["-vv", "apply-similar"],
+      "module": "applicant_tool",
+      "args": [
+        "-vv",
+        "apply-similar"
+      ],
       "justMyCode": true
     },
     {
       "name": "Reply Employers",
       "type": "python",
       "request": "launch",
-      "module": "hh_applicant_tool",
-      "args": ["-vv", "reply-employers"],
+      "module": "applicant_tool",
+      "args": [
+        "-vv",
+        "reply-employers"
+      ],
       "justMyCode": true
     },
-
-
-
-
-
-
-
-
-
     {
       "name": "Clear Negotiations",
       "type": "python",
       "request": "launch",
-      "module": "hh_applicant_tool",
-      "args": ["-vv", "clear-negotiations", "--blacklist-discard"],
+      "module": "applicant_tool",
+      "args": [
+        "-vv",
+        "clear-negotiations",
+        "--blacklist-discard"
+      ],
       "justMyCode": true
     }
   ]
