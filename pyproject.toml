@@ -27,7 +27,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-hh-applicant-tool = "applicant_tool.main:main"
+hh-applicant-tool = "hh_applicant_tool.main:main"
 
 # Он заебал агриться на старый код, который был написан до появления агрессивной
 # проверки типов в pyright
