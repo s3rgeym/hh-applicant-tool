@@ -250,8 +250,8 @@ class HHApplicantTool:
         INSERT INTO negotiations (vacancy_id, resume_id, message)
         VALUES (?, ?, ?)
         """
-        self.databas.execute(sql, (vacancy_id, resume_id, message))
-        self.databas.commit()
+        self.database.execute(sql, (vacancy_id, resume_id, message))
+        self.database.commit()
 
     def save_vacancy(self, v: dict[str, Any]) -> None:
         # Вложенные объекты
