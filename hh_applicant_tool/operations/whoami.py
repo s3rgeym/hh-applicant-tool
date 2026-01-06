@@ -1,10 +1,16 @@
 # Этот модуль можно использовать как образец для других
+from __future__ import annotations
+
 import argparse
 import logging
+from typing import TYPE_CHECKING
 
-from ..api import ApiClient
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
+
+if TYPE_CHECKING:
+    from ..main import HHApplicantTool
+
 
 logger = logging.getLogger(__package__)
 
@@ -24,7 +30,8 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, args: Namespace, api_client: ApiClient, _) -> None:
+    def run(self, applicant_tool: HHApplicantTool) -> None:
+        api_client = applicant_tool.api_client
         result = api_client.get("me")
         full_name = " ".join(
             filter(

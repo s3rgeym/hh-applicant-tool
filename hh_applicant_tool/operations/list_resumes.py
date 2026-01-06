@@ -1,14 +1,19 @@
-# Этот модуль можно использовать как образец для других
+from __future__ import annotations
+
 import argparse
 import logging
+from typing import TYPE_CHECKING
 
 from prettytable import PrettyTable
 
-from ..api import ApiClient
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
 from ..types import ApiListResponse
 from ..utils import shorten
+
+if TYPE_CHECKING:
+    from ..main import HHApplicantTool
+
 
 logger = logging.getLogger(__package__)
 
@@ -23,8 +28,8 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, args: Namespace, api_client: ApiClient, *_) -> None:
-        resumes: ApiListResponse = api_client.get("/resumes/mine")
+    def run(self, applicant_tool: HHApplicantTool) -> None:
+        resumes: ApiListResponse = applicant_tool.get_resumes()
         t = PrettyTable(field_names=["ID", "Название", "Статус"], align="l", valign="t")
         t.add_rows(
             [

@@ -1,4 +1,5 @@
-@reboot /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json apply-similar
-0 13,21 * * * /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json apply-similar
-@reboot /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json refresh-token
-0 19 * * * /usr/local/bin/python -m hh_applicant_tool -vv -c /app/config.json refresh-token
+# shellcheck disable=SC2148
+@reboot /usr/local/bin/python -m applicant_tool -vv -c /app/config apply-similar
+0 13,21 * * * /usr/local/bin/python -m applicant_tool -vv -c /app/config apply-similar
+@reboot /usr/local/bin/python -m applicant_tool -vv -c /app/config refresh-token
+0 19 * * * /usr/local/bin/python -m applicant_tool -vv -c /app/config refresh-token

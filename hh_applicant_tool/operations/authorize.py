@@ -1,14 +1,20 @@
+from __future__ import annotations
+
 import argparse
 import asyncio
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
+from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlsplit
 
 from playwright.async_api import async_playwright
 
-from ..api import ApiClient
-from ..main import BaseOperation, Namespace
+from ..main import BaseOperation
+
+if TYPE_CHECKING:
+    from ..main import HHApplicantTool
+
 
 HH_ANDROID_SCHEME = "hhandroid"
 
@@ -62,15 +68,17 @@ class Operation(BaseOperation):
             help="Показать окно браузера для отладки (отключает headless режим).",
         )
 
-    def run(self, args: Namespace, api_client: ApiClient, *_):
-        self._args = args
+    def run(self, applicant_tool: HHApplicantTool) -> None:
+        self._args = applicant_tool.args
         try:
-            asyncio.run(self._main(args, api_client))
+            asyncio.run(self._main(applicant_tool))
         except (KeyboardInterrupt, asyncio.TimeoutError):
             logger.warning("Что-то пошло не так")
             os._exit(1)
 
-    async def _main(self, args: Namespace, api_client: ApiClient):
+    async def _main(self, applicant_tool: HHApplicantTool) -> None:
+        args = applicant_tool.args
+        api_client = applicant_tool.api_client
         username = (
             args.username or (await ainput("👤 Введите email или телефон: "))
         ).strip()

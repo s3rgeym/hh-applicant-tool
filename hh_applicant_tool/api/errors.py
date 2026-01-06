@@ -24,11 +24,11 @@ class BadResponse(Exception):
 class ApiError(BadResponse):
     def __init__(self, response: Response, data: dict[str, Any]) -> None:
         self._response = response
-        self._raw = data
+        self._data = data
 
     @property
     def data(self) -> dict:
-        return self._raw
+        return self._data
 
     @property
     def request(self) -> Request:
@@ -42,6 +42,10 @@ class ApiError(BadResponse):
     def response_headers(self) -> CaseInsensitiveDict:
         return self._response.headers
 
+    @property
+    def message(self) -> str:
+        return self._data.get("description") or str(self._data)
+
     #     def __getattr__(self, name: str) -> Any:
     #         try:
     #             return self._raw[name]
@@ -49,7 +53,7 @@ class ApiError(BadResponse):
     #             raise AttributeError(name) from ex
 
     def __str__(self) -> str:
-        return str(self._raw)
+        return self.message
 
     @staticmethod
     def is_limit_exceeded(data) -> bool:

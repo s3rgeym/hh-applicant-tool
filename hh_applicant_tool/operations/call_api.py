@@ -1,12 +1,18 @@
-# Этот модуль можно использовать как образец для других
+from __future__ import annotations
+
 import argparse
 import json
 import logging
 import sys
+from typing import TYPE_CHECKING
 
-from ..api import ApiClient, ApiError
+from ..api import ApiError
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
+
+if TYPE_CHECKING:
+    from ..main import HHApplicantTool
+
 
 logger = logging.getLogger(__package__)
 
@@ -32,7 +38,9 @@ class Operation(BaseOperation):
             "-m", "--method", "--meth", "-X", default="GET", help="HTTP Метод"
         )
 
-    def run(self, args: Namespace, api_client: ApiClient, *_) -> None:
+    def run(self, applicant_tool: HHApplicantTool) -> None:
+        args = applicant_tool.args
+        api_client = applicant_tool.api_client
         params = dict(x.split("=", 1) for x in args.param)
         try:
             result = api_client.request(args.method, args.endpoint, params=params)
