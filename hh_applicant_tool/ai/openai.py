@@ -19,13 +19,11 @@ class OpenAIChat:
         token: str,
         model: str,
         system_prompt: str,
-        proxies: dict[str, str] | None = None,
         session: requests.Session | None = None,
     ):
         self.token = token
         self.model = model
         self.system_prompt = system_prompt
-        self.proxies = proxies
         self.session = session or requests.session()
 
     def default_headers(self) -> dict[str, str]:

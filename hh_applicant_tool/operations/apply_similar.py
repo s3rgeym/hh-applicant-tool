@@ -3,9 +3,8 @@ from __future__ import annotations
 import argparse
 import logging
 import random
-import time
 from pathlib import Path
-from typing import TYPE_CHECKING, TextIO
+from typing import TYPE_CHECKING, Iterator, TextIO
 
 from ..ai.base import AIError
 from ..ai.openai import OpenAIChat
@@ -13,12 +12,11 @@ from ..api import BadResponse, Redirect
 from ..api.errors import ApiError, LimitExceeded
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
-from ..types import ApiListResponse, VacancyItem
+from ..types import Paginated, Vacancy
 from ..utils import (
     bool2str,
     list2str,
-    parse_interval,
-    random_text,
+    rand_text,
     shorten,
 )
 
@@ -36,8 +34,6 @@ class Namespace(BaseNamespace):
     force_message: bool
     use_ai: bool
     pre_prompt: str
-    apply_interval: tuple[float, float]
-    page_interval: tuple[float, float]
     order_by: str
     search: str
     schedule: str
@@ -80,7 +76,7 @@ class Operation(BaseOperation):
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
         parser.add_argument(
             "--search",
-            help="Строка поиска для фильтрации вакансий, например, 'москва бухгалтер 100500'",
+            help="Строка поиска для фильтрации вакансий, например, 'москва бухгалтер 100500'",  # noqa: E501
             type=str,
         )
         parser.add_argument(
@@ -88,11 +84,6 @@ class Operation(BaseOperation):
             "--message-list",
             help="Путь до файла, где хранятся сообщения для отклика на вакансии. Каждое сообщение — с новой строки.",  # noqa: E501
             type=argparse.FileType("r", encoding="utf-8", errors="replace"),
-        )
-        parser.add_argument(
-            "--ignore-employers",
-            help="Путь к файлу со списком ID игнорируемых работодателей (по одному ID на строку)",  # noqa: E501
-            type=Path,
         )
         parser.add_argument(
             "-f",
@@ -112,18 +103,6 @@ class Operation(BaseOperation):
             "--prompt",
             help="Добавочный промпт для генерации сопроводительного письма",
             default="Сгенерируй сопроводительное письмо не более 5-7 предложений от моего имени для вакансии",  # noqa: E501
-        )
-        parser.add_argument(
-            "--apply-interval",
-            help="Интервал перед отправкой откликов в секундах (X, X-Y)",
-            default="1-5",
-            type=parse_interval,
-        )
-        parser.add_argument(
-            "--page-interval",
-            help="Интервал перед получением следующей страницы рекомендованных вакансий в секундах (X, X-Y)",  # noqa: E501
-            default="1-3",
-            type=parse_interval,
         )
         parser.add_argument(
             "--total-pages",
@@ -257,138 +236,107 @@ class Operation(BaseOperation):
     ) -> None:
         self.applicant_tool = applicant_tool
         self.api_client = applicant_tool.api_client
-        # self.telemetry_client = telemetry_client
         args: Namespace = applicant_tool.args
-        self.resume_id = args.resume_id or applicant_tool.first_resume_id()
         self.application_messages = self._get_application_messages(args.message_list)
-        self.ignored_employers = self._get_ignored_employers(args.ignore_employers)
-        self.chat = None
-
-        if config := applicant_tool.config.get("openai"):
-            # Это не мой код, поэтому лень править
-            model = "gpt-5.1"
-            system_prompt = "Напиши сопроводительное письмо для отклика на эту вакансию. Не используй placeholder'ы, твой ответ будет отправлен без обработки."  # noqa: E501
-            if "model" in config.keys():
-                model = config["model"]
-            if "system_prompt" in config.keys():
-                system_prompt = config["system_prompt"]
-            self.chat = OpenAIChat(
-                token=config["token"],
-                model=model,
-                system_prompt=system_prompt,
-                proxies=self.api_client.proxies or {},
-            )
-
-        self.pre_prompt = args.pre_prompt
-
-        self.apply_min_interval, self.apply_max_interval = args.apply_interval
-        self.page_min_interval, self.page_max_interval = args.page_interval
-
-        self.force_message = args.force_message
-        self.order_by = args.order_by
-        self.search = args.search
-        self.schedule = args.schedule
-        self.dry_run = args.dry_run
-        self.experience = args.experience
-        self.search_field = args.search_field
-        self.employment = args.employment
         self.area = args.area
-        self.metro = args.metro
-        self.professional_role = args.professional_role
-        self.industry = args.industry
-        self.employer_id = args.employer_id
-        self.excluded_employer_id = args.excluded_employer_id
+        self.bottom_lat = args.bottom_lat
         self.currency = args.currency
-        self.salary = args.salary
-        self.only_with_salary = args.only_with_salary
-        self.label = args.label
-        self.period = args.period
         self.date_from = args.date_from
         self.date_to = args.date_to
-        self.top_lat = args.top_lat
-        self.bottom_lat = args.bottom_lat
+        self.dry_run = args.dry_run
+        self.employer_id = args.employer_id
+        self.employment = args.employment
+        self.excluded_employer_id = args.excluded_employer_id
+        self.experience = args.experience
+        self.force_message = args.force_message
+        self.industry = args.industry
+        self.label = args.label
         self.left_lng = args.left_lng
+        self.metro = args.metro
+        self.no_magic = args.no_magic
+        self.only_with_salary = args.only_with_salary
+        self.order_by = args.order_by
+        self.per_page = args.per_page
+        self.period = args.period
+        self.pre_prompt = args.pre_prompt
+        self.premium = args.premium
+        self.professional_role = args.professional_role
+        self.resume_id = args.resume_id or applicant_tool.first_resume_id()
         self.right_lng = args.right_lng
+        self.salary = args.salary
+        self.schedule = args.schedule
+        self.search = args.search
+        self.search_field = args.search_field
         self.sort_point_lat = args.sort_point_lat
         self.sort_point_lng = args.sort_point_lng
-        self.no_magic = args.no_magic
-        self.premium = args.premium
-
-        self.per_page = args.per_page
+        self.top_lat = args.top_lat
         self.total_pages = args.total_pages
+
+        self.ai_chat = None
+        self._set_ai_chat()
         self._apply_similar()
 
+    def _set_ai_chat(self) -> None:
+        c = self.applicant_tool.config.get("openai", {})
+        if not (token := c.get("token")):
+            return
+        model = c.get("model", "gpt-5.1")
+        system_prompt = c.get(
+            "system_prompt",
+            "Напиши сопроводительное письмо для отклика на эту вакансию. Не используй placeholder'ы, твой ответ будет отправлен без обработки.",  # noqa: E501
+        )
+        self.ai_chat = OpenAIChat(
+            token=token,
+            model=model,
+            system_prompt=system_prompt,
+            session=self.applicant_tool.session,
+        )
+
     def _get_application_messages(self, message_list: TextIO | None) -> list[str]:
-        if message_list:
-            application_messages = list(filter(None, map(str.strip, message_list)))
-        else:
-            application_messages = [
+        return (
+            list(filter(None, map(str.strip, message_list)))
+            if message_list
+            else [
                 "{Меня заинтересовала|Мне понравилась} ваша вакансия %(vacancy_name)s",
                 "{Прошу рассмотреть|Предлагаю рассмотреть} {мою кандидатуру|мое резюме} на вакансию %(vacancy_name)s",  # noqa: E501
             ]
-        return application_messages
-
-    def _get_ignored_employers(self, file_path: Path | None) -> set[str]:
-        ignored = set()
-        if file_path is not None:
-            with file_path.open("r", encoding="utf-8") as f:
-                for line in f:
-                    if clean_id := line.strip():
-                        ignored.add(int(clean_id))
-            logger.info("Загружено %d ID игнорируемых работодателей", len(ignored))
-        return ignored
+        )
 
     def _apply_similar(self) -> None:
-        # telemetry_client = self.telemetry_client
-        # telemetry_data = defaultdict(dict)
-        vacancies = self._get_vacancies()
-
-        # if self.enable_telemetry:
-        #     for vacancy in vacancies:
-        #         vacancy_id = int(vacancy["id"])
-        #         telemetry_data["vacancies"][vacancy_id] = {
-        #             "name": vacancy.get("name"),
-        #             "type": vacancy.get("type", {}).get("id"),  # open/closed
-        #             "area": vacancy.get("area", {}).get("name"),  # город
-        #             "salary": vacancy.get("salary"),  # from, to, currency, gross
-        #             "direct_url": vacancy.get("alternate_url"),  # ссылка на вакансию
-        #             "created_at": fix_datetime(
-        #                 vacancy.get("created_at")
-        #             ),  # будем вычислять говно-вакансии, которые по полгода висят
-        #             "published_at": fix_datetime(vacancy.get("published_at")),
-        #             "contacts": vacancy.get(
-        #                 "contacts"
-        #             ),  # пиздорванки там телеграм для связи указывают
-        #             # HH с точки зрения перфикциониста — кусок говна, где кривые
-        #             # форматы даты, у вакансий может не быть работодателя...
-        #             "employer_id": int(vacancy["employer"].get("id", 0)),
-        #             # "relations": vacancy.get("relations", []),
-        #             # Остальное неинтересно
-        #         }
-
         me = self.applicant_tool.get_me()
 
-        basic_message_placeholders = {
+        basic_placeholders = {
             "first_name": me.get("first_name", ""),
             "last_name": me.get("last_name", ""),
             "email": me.get("email", ""),
             "phone": me.get("phone", ""),
         }
 
-        for vacancy in vacancies:
+        for vacancy in self._get_vacancies():
             try:
-                self.applicant_tool.save_vacancy(vacancy)
+                employer = vacancy.get("employer", {})
 
-                message_placeholders = {
+                placeholders = {
                     "vacancy_name": vacancy.get("name", ""),
-                    "employer_name": vacancy.get("employer", {}).get("name", ""),
-                    **basic_message_placeholders,
+                    "employer_name": employer.get("name", ""),
+                    **basic_placeholders,
                 }
 
                 logger.debug(
-                    "Вакансия от %(employer_name)s: %(vacancy_name)s"
-                    % message_placeholders
+                    "Вакансия от %(employer_name)s: %(vacancy_name)s" % placeholders
                 )
+                self.applicant_tool.storage.vacancies.save(vacancy)
+
+                # По факту контакты можно получить только здесь?!
+                if contacts := vacancy.get("contacts"):
+                    # Профиль компании могут снести и тогда о ней ничего не узнать
+                    if employer_id := employer.get("id"):
+                        employer_profile = self.api_client.get(
+                            f"/employers/{employer_id}"
+                        )
+                        # Сначала нужно работодателя сохранить, так как контакты на него ссылаются
+                        self.applicant_tool.storage.employers.save(employer_profile)
+                        self.applicant_tool.storage.contacts.save(employer_id, contacts)
 
                 if vacancy.get("has_test"):
                     logger.debug(
@@ -412,22 +360,9 @@ class Operation(BaseOperation):
                     )
                     continue
 
-                vacancy_id = int(vacancy["id"])
-                relations = vacancy.get("relations", [])
-                # employer_id = int(vacancy.get("employer", {}).get("id", 0))
-                # if employer_id and employer_id not in telemetry_data["employers"]:
-                #     employer = self.api_client.get(f"/employers/{employer_id}")
-                #     employer_data = {
-                #         "name": employer.get("name"),
-                #         "type": employer.get("type"),
-                #         "description": employer.get("description"),
-                #         "site_url": employer.get("site_url"),
-                #         "area": employer.get("area", {}).get("name"),  # город
-                #     }
-                #     telemetry_data["employers"][employer_id] = employer_data
+                vacancy_id = vacancy["id"]
 
-                # if employer_id := int(vacancy.get("employer", {}).get("id", 0)):
-                #     self.api_client.get(f"/employers/{employer_id}")
+                relations = vacancy.get("relations", [])
 
                 if relations:
                     logger.debug(
@@ -446,44 +381,29 @@ class Operation(BaseOperation):
                 }
 
                 if self.force_message or vacancy.get("response_letter_required"):
-                    if self.chat:
-                        try:
-                            msg = self.pre_prompt + "\n\n"
-                            msg += message_placeholders["vacancy_name"]
-                            logger.debug(msg)
-                            msg = self.chat.send_message(msg)
-                        except Exception as ex:
-                            logger.error(ex)
-                            continue
+                    if self.ai_chat:
+                        msg = self.pre_prompt + "\n\n"
+                        msg += placeholders["vacancy_name"]
+                        logger.debug("prompt: %s", msg)
+                        msg = self.ai_chat.send_message(msg)
                     else:
                         msg = (
-                            random_text(random.choice(self.application_messages))
-                            % message_placeholders
+                            rand_text(random.choice(self.application_messages))
+                            % placeholders
                         )
 
                     logger.debug(msg)
                     params["message"] = msg
-
-                # Задержка перед отправкой отклика
-                apply_interval = random.uniform(
-                    self.apply_min_interval,
-                    self.apply_max_interval,
-                )
 
                 try:
                     if not self.dry_run:
                         res = self.api_client.post(
                             "/negotiations",
                             params,
-                            delay=apply_interval,
+                            delay=random.uniform(1, 3),
                         )
                         assert res == {}
                         logger.debug("Отправили отклик: %s", vacancy["alternate_url"])
-                        self.applicant_tool.save_negotiation(
-                            vacancy_id=vacancy_id,
-                            resume_id=self.resume_id,
-                            message=params.get("message"),
-                        )
                     print(
                         "📨 Отправили отклик:",
                         vacancy["alternate_url"],
@@ -503,23 +423,6 @@ class Operation(BaseOperation):
                 logger.error(ex)
 
         print("📝 Отклики на вакансии разосланы!")
-
-        # if self.enable_telemetry:
-        #     if self.dry_run:
-        #         # С --dry-run можно посмотреть что отправляется
-        #         logger.info(
-        #             "dry-run: данные телеметрии для отправки на сервер: %r",
-        #             telemetry_data,
-        #         )
-        #         return
-        #
-        #     try:
-        #         response = telemetry_client.send_telemetry(
-        #             "/collect", dict(telemetry_data)
-        #         )
-        #         logger.debug(response)
-        #     except TelemetryError as ex:
-        #         logger.error(ex)
 
     def _get_search_params(self, page: int) -> dict:
         params = {
@@ -587,22 +490,17 @@ class Operation(BaseOperation):
 
         return params
 
-    def _get_vacancies(self) -> list[VacancyItem]:
-        rv = []
+    def _get_vacancies(self) -> Iterator[Vacancy]:
         for page in range(self.total_pages):
             params = self._get_search_params(page)
-            res: ApiListResponse = self.api_client.get(
-                f"/resumes/{self.resume_id}/similar_vacancies", params
+            res: Paginated[Vacancy] = self.api_client.get(
+                f"/resumes/{self.resume_id}/similar_vacancies",
+                params,
             )
-            rv.extend(res["items"])
+            if not res["items"]:
+                return
+
+            yield from res["items"]
+
             if page >= res["pages"] - 1:
-                break
-
-            # Задержка перед получением следующей страницы
-            if page > 0:
-                interval = random.uniform(
-                    self.page_min_interval, self.page_max_interval
-                )
-                time.sleep(interval)
-
-        return rv
+                return

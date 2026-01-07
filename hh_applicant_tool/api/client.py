@@ -11,7 +11,7 @@ from typing import Any, Literal
 from urllib.parse import urlencode
 
 import requests
-from requests import Response, Session
+from requests import Session
 
 from ..types import AccessToken
 from . import errors
@@ -22,6 +22,7 @@ logger = logging.getLogger(__package__)
 
 
 ALLOWED_METHODS = Literal["GET", "POST", "PUT", "DELETE"]
+DEFAULT_DELAY = 0.334
 
 
 # Thread-safe
@@ -30,18 +31,22 @@ class BaseClient:
     base_url: str
     _: dataclasses.KW_ONLY
     user_agent: str | None = None
-    proxies: dict | None = None
     session: Session | None = None
-    previous_request_time: float = 0.0
-    delay: float = 0.334
+    delay: float = DEFAULT_DELAY
+    _previous_request_time: float = 0.0
 
     def __post_init__(self) -> None:
         self.lock = Lock()
         # logger.debug(f"user agent: {self.user_agent}")
         if not self.session:
+            logger.debug("create new session")
             self.session = requests.session()
         # if self.proxies:
         #     logger.debug(f"client proxies: {self.proxies}")
+
+    @property
+    def proxies(self):
+        return self.session.proxies
 
     def default_headers(self) -> dict[str, str]:
         return {
@@ -67,7 +72,7 @@ class BaseClient:
             if (
                 delay := (self.delay if delay is None else delay)
                 - time.monotonic()
-                + self.previous_request_time
+                + self._previous_request_time
             ) > 0:
                 logger.debug("wait %fs before request", delay)
                 time.sleep(delay)
@@ -79,7 +84,6 @@ class BaseClient:
                 url,
                 **payload,
                 headers=self.default_headers(),
-                proxies=self.proxies,
                 allow_redirects=False,
             )
             try:
@@ -106,8 +110,8 @@ class BaseClient:
                     method,
                     log_url,
                 )
-                self.previous_request_time = time.monotonic()
-        self.raise_for_status(response, rv)
+                self._previous_request_time = time.monotonic()
+        errors.ApiError.raise_for_status(response, rv)
         assert 300 > response.status_code >= 200, (
             f"Unexpected status code for {method} {url}: {response.status_code}"
         )
@@ -127,26 +131,6 @@ class BaseClient:
 
     def resolve_url(self, url: str) -> str:
         return url if "://" in url else f"{self.base_url.rstrip('/')}/{url.lstrip('/')}"
-
-    @staticmethod
-    def raise_for_status(response: Response, data: dict) -> None:
-        match response.status_code:
-            case status if 300 <= status <= 308:
-                raise errors.Redirect(response, data)
-            case 400:
-                if errors.ApiError.is_limit_exceeded(data):
-                    raise errors.LimitExceeded(response=response, data=data)
-                raise errors.BadRequest(response, data)
-            case 403:
-                raise errors.Forbidden(response, data)
-            case 404:
-                raise errors.ResourceNotFound(response, data)
-            case status if 500 > status >= 400:
-                raise errors.ClientError(response, data)
-            case 502:
-                raise errors.BadGateway(response, data)
-            case status if status >= 500:
-                raise errors.InternalServerError(response, data)
 
 
 @dataclass
@@ -221,7 +205,6 @@ class ApiClient(BaseClient):
             client_id=self.client_id,
             client_secret=self.client_secret,
             user_agent=self.user_agent,
-            proxies=dict(self.proxies or {}),
             session=self.session,
         )
 

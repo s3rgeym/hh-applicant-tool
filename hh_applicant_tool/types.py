@@ -1,4 +1,14 @@
-from typing import TypedDict, Literal
+from typing import Generic, List, Literal, Optional, TypedDict, TypeVar
+
+T = TypeVar("T")
+
+NegotiationState = Literal[
+    "discard",  # отказ
+    "interview",  # собес
+    "response",  # отклик
+    "invitation",  # приглашение
+    "hired",  # выход на работу
+]
 
 
 class AccessToken(TypedDict):
@@ -8,16 +18,16 @@ class AccessToken(TypedDict):
     token_type: Literal["bearer"]
 
 
-class ApiListResponse(TypedDict):
+class Paginated(TypedDict, Generic[T]):
     ...
-    items: list
+    items: list[T]
     found: int
     page: int
     pages: int
     per_page: int
 
 
-class VacancyItem(TypedDict):
+class Vacancy(TypedDict):
     accept_incomplete_resumes: bool
     address: dict
     alternate_url: str
@@ -43,3 +53,17 @@ class VacancyItem(TypedDict):
     type: dict
     url: str
     experience: dict
+
+
+class Phone(TypedDict):
+    country: str
+    city: str
+    number: str
+    formatted: str
+    comment: Optional[str]
+
+
+class ContactData(TypedDict):
+    name: Optional[str]
+    email: Optional[str]
+    phones: List[Phone]
