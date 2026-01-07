@@ -1,13 +1,19 @@
 [tool.poetry]
 name = "hh-applicant-tool"
-version = "1.2.0"
+version = "1.2.1"
 description = "HH-Applicant-Tool: An automation utility for HeadHunter (hh.ru) designed to streamline the job search process by auto-applying to relevant vacancies and periodically refreshing resumes to stay at the top of recruiter searches."
 homepage = "https://github.com/s3rgeym/hh-applicant-tool"
 repository = "https://github.com/s3rgeym/hh-applicant-tool"
 # Впишите себя, кто причастен к каким-либо изменениям
 authors = ["Senior YAML Developer <yamldeveloper@proton.me>"]
 readme = "README.md"
-packages = [{include = "hh_applicant_tool"}]
+packages = [
+  { include = "hh_applicant_tool" },
+]
+include = [
+  # Содержит схему и миграции
+  { path = "hh_applicant_tool/**/*.sql", format = ["sdist", "wheel"] },
+]
 
 [tool.poetry.dependencies]
 python = "^3.10"

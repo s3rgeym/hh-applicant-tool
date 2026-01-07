@@ -18,11 +18,11 @@ from . import errors
 
 __all__ = ("ApiClient", "OAuthClient")
 
-logger = logging.getLogger(__package__)
-
-
-ALLOWED_METHODS = Literal["GET", "POST", "PUT", "DELETE"]
 DEFAULT_DELAY = 0.334
+
+AllowedMethods = Literal["GET", "POST", "PUT", "DELETE"]
+
+logger = logging.getLogger(__package__)
 
 
 # Thread-safe
@@ -56,14 +56,14 @@ class BaseClient:
 
     def request(
         self,
-        method: ALLOWED_METHODS,
+        method: AllowedMethods,
         endpoint: str,
         params: dict[str, Any] | None = None,
         delay: float | None = None,
         **kwargs: Any,
     ) -> dict:
         # Не знаю насколько это "правильно"
-        assert method in ALLOWED_METHODS.__args__
+        assert method in AllowedMethods.__args__
         params = dict(params or {})
         params.update(kwargs)
         url = self.resolve_url(endpoint)
@@ -221,7 +221,7 @@ class ApiClient(BaseClient):
     # Реализовано автоматическое обновление токена
     def request(
         self,
-        method: ALLOWED_METHODS,
+        method: AllowedMethods,
         endpoint: str,
         params: dict[str, Any] | None = None,
         delay: float | None = None,

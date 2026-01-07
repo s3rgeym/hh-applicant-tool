@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__package__)
+
+QUERIES_PATH = Path(__file__).parent / "queries"
 
 
 class BaseRepository:
@@ -32,3 +35,4 @@ class BaseRepository:
 
         logger.debug(sql)
         self.conn.execute(sql, data)
+        self.conn.commit()

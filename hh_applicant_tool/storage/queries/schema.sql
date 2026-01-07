@@ -1,8 +1,3 @@
-from __future__ import annotations
-
-import sqlite3
-
-DATABASE_SCHEMA = """\
 BEGIN;
 
 -- employer_contacts
@@ -84,9 +79,3 @@ CREATE INDEX IF NOT EXISTS idx_vacancies_expirence
     ON vacancies(expirence);
 
 COMMIT;
-"""
-
-
-def create_schema(conn: sqlite3.Connection) -> None:
-    conn.execute("PRAGMA foreign_keys = ON;")
-    conn.executescript(DATABASE_SCHEMA)

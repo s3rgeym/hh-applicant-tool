@@ -15,7 +15,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
-from .constants import INVALID_ISO8601_FORMAT
+from .constants import DATETIME_FORMAT
 
 print_err = partial(print, file=sys.stderr, flush=True)
 
@@ -80,12 +80,12 @@ def make_hash(data: str) -> str:
     return hashlib.sha256(data.encode()).hexdigest()
 
 
-def parse_invalid_datetime(dt: str) -> datetime:
-    return datetime.strptime(dt, INVALID_ISO8601_FORMAT)
+def parse_datetime(dt: str) -> datetime:
+    return datetime.strptime(dt, DATETIME_FORMAT)
 
 
 def fix_datetime(dt: str | None) -> str | None:
-    return parse_invalid_datetime(dt).isoformat() if dt is not None else None
+    return parse_datetime(dt).isoformat() if dt is not None else None
 
 
 def rand_text(s: str) -> str:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sqlite3
 import sys
 from functools import cached_property
@@ -20,7 +21,6 @@ from .api import ApiClient
 from .constants import ANDROID_CLIENT_ID, ANDROID_CLIENT_SECRET
 from .log import ColorHandler, RedactingFilter
 from .storage import StorageFacade
-from .storage.schema import create_schema
 from .utils import (
     Config,
     android_user_agent,
@@ -120,24 +120,15 @@ class HHApplicantTool:
         subparsers = parser.add_subparsers(help="commands")
         package_dir = Path(__file__).resolve().parent / OPERATIONS
         for _, module_name, _ in iter_modules([str(package_dir)]):
+            if module_name.startswith("_"):
+                continue
             mod = import_module(f"{__package__}.{OPERATIONS}.{module_name}")
             op: BaseOperation = mod.Operation()
-            words = module_name.split("_")
-
-            kebab_name = "-".join(words)
-            aliases = set()
-            aliases.update(getattr(op, "__aliases__", []))
-
-            if kebab_name != module_name:
-                # camelCase
-                aliases.add(words[0] + "".join(word.title() for word in words[1:]))
-
-                # flatcase
-                aliases.add("".join(words))
-
+            kebab_name = module_name.replace("_", "-")
+            aliases = set(kebab_name, *getattr(op, "__aliases__", []))
+            aliases.remove(kebab_name)
             op_parser = subparsers.add_parser(
                 kebab_name,
-                # Добавляем остальные варианты в псевдонимы
                 aliases=aliases,
                 description=op.__doc__,
                 formatter_class=self.ArgumentFormatter,
@@ -198,8 +189,7 @@ class HHApplicantTool:
 
     @cached_property
     def db(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, autocommit=True)
-        create_schema(conn)
+        conn = sqlite3.connect(self.db_path)
         return conn
 
     @cached_property
@@ -330,9 +320,12 @@ class HHApplicantTool:
                 return 1
             except sqlite3.Error as ex:
                 logger.exception(ex)
+
+                script_name = sys.argv[0].split(os.sep)[-1]
+
                 logger.warning(
-                    f"Возможно база данных повреждена, попробуйте удалить файл:\n"
-                    f"rm {self.db_path}"
+                    f"Возможно база данных повреждена, попробуйте выполнить команду:\n"
+                    f"{script_name} migrate-db"
                 )
                 return 1
             except Exception as e:

@@ -32,3 +32,4 @@ class EmployerContactsRepository(BaseRepository):
 
         logger.debug(sql)
         self.conn.execute(sql, data)
+        self.conn.commit()

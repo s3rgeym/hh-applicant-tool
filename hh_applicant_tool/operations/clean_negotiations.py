@@ -25,7 +25,7 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Чистит отклики"""
 
-    __aliases__ = ["clean"]
+    __aliases__ = ["clean-negotians", "clean"]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
