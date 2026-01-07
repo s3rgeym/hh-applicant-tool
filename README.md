@@ -256,8 +256,6 @@ hh-applicant-tool config -p
 | **check-proxy**                    | Проверяет используемые прокси                                                                                                                                                |
 | **log**                            | Просмотр файла-лога. С флагом -f будет следить за изменениями.                                                                                                               |
 
-Данные имена команд равнозначны: `call-api = callApi = callapi`. Можно использовать `kebab-case`, `camelCase` и `flatcase`.
-
 Примеры команд:
 
 ```bash

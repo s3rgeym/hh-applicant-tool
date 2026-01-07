@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..utils import parse_invalid_datetime
+from ..utils import parse_datetime
 from .base import BaseRepository
 
 
@@ -21,10 +21,10 @@ class VacanciesRepository(BaseRepository):
             "salary_to": salary.get("to") or salary.get("from"),
             "currency": salary.get("currency"),
             "gross": salary.get("gross"),
-            "published_at": parse_invalid_datetime(vacancy["published_at"])
+            "published_at": parse_datetime(vacancy["published_at"])
             if "published_at" in vacancy
             else None,
-            "created_at": parse_invalid_datetime(vacancy["created_at"])
+            "created_at": parse_datetime(vacancy["created_at"])
             if "created_at" in vacancy
             else None,
             "remote": vacancy.get("schedule", {}).get("id") == "remote",
