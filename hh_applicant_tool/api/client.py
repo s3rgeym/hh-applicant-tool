@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from threading import Lock
 from typing import Any, Literal
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urljoin
 
 import requests
 from requests import Session
@@ -36,6 +36,7 @@ class BaseClient:
     _previous_request_time: float = 0.0
 
     def __post_init__(self) -> None:
+        assert self.base_url.endswith("/"), "base_url must end with /"
         self.lock = Lock()
         # logger.debug(f"user agent: {self.user_agent}")
         if not self.session:
@@ -50,7 +51,8 @@ class BaseClient:
 
     def default_headers(self) -> dict[str, str]:
         return {
-            "user-agent": self.user_agent or "Mozilla/5.0",
+            "user-agent": self.user_agent
+            or "Mozilla/5.0 (+https://github.com/s3rgeym/hh-applicant-tool)",
             "x-hh-app-active": "true",
         }
 
@@ -130,7 +132,7 @@ class BaseClient:
         return self.request("DELETE", *args, **kwargs)
 
     def resolve_url(self, url: str) -> str:
-        return url if "://" in url else f"{self.base_url.rstrip('/')}/{url.lstrip('/')}"
+        return urljoin(self.base_url, url.lstrip("/"))
 
 
 @dataclass
@@ -138,7 +140,7 @@ class OAuthClient(BaseClient):
     client_id: str
     client_secret: str
     _: dataclasses.KW_ONLY
-    base_url: str = "https://hh.ru/oauth"
+    base_url: str = "https://hh.ru/oauth/"
     state: str = ""
     scope: str = ""
     redirect_uri: str = ""

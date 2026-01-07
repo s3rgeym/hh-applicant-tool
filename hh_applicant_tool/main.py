@@ -17,6 +17,7 @@ from typing import Any, Iterable, Sequence
 import requests
 import urllib3
 
+from . import types
 from .api import ApiClient
 from .constants import ANDROID_CLIENT_ID, ANDROID_CLIENT_SECRET
 from .log import ColorHandler, RedactingFilter
@@ -125,11 +126,9 @@ class HHApplicantTool:
             mod = import_module(f"{__package__}.{OPERATIONS}.{module_name}")
             op: BaseOperation = mod.Operation()
             kebab_name = module_name.replace("_", "-")
-            aliases = set(kebab_name, *getattr(op, "__aliases__", []))
-            aliases.remove(kebab_name)
             op_parser = subparsers.add_parser(
                 kebab_name,
-                aliases=aliases,
+                aliases=getattr(op, "__aliases__", []),
                 description=op.__doc__,
                 formatter_class=self.ArgumentFormatter,
             )
@@ -233,7 +232,7 @@ class HHApplicantTool:
                 break
         return rv
 
-    def get_negotiations(self, status: str = "active") -> Iterable[dict]:
+    def get_negotiations(self, status: str = "active") -> Iterable[types.Negotiation]:
         for page in count():
             r: dict[str, Any] = self.api_client.get(
                 "/negotiations",
