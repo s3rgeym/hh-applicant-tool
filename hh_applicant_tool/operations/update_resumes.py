@@ -6,8 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from ..api import ApiError
-from ..main import BaseOperation
-from ..main import Namespace as BaseNamespace
+from ..main import BaseNamespace, BaseOperation
 from ..types import PaginatedItems
 from ..utils import print_err, shorten
 

@@ -8,8 +8,7 @@ import subprocess
 import sys
 from typing import TYPE_CHECKING
 
-from ..main import BaseOperation
-from ..main import Namespace as BaseNamespace
+from ..main import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool

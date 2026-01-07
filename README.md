@@ -271,14 +271,14 @@ $ hh-applicant-tool apply-similar -h
 $ hh-applicant-tool authorize
 
 # Авторизация с использованием другого профиля
-$ hh-applicant-tool --profile test authorize
+$ hh-applicant-tool --profile profile123 authorize
 
 # Рассылаем заявки
 $ hh-applicant-tool apply-similar
 
 # Для тестирования поисковой строки и других параметров, используйте --dry-run.
 # С ним отклики не отправляются, а лишь выводятся сообщения
-$ hh-applicant-tool -vv apply-similar --search "Python программист" --per-page 10 --total-pages 1 --dry-run
+$ hh-applicant-tool -vv apply-similar --search "Python программист" --per-page 3 --total-pages 1 --dry-run
 
 # Поднимаем резюме
 $ hh-applicant-tool update-resumes
@@ -306,6 +306,25 @@ $ hh-applicant-tool config -s openai.model gpt-4o
 
 # Удалить значение из конфига
 $ hh-applicant-tool config -u proxy_url
+
+# Утилита все данные об откликах хранит в SQLite. Для работы с ней вы можете
+# использовать команду query
+$ hh-applicant-tool query 'select count(*) from employer_contacts;'
++----------+
+| count(*) |
++----------+
+|    42    |
++----------+
+
+# При обновлении может сломаться схема БД, для ее починки нужно выполнить
+# поочередно все миграции, добавленные после выхода последней версии
+$ hh-applicant-tool migrate
+List of migrations:
+
+  [1]: 2026-01-07.1767815492
+
+Choose migraion [1] (Keep empty to exit): 1
+✅ Success!
 ```
 
 Для тестирования запросов к API используйте команду `call-api` совместно с `jq` для обработки JSON.

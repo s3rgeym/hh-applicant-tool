@@ -53,7 +53,7 @@ class BaseOperation:
 OPERATIONS = "operations"
 
 
-class Namespace(argparse.Namespace):
+class BaseNamespace(argparse.Namespace):
     profile_id: str
     config_dir: Path
     verbosity: int
@@ -290,7 +290,7 @@ class HHApplicantTool:
 
     def run(self, argv: Sequence[str] | None) -> None | int:
         parser = self._create_parser()
-        self.args = parser.parse_args(argv, namespace=Namespace())
+        self.args = parser.parse_args(argv, namespace=BaseNamespace())
 
         if sys.platform == "win32":
             fix_windows_color_output()
@@ -323,8 +323,8 @@ class HHApplicantTool:
                 script_name = sys.argv[0].split(os.sep)[-1]
 
                 logger.warning(
-                    f"Возможно база данных повреждена, попробуйте выполнить команду:\n"
-                    f"{script_name} migrate-db"
+                    f"Возможно база данных повреждена, попробуйте выполнить команду:\n\n"  # noqa: E501
+                    f"  {script_name} migrate-db"
                 )
                 return 1
             except Exception as e:
