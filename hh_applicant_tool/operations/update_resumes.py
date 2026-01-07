@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from ..api import ApiError
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
-from ..types import ApiListResponse
+from ..types import Paginated
 from ..utils import print_err, shorten
 
 if TYPE_CHECKING:
@@ -31,7 +31,7 @@ class Operation(BaseOperation):
         pass
 
     def run(self, applicant_tool: HHApplicantTool) -> None:
-        resumes: ApiListResponse = applicant_tool.get_resumes()
+        resumes: Paginated = applicant_tool.get_resumes()
         for resume in resumes["items"]:
             try:
                 res = applicant_tool.api_client.post(

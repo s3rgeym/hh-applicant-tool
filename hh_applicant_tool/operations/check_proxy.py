@@ -26,10 +26,6 @@ class Operation(BaseOperation):
         pass
 
     def run(self, applicant_tool: HHApplicantTool) -> None:
-        proxies = applicant_tool.api_client.proxies
-        assert proxies, "Прокси не заданы"
-        print(
-            applicant_tool.api_client.session.get(
-                "https://icanhazip.com", proxies=proxies
-            ).text
-        )
+        session = applicant_tool.session
+        assert session.proxies, "Прокси не заданы"
+        print(session.get("https://icanhazip.com").text)

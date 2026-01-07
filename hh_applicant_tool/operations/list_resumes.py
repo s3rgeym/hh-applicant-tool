@@ -8,7 +8,7 @@ from prettytable import PrettyTable
 
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
-from ..types import ApiListResponse
+from ..types import Paginated
 from ..utils import shorten
 
 if TYPE_CHECKING:
@@ -31,7 +31,7 @@ class Operation(BaseOperation):
         pass
 
     def run(self, applicant_tool: HHApplicantTool) -> None:
-        resumes: ApiListResponse = applicant_tool.get_resumes()
+        resumes: Paginated = applicant_tool.get_resumes()
         t = PrettyTable(field_names=["ID", "Название", "Статус"], align="l", valign="t")
         t.add_rows(
             [
