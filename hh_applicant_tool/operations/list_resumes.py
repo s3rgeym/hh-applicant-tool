@@ -6,8 +6,7 @@ from typing import TYPE_CHECKING
 
 from prettytable import PrettyTable
 
-from ..main import BaseOperation
-from ..main import Namespace as BaseNamespace
+from ..main import BaseNamespace, BaseOperation
 from ..types import PaginatedItems
 from ..utils import shorten
 

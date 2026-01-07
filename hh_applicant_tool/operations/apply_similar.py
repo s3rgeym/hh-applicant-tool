@@ -10,8 +10,7 @@ from ..ai.base import AIError
 from ..ai.openai import OpenAIChat
 from ..api import BadResponse, Redirect
 from ..api.errors import ApiError, LimitExceeded
-from ..main import BaseOperation
-from ..main import Namespace as BaseNamespace
+from ..main import BaseNamespace, BaseOperation
 from ..types import PaginatedItems, SearchVacancy
 from ..utils import (
     bool2str,

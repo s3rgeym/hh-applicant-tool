@@ -28,7 +28,7 @@ class VacanciesRepository(BaseRepository):
             if "created_at" in vacancy
             else None,
             "remote": vacancy.get("schedule", {}).get("id") == "remote",
-            "expirence": vacancy.get("experience", {}).get("name"),
+            "experience": vacancy.get("experience", {}).get("name"),
             "alternate_url": vacancy.get("alternate_url"),
         }
 

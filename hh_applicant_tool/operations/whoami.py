@@ -5,8 +5,7 @@ import argparse
 import logging
 from typing import TYPE_CHECKING
 
-from ..main import BaseOperation
-from ..main import Namespace as BaseNamespace
+from ..main import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -27,7 +26,7 @@ def fmt_plus(n: int) -> str:
 class Operation(BaseOperation):
     """Выведет текущего пользователя"""
 
-    __aliases__: tuple[str] = ("id",)
+    __aliases__: list[str] = ["id"]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass

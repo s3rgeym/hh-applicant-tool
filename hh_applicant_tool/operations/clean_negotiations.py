@@ -5,8 +5,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from ..api.errors import ApiError
-from ..main import BaseOperation
-from ..main import Namespace as BaseNamespace
+from ..main import BaseNamespace, BaseOperation
 from ..types import NegotiationState
 
 if TYPE_CHECKING:
