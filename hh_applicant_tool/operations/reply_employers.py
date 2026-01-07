@@ -48,14 +48,14 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         # parser.add_argument(
         #     "reply_message",
-        #     help="Сообщение для отправки во все чаты с работодателями, где ожидают ответа либо не прочитали ответ. Если не передать, то его нужно будет вводить интерактивно.",
+        #     help="Сообщение для отправки во все чаты с работодателями, где ожидают ответа либо не прочитали ответ. Если не передать, то его нужно будет вводить интерактивно.",  # noqa: E501
         # )
         parser.add_argument("--resume-id", help="Идентификатор резюме")
         parser.add_argument(
             "-m",
             "--reply-message",
             "--reply",
-            help="Отправить сообщение во все чаты, где ожидают ответа либо не прочитали ответ. Если не передать сообщение, то нужно будет вводить его в интерактивном режиме.",
+            help="Отправить сообщение во все чаты, где ожидают ответа либо не прочитали ответ. Если не передать сообщение, то нужно будет вводить его в интерактивном режиме.",  # noqa: E501
         )
         parser.add_argument(
             "-p",
@@ -87,7 +87,7 @@ class Operation(BaseOperation):
         self.reply_message = args.reply_message or applicant_tool.config.get(
             "reply_message"
         )
-        # assert self.reply_message, "`reply_message` должен быть передан через аргументы или настройки"
+        # assert self.reply_message, "`reply_message` должен быть передан через аргументы или настройки"  # noqa: E501
         self.max_pages = args.max_pages
         self.dry_run = args.dry_run
         self.only_invitations = args.only_invitations

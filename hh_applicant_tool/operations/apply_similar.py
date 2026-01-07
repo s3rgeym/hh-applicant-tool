@@ -12,7 +12,7 @@ from ..api import BadResponse, Redirect
 from ..api.errors import ApiError, LimitExceeded
 from ..main import BaseOperation
 from ..main import Namespace as BaseNamespace
-from ..types import Paginated, Vacancy
+from ..types import PaginatedItems, SearchVacancy
 from ..utils import (
     bool2str,
     list2str,
@@ -490,10 +490,10 @@ class Operation(BaseOperation):
 
         return params
 
-    def _get_vacancies(self) -> Iterator[Vacancy]:
+    def _get_vacancies(self) -> Iterator[SearchVacancy]:
         for page in range(self.total_pages):
             params = self._get_search_params(page)
-            res: Paginated[Vacancy] = self.api_client.get(
+            res: PaginatedItems[SearchVacancy] = self.api_client.get(
                 f"/resumes/{self.resume_id}/similar_vacancies",
                 params,
             )
