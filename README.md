@@ -227,6 +227,8 @@ hh-applicant-tool config -p
 
 Данные о работодателях и их вакансиях хранятся в файле `data`. Это обычная база `sqlite3` вы ее можете просматривать через `DB Browser` и тп.
 
+<img width="833" height="526" alt="image" src="https://github.com/user-attachments/assets/e972b231-ae17-4acb-be0d-6cf10cc24362" />
+
 При использовании профиля отличного от дефолтного, данные хранятся в подкаталоге.
 
 ### Описание команд
