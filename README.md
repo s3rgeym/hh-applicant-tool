@@ -399,14 +399,16 @@ https://hh.ru/employer/1918903
 Синтаксис `call-api` немного похож на `httpie` или `curlie`:
 
 ```sh
-hh-applicant-tool call-api [ -m {GET|POST|PUT|DELETE} ] [/]path/to/endpoint [ key1=value1  [ ... keyN=valueN ] ]
+$ hh-applicant-tool call-api -m {GET|POST|PUT|DELETE} /path/to/endpoint key1=value1 ... keyN=valueN
 ```
 
 Если используется метод `GET` или `DELETE` (или ничего не указано), то параметры будут переданы как query string. Во всех остальных случаях парметры передаются как `application/x-www-form-urlencoded` в теле запроса.
 
 Данная возможность полезна для написания Bash-скриптов.
 
-Документация для работы с API соискателей была удалена с ха-ха и его копропротивного репозитория. Можете не искать, они затерли даже историю репозитория. Но я через веб-архив выкачал документацию. Чтобы ее посмотреть, клонируйте этот репозиторий и выполните:
+Документация для работы с API соискателей была удалена с ха-ха.сру и его копропротивного репозитория. Можете не искать, они затерли даже историю репозитория. Но я через веб-архив выкачал документацию. Чтобы ее посмотреть, клонируйте этот репозиторий и откройте файл, например, с помощью [Swagger Viewer](https://marketplace.visualstudio.com/items?itemName=Arjun.swagger-viewer).
+
+Или так:
 
 ```sh
 npx @redocly/cli preview -d docs/hhapi
