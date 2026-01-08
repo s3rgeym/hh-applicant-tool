@@ -22,9 +22,9 @@ class Namespace(BaseNamespace):
 
 
 class Operation(BaseOperation):
-    """Чистит отклики"""
+    """Синхронизирует отклики с локальной базой и опционально удаляет отказы."""
 
-    __aliases__ = ["clean-negotians", "clean"]
+    __aliases__ = ["sync-negotians", "sync"]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(

@@ -35,7 +35,8 @@ DEFAULT_LOG_FILENAME = "log.txt"
 DEFAULT_DATABASE_FILENAME = "data"
 DEFAULT_PROFILE_ID = "."
 
-MAX_LOG_SIZE = 5 * 1 << 20
+# 10MB
+MAX_LOG_SIZE = 10 << 20
 
 logger = logging.getLogger(__package__)
 

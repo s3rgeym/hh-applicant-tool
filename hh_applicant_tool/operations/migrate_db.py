@@ -58,4 +58,8 @@ class Operation(BaseOperation):
                 apply(migrations[n - 1])
         except sqlite3.OperationalError as ex:
             logger.exception(ex)
+            logger.warning(
+                f"Если ничего не помогает, то вы можете просто удалить базу, сделав бекап:\n\n"
+                f"  $ mv {applicant_tool.db_path}{{,.bak}}"
+            )
             return 1
