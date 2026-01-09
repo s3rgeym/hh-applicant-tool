@@ -17,7 +17,7 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(
         (QUERIES_PATH / "schema.sql").read_text(encoding="utf-8")
     )
-    logger.debug("Database scheme created or updated")
+    logger.debug("Database unitialized")
 
 
 def list_migrations() -> list[str]:

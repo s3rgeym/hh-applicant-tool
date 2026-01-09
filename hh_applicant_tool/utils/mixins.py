@@ -162,7 +162,7 @@ class ErrorReporter:
     def process_reporting(self):
         # Получаем timestamp последнего репорта
         last_report = datetime.fromtimestamp(
-            self.storage.settings.get_key("_last_report", 0)
+            self.storage.settings.get_value("_last_report", 0)
         )
 
         if datetime.now() >= last_report + timedelta(hours=48):
@@ -203,7 +203,7 @@ class VersionChecker:
             return False
 
     def check_version(self: HHApplicantTool) -> bool:
-        if datetime.now().timestamp() >= self.storage.settings.get_key(
+        if datetime.now().timestamp() >= self.storage.settings.get_value(
             "_next_version_check", 0
         ):
             if v := self.get_latest_version():
@@ -213,7 +213,7 @@ class VersionChecker:
                 )
 
         if (
-            latest_ver := self.storage.settings.get_key("_latest_version")
+            latest_ver := self.storage.settings.get_value("_latest_version")
         ) and (cur_ver := get_package_version()):
             if Version(latest_ver) > Version(cur_ver):
                 log.warning(
@@ -231,7 +231,7 @@ class ChatOpenAISupport:
         c = self.config.get("openai", {})
         if not (token := c.get("token")):
             raise ValueError("Токен для OpenAI не задан")
-        self.ai_chat = ChatOpenAI(
+        return ChatOpenAI(
             token=token,
             model=c.get("model", "gpt-5.1"),
             system_prompt=system_prompt,
@@ -241,10 +241,10 @@ class ChatOpenAISupport:
 
 class MegaTool(ErrorReporter, VersionChecker, ChatOpenAISupport):
     def check_system(self: HHApplicantTool):
-        if not self.storage.settings.get_key("disable_version_check", False):
+        if not self.storage.settings.get_value("disable_version_check", False):
             self.check_version()
 
-        if self.storage.settings.get_key("send_error_reports", True):
+        if self.storage.settings.get_value("send_error_reports", True):
             self.process_reporting()
         else:
             log.warning("ОТКЛЮЧЕНА ОТПРАВКА СООБЩЕНИЙ ОБ ОШИБКАХ!")
