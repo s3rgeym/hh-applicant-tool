@@ -96,7 +96,7 @@ class Operation(BaseOperation):
         if self.is_automate:
             username = (
                 args.username
-                or storage.settings.get_key("auth.username")
+                or storage.settings.get_value("auth.username")
                 or (await ainput("👤 Введите email или телефон: "))
             ).strip()
 

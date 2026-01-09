@@ -70,7 +70,7 @@ class Operation(BaseOperation):
             print(f"✅ Установлено значение для '{args.key}'")
         elif args.key is not _MISSING:
             # Get value
-            value = settings.get_key(args.key)
+            value = settings.get_value(args.key)
             if value is not None:
                 # print(type(value).__name__, value)
                 print(value)
