@@ -13,7 +13,9 @@ from ..utils import jsonutil
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
 
-_MISSING = object()
+
+class NOTSET: ...
+
 
 logger = logging.getLogger(__package__)
 
@@ -41,17 +43,17 @@ class Operation(BaseOperation):
             "-d",
             "--delete",
             action="store_true",
-            help="Удалить настройку по ключу",
+            help="Удалить настройку по ключу либо удалить все насйтроки, если ключ не передан",
         )
         parser.add_argument(
-            "key", nargs="?", help="Ключ настройки", default=_MISSING
+            "key", nargs="?", help="Ключ настройки", default=NOTSET
         )
         parser.add_argument(
             "value",
             nargs="?",
             type=parse_value,
             help="Значение настройки",
-            default=_MISSING,
+            default=NOTSET,
         )
 
     def run(self, applicant_tool: HHApplicantTool) -> None:
@@ -59,19 +61,19 @@ class Operation(BaseOperation):
         settings = applicant_tool.storage.settings
 
         if args.delete:
-            if args.key is not _MISSING:
+            if args.key is not NOTSET:
                 # Delete value
                 settings.delete_value(args.key)
                 print(f"🗑️ Настройка '{args.key}' удалена")
             else:
                 settings.clear()
-        elif args.key is not _MISSING and args.value is not _MISSING:
+        elif args.key is not NOTSET and args.value is not NOTSET:
             settings.set_value(args.key, args.value)
             print(f"✅ Установлено значение для '{args.key}'")
-        elif args.key is not _MISSING:
+        elif args.key is not NOTSET:
             # Get value
-            value = settings.get_value(args.key, _MISSING)
-            if value is not _MISSING:
+            value = settings.get_value(args.key, NOTSET)
+            if value is not NOTSET:
                 # print(type(value).__name__, value)
                 print(value)
             else:
