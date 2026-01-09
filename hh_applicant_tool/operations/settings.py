@@ -8,11 +8,12 @@ from typing import TYPE_CHECKING
 from prettytable import PrettyTable
 
 from ..main import BaseNamespace, BaseOperation
-from ..utils import json_utils
+from ..utils import jsonutil
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
 
+_MISSING = object()
 
 logger = logging.getLogger(__package__)
 
@@ -25,7 +26,7 @@ class Namespace(BaseNamespace):
 
 def parse_value(v):
     try:
-        return json_utils.loads(v)
+        return jsonutil.loads(v)
     except json.JSONDecodeError:
         return v
 
@@ -42,35 +43,51 @@ class Operation(BaseOperation):
             action="store_true",
             help="Удалить настройку по ключу",
         )
-        parser.add_argument("key", nargs="?", help="Ключ настройки")
         parser.add_argument(
-            "value", nargs="?", type=parse_value, help="Значение настройки"
+            "key", nargs="?", help="Ключ настройки", default=_MISSING
+        )
+        parser.add_argument(
+            "value",
+            nargs="?",
+            type=parse_value,
+            help="Значение настройки",
+            default=_MISSING,
         )
 
     def run(self, applicant_tool: HHApplicantTool) -> None:
         args: Namespace = applicant_tool.args
-        storage = applicant_tool.storage
+        settings = applicant_tool.storage.settings
 
-        if args.delete and args.key:
-            # Delete value
-            storage.settings.delete_value(args.key)
-            print(f"🗑️ Настройка '{args.key}' удалена")
-        elif args.key and args.value:
-            storage.settings.set_value(args.key, args.value)
+        if args.delete:
+            if args.key is not _MISSING:
+                # Delete value
+                settings.delete_value(args.key)
+                print(f"🗑️ Настройка '{args.key}' удалена")
+            else:
+                settings.clear()
+        elif args.key is not _MISSING and args.value is not _MISSING:
+            settings.set_value(args.key, args.value)
             print(f"✅ Установлено значение для '{args.key}'")
-        elif args.key:
+        elif args.key is not _MISSING:
             # Get value
-            value = storage.settings.get_setting(args.key)
+            value = settings.get_key(args.key)
             if value is not None:
+                # print(type(value).__name__, value)
                 print(value)
             else:
                 print(f"⚠️ Настройка '{args.key}' не найдена")
         else:
             # List all settings
-            settings = storage.settings.find()
-            t = PrettyTable(field_names=["Ключ", "Значение"], align="l")
+            settings = settings.find()
+            t = PrettyTable(field_names=["Ключ", "Тип", "Значение"], align="l")
             for setting in settings:
                 if setting.key.startswith("_"):
                     continue
-                t.add_row([setting.key, setting.value])
+                t.add_row(
+                    [
+                        setting.key,
+                        type(setting.value).__name__,
+                        setting.value,
+                    ]
+                )
             print(t)

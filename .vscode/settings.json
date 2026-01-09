@@ -11,4 +11,5 @@
     "hhandroid",
     "pincode"
   ],
+  "python.analysis.autoImportCompletions": true,
 }

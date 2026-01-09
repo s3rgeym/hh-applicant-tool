@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Iterator, TextIO
 
 from .. import datatypes
 from ..ai.base import AIError
-from ..ai.openai import OpenAIChat
 from ..api import BadResponse, Redirect
 from ..api.errors import ApiError, LimitExceeded
 from ..datatypes import PaginatedItems, SearchVacancy
@@ -28,7 +27,8 @@ class Namespace(BaseNamespace):
     ignore_employers: Path | None
     force_message: bool
     use_ai: bool
-    pre_prompt: str
+    first_prompt: str
+    prompt: str
     order_by: str
     search: str
     schedule: str
@@ -94,9 +94,13 @@ class Operation(BaseOperation):
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
-            "--pre-prompt",
+            "--first-prompt",
+            help="Начальный помпт чата для генерации сопроводительного письма",
+            default="Напиши сопроводительное письмо для отклика на эту вакансию. Не используй placeholder'ы, твой ответ будет отправлен без обработки.",  # noqa: E501
+        )
+        parser.add_argument(
             "--prompt",
-            help="Добавочный промпт для генерации сопроводительного письма",
+            help="Промпт для генерации сопроводительного письма",
             default="Сгенерируй сопроводительное письмо не более 5-7 предложений от моего имени для вакансии",  # noqa: E501
         )
         parser.add_argument(
@@ -261,7 +265,7 @@ class Operation(BaseOperation):
         self.order_by = args.order_by
         self.per_page = args.per_page
         self.period = args.period
-        self.pre_prompt = args.pre_prompt
+        self.pre_prompt = args.prompt
         self.premium = args.premium
         self.professional_role = args.professional_role
         self.resume_id = args.resume_id or applicant_tool.first_resume_id()
@@ -274,26 +278,12 @@ class Operation(BaseOperation):
         self.sort_point_lng = args.sort_point_lng
         self.top_lat = args.top_lat
         self.total_pages = args.total_pages
-
-        self.ai_chat = None
-        self._set_ai_chat()
+        self.openai_chat = (
+            applicant_tool.get_openai_chat(args.first_prompt)
+            if args.use_ai
+            else None
+        )
         self._apply_similar()
-
-    def _set_ai_chat(self) -> None:
-        c = self.applicant_tool.config.get("openai", {})
-        if not (token := c.get("token")):
-            return
-        model = c.get("model", "gpt-5.1")
-        system_prompt = c.get(
-            "system_prompt",
-            "Напиши сопроводительное письмо для отклика на эту вакансию. Не используй placeholder'ы, твой ответ будет отправлен без обработки.",  # noqa: E501
-        )
-        self.ai_chat = OpenAIChat(
-            token=token,
-            model=model,
-            system_prompt=system_prompt,
-            session=self.applicant_tool.session,
-        )
 
     def _get_application_messages(
         self, message_list: TextIO | None
@@ -317,6 +307,7 @@ class Operation(BaseOperation):
             "phone": me.get("phone", ""),
         }
 
+        seen_employers = set()
         for vacancy in self._get_vacancies():
             try:
                 employer = vacancy.get("employer", {})
@@ -330,13 +321,12 @@ class Operation(BaseOperation):
                 storage = self.applicant_tool.storage
                 storage.vacancies.save(vacancy)
                 if employer := vacancy.get("employer"):
-                    try:
+                    employer_id = employer.get("id")
+                    if employer_id and employer_id not in seen_employers:
                         employer_profile: datatypes.Employer = (
-                            self.api_client.get(f"/employers/{employer['id']}")
+                            self.api_client.get(f"/employers/{employer_id}")
                         )
                         storage.employers.save(employer_profile)
-                    except ApiError:
-                        storage.employers.save(employer)
 
                 # По факту контакты можно получить только здесь?!
                 if vacancy.get("contacts"):
@@ -389,11 +379,11 @@ class Operation(BaseOperation):
                 if self.force_message or vacancy.get(
                     "response_letter_required"
                 ):
-                    if self.ai_chat:
+                    if self.openai_chat:
                         msg = self.pre_prompt + "\n\n"
                         msg += placeholders["vacancy_name"]
                         logger.debug("prompt: %s", msg)
-                        msg = self.ai_chat.send_message(msg)
+                        msg = self.openai_chat.send_message(msg)
                     else:
                         msg = (
                             rand_text(random.choice(self.application_messages))

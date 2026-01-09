@@ -2,7 +2,7 @@ import ctypes
 import platform
 
 
-def fix_windows_colors() -> None:
+def enable_terminal_colors() -> None:
     if not platform.system() == "Windows":
         return
     kernel32 = ctypes.windll.kernel32  # ty:ignore[unresolved-attribute]

@@ -8,5 +8,5 @@ class EmployerModel(BaseModel):
     description: str | None = None
     site_url: str | None = None
     alternate_url: str | None = None
-    area_id: int = mapped(src="area.id", default=None)
-    area_name: str = mapped(src="area.name", default=None)
+    area_id: int = mapped(path="area.id", default=None)
+    area_name: str = mapped(path="area.name", default=None)

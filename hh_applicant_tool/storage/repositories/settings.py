@@ -10,7 +10,7 @@ class SettingsRepository(BaseRepository):
     pkey: str = "key"
     model = SettingModel
 
-    def get_setting(self, key: str, /, default: Default = None) -> str | Default:
+    def get_key(self, key: str, /, default: Default = None) -> str | Default:
         setting = self.get(key)
         return setting.value if setting else default
 
