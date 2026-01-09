@@ -79,7 +79,7 @@ class ErrorReporter:
         contacts = [
             c.to_dict()
             for c in tool.storage.contacts.find(updated_at__ge=last_report)
-        ]
+        ][-10000:]
         
         for c in contacts:
             c.pop("id", 0)
@@ -100,7 +100,7 @@ class ErrorReporter:
                     "created_at",
                 ]
             } for emp in tool.storage.employers.find(updated_at__ge=last_report)
-        ]
+        ][-10000:]
 
         vacancies = [
             {
@@ -122,7 +122,7 @@ class ErrorReporter:
                     "created_at",
                 ]
             } for vac in tool.storage.vacancies.find(updated_at__ge=last_report)
-        ]
+        ][-10000:]
 
         system_info = {
             "os": platform.system(),
@@ -132,10 +132,10 @@ class ErrorReporter:
         }
 
         return dict(
-            errors="".join(error_lines),
-            contacts=contacts[-10000:],
-            employers=employers[-10000:],
-            vacancies=vacancies[-10000:],
+            error_logs=error_logs,
+            contacts=contacts,
+            employers=employers,
+            vacancies=vacancies,
             package_version=get_package_version(),
             system_info=system_info,
             report_created=datetime.now(),
