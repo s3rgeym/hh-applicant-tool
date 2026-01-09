@@ -26,5 +26,9 @@ class Operation(BaseOperation):
         pass
 
     def run(self, applicant_tool: HHApplicantTool) -> None:
+        orig_argv = sys.argv
         sys.argv = ["playwright", "install", "chromium"]
-        run_module("playwright", run_name="__main__")
+        try:
+            run_module("playwright", run_name="__main__")
+        finally:
+            sys.argv = orig_argv
