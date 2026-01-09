@@ -5,16 +5,18 @@ import re
 import sqlite3
 from pathlib import Path
 
-QUERIES_PATH = Path(__file__).parent / "queries"
-MIGRATION_PATH = QUERIES_PATH / "migrations"
+QUERIES_PATH: Path = Path(__file__).parent / "queries"
+MIGRATION_PATH: Path = QUERIES_PATH / "migrations"
 
 
-logger = logging.getLogger(__package__)
+logger: logging.Logger = logging.getLogger(__package__)
 
 
 def init_db(conn: sqlite3.Connection) -> None:
     """Создает схему БД"""
-    conn.executescript((QUERIES_PATH / "schema.sql").read_text(encoding="utf-8"))
+    conn.executescript(
+        (QUERIES_PATH / "schema.sql").read_text(encoding="utf-8")
+    )
     logger.debug("Database scheme created or updated")
 
 
@@ -27,11 +29,13 @@ def list_migrations() -> list[str]:
 
 def apply_migration(conn: sqlite3.Connection, name: str) -> None:
     """Находит файл по имени и выполняет его содержимое"""
-    conn.executescript((MIGRATION_PATH / f"{name}.sql").read_text(encoding="utf-8"))
+    conn.executescript(
+        (MIGRATION_PATH / f"{name}.sql").read_text(encoding="utf-8")
+    )
 
 
-def model2table(o: object) -> str:
-    name = o.__name__
+def model2table(o: type) -> str:
+    name: str = o.__name__
     if name.endswith("Model"):
         name = name[:-5]
     name = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()

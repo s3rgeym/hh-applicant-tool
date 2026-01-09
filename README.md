@@ -45,6 +45,7 @@
   - [Использование AI для генерации сопроводительного письма](#использование-ai-для-генерации-сопроводительного-письма)
     - [OpenAI/ChatGPT](#openaichatgpt)
   - [Добавление своих команд](#добавление-своих-команд)
+  - [Прочее](#прочее)
   - [Лицензия / License](#лицензия--license)
 
 ---
@@ -175,10 +176,12 @@ $ hh-applicant-tool authorize '<ваш телефон или email>'
 - Если вы ввели телефон, то код придет через SMS
 - Если был введен Email, то проверьте почту
 
-Если же при вводе правильных данных возникает ошибка авторизации, то, скорее всего, требуется ввод капчи:
+Если же при вводе правильных данных возникает ошибка авторизации, то, скорее всего, требуется ввод капчи.
+
+Для ввода данных вручную:
 
 ```sh
-hh-applicant-tool authorize --no-headless
+hh-applicant-tool authorize --manual
 ```
 
 Проверка авторизации:
@@ -345,11 +348,18 @@ Choose migration [1] (Keep empty to exit): 1
 
 # Вывести все настройки
 $ hh-applicant-tool settings
++----------+-------------------------+-------------------------+
+| Тип      | Ключ                    | Значение                |
++----------+-------------------------+-------------------------+
+| str      | user.email              | dmitry.kozlov@yandex.ru |
+| bool     | auth.last_login_success | True                    |
+| int      | auth.last_login         | 1768462521              |
++----------+-------------------------+-------------------------+
 
 # Получить значение по ключу
 $ hh-applicant-tool settings auth.username
 
-# Установить значение
+# Установить email, используемый для автологина
 $ hh-applicant-tool settings auth.username 'user@example.com'
 ```
 
@@ -469,11 +479,9 @@ hh-applicant-tool config -e
 
 ```json
 {
-  // ...
   "openai": {
     "token": "ВАШ_API_КЛЮЧ_OPENAI",
-    "model": "gpt-4o",
-    "system_prompt": "Вы опытный HR-специалист. Напишите идеальное сопроводительное письмо..."
+    "model": "ВАША_МОДЕЛЬ",
   }
 }
 ```
@@ -481,6 +489,20 @@ hh-applicant-tool config -e
 ### Добавление своих команд
 
 Утилита использует систему плагинов. Все они лежат в [operations](https://github.com/s3rgeym/hh-applicant-tool/tree/main/applicant_tool/operations). Модули, расположенные там, автоматически добавляются как доступные команды. За основу для своего плагина можно взять [whoami.py](https://github.com/s3rgeym/hh-applicant-tool/tree/main/applicant_tool/operations/whoami.py).
+
+### Прочее
+
+Отключение проверки версии с выводом предупреждения:
+
+```sh
+$ hh-applicant-tool settings disable_version_check true
+```
+
+Утилита ищет в логах информацию о Python-ошибках. Они отправляются на сервер разработчика с целью их оперативного исправления, однако, вы можете отключить отправку отчетов:
+
+```sh
+$ hh-applicant-tool settings send_error_reports false
+```
 
 ### Лицензия / License
 

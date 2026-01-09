@@ -1,4 +1,6 @@
 import logging
+from dataclasses import dataclass, field
+from typing import ClassVar
 
 import requests
 
@@ -11,20 +13,16 @@ class OpenAIError(AIError):
     pass
 
 
-class OpenAIChat:
-    chat_endpoint: str = "https://api.openai.com/v1/chat/completions"
+@dataclass
+class ChatOpenAI:
+    chat_endpoint: ClassVar[str] = "https://api.openai.com/v1/chat/completions"
 
-    def __init__(
-        self,
-        token: str,
-        model: str,
-        system_prompt: str,
-        session: requests.Session | None = None,
-    ):
-        self.token = token
-        self.model = model
-        self.system_prompt = system_prompt
-        self.session = session or requests.session()
+    token: str
+    model: str
+    system_prompt: str | None = None
+    temperature: float = 0.7
+    max_completion_tokens: int = 1000
+    session: requests.Session = field(default_factory=requests.Session)
 
     def default_headers(self) -> dict[str, str]:
         return {
@@ -38,8 +36,8 @@ class OpenAIChat:
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": message},
             ],
-            "temperature": 0.7,
-            "max_completion_tokens": 1000,
+            "temperature": self.temperature,
+            "max_completion_tokens": self.max_completion_tokens,
         }
 
         try:
@@ -47,7 +45,6 @@ class OpenAIChat:
                 self.chat_endpoint,
                 json=payload,
                 headers=self.default_headers(),
-                proxies=self.proxies,
                 timeout=30,
             )
             response.raise_for_status()
@@ -61,4 +58,4 @@ class OpenAIChat:
             return assistant_message
 
         except requests.exceptions.RequestException as ex:
-            raise OpenAIError(str(ex)) from ex
+            raise OpenAIError(f"Network error: {ex}") from ex

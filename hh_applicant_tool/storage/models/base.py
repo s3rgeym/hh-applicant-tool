@@ -4,8 +4,8 @@ from datetime import datetime
 from logging import getLogger
 from typing import Any, Callable, Mapping, Self, dataclass_transform, get_origin
 
-from hh_applicant_tool.utils import json_utils
-from hh_applicant_tool.utils.datetime_utils import try_parse_datetime
+from hh_applicant_tool.utils import jsonutil
+from hh_applicant_tool.utils.dateutil import try_parse_datetime
 
 logger = getLogger(__package__)
 
@@ -13,15 +13,15 @@ MISSING = object()
 
 
 def mapped(
-    src: str | None = None,
-    parse_src: Callable[[Any], Any] | None = None,
-    as_json: bool = False,
+    path: str | None = None,
+    transform: Callable[[Any], Any] | None = None,
+    store_json: bool = False,
     **kwargs: Any,
 ):
     metadata = kwargs.get("metadata", {})
-    metadata.setdefault("src", src)
-    metadata.setdefault("parse_src", parse_src)
-    metadata.setdefault("as_json", as_json)
+    metadata.setdefault("path", path)
+    metadata.setdefault("transform", transform)
+    metadata.setdefault("store_json", store_json)
     return field(metadata=metadata, **kwargs)
 
 
@@ -47,11 +47,11 @@ class BaseModel:
             value = data.get(f.name, MISSING)
             if value is MISSING:
                 continue
-            if f.metadata.get("as_json"):
-                value = json_utils.dumps(value)
-            else:
-                # Приводим типы перед сохранением в базу
-                value = self._coerce_type(value, f)
+            if f.metadata.get("store_json"):
+                value = jsonutil.dumps(value)
+            # Точно не нужно сохранять
+            # else:
+            #     value = self._coerce_type(value, f)
             data[f.name] = value
         return data
 
@@ -89,7 +89,7 @@ class BaseModel:
         kwargs = {}
         for f in fields(cls):
             if from_source:
-                if path := f.metadata.get("src"):
+                if path := f.metadata.get("path"):
                     found = True
                     v = data
                     for key in path.split("."):
@@ -106,12 +106,10 @@ class BaseModel:
                     if value is MISSING:
                         continue
 
-                if value is not None and (
-                    parser := f.metadata.get("parse_src")
-                ):
-                    if isinstance(parser, str):
-                        parser = getattr(cls, parser)
-                    value = parser(value)
+                if value is not None and (t := f.metadata.get("transform")):
+                    if isinstance(t, str):
+                        t = getattr(cls, t)
+                    value = t(value)
 
                 value = cls._coerce_type(value, f)
             else:
@@ -119,8 +117,8 @@ class BaseModel:
                 if value is MISSING:
                     continue
 
-                if f.metadata.get("as_json"):
-                    value = json_utils.loads(value)
+                if f.metadata.get("store_json"):
+                    value = jsonutil.loads(value)
                 else:
                     value = cls._coerce_type(value, f)
 
@@ -128,7 +126,7 @@ class BaseModel:
         return cls(**kwargs)
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return asdict(self)  # pyright: ignore[reportArgumentType]
 
     # def to_json(self, **kwargs: Any) -> str:
     #     """Serializes the model to a JSON string."""
@@ -149,8 +147,8 @@ if __name__ == "__main__":
     class CompanyModel(BaseModel):
         id: "int"
         name: str
-        city_id: int = mapped(src="location.city.id")
-        city: str = mapped(src="location.city.name")
+        city_id: int = mapped(path="location.city.id")
+        city: str = mapped(path="location.city.name")
         created_at: datetime
 
     c = CompanyModel.from_api(

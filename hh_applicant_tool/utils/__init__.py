@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from .attrdict import AttrDict
 from .config import Config, get_config_path
-from .datetime_utils import (
+from .dateutil import (
     DATETIME_FORMAT,
     parse_api_datetime,
     try_parse_datetime,
 )
 from .misc import calc_hash, print_err
 from .string import bool2str, list2str, rand_text, shorten
-from .user_agent import android_user_agent
-from .windows import fix_windows_colors
+from .user_agent import hh_android_useragent
+from .windows import enable_terminal_colors
 
 # Add all public symbols to __all__ for consistent import behavior
 __all__ = [
@@ -25,7 +25,7 @@ __all__ = [
     "bool2str",
     "list2str",
     "calc_hash",
-    "android_user_agent",
-    "fix_windows_colors",
+    "hh_android_useragent",
+    "enable_terminal_colors",
     "print_err",
 ]

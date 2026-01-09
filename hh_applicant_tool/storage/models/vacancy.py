@@ -9,21 +9,23 @@ class VacancyModel(BaseModel):
     id: int
     name: str
     alternate_url: str
-    area_id: int = mapped(src="area.id")
-    area_name: str = mapped(src="area.name")
-    salary_from: int = mapped(src="salary.from", default=None)
-    salary_to: int = mapped(src="salary.to", default=None)
-    currency: str = mapped(src="salary.currency", default=None)
-    gross: bool = mapped(src="salary.gross", default=False)
+    area_id: int = mapped(path="area.id")
+    area_name: str = mapped(path="area.name")
+    salary_from: int = mapped(path="salary.from", default=None)
+    salary_to: int = mapped(path="salary.to", default=None)
+    currency: str = mapped(path="salary.currency", default="RUR")
+    gross: bool = mapped(path="salary.gross", default=False)
 
     remote: bool = mapped(
-        src="schedule.id",
-        parse_src=lambda v: v == "remote",
+        path="schedule.id",
+        transform=lambda v: v == "remote",
         default=False,
     )
 
-    experience: str = mapped(src="experience.id", default=None)
-    professional_roles: list[dict] = mapped(as_json=True, default_factory=list)
+    experience: str = mapped(path="experience.id", default=None)
+    professional_roles: list[dict] = mapped(
+        store_json=True, default_factory=list
+    )
 
     created_at: datetime | None = None
     published_at: datetime | None = None

@@ -94,7 +94,7 @@ class BaseRepository:
         if conditions:
             sql += f" WHERE {' AND '.join(conditions)}"
         sql += " ORDER BY rowid DESC;"
-        logger.debug("%r => %s", sql, sql_params)
+        logger.debug("%.2000s", sql)
         cur = self.conn.execute(sql, sql_params)
         yield from (self._row_to_model(cur, row) for row in cur.fetchall())
 
@@ -112,6 +112,12 @@ class BaseRepository:
         self.maybe_commit(commit=commit)
 
     remove = delete
+
+    def clear(self, commit: bool | None = None):
+        self.conn.execute(f"DELETE FROM {self.table_name};")
+        self.maybe_commit(commit)
+
+    clean = clear
 
     def _insert(
         self,
@@ -157,7 +163,7 @@ class BaseRepository:
                     sql += " DO NOTHING"
 
         sql += ";"
-        # logger.debug(sql)
+        logger.debug("%.2000s", sql)
         self.conn.execute(sql, data)
         self.maybe_commit(commit)
 

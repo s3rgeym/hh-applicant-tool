@@ -67,7 +67,7 @@ class HHApplicantTool(MegaTool):
 
     Исходники и предложения: <https://github.com/s3rgeym/hh-applicant-tool>
 
-    Группа поддержки: <https://t.me/applicant_tool>
+    Группа поддержки: <https://t.me/hh_applicant_tool>
     """
 
     class ArgumentFormatter(
@@ -206,7 +206,7 @@ class HHApplicantTool(MegaTool):
             refresh_token=token.get("refresh_token"),
             access_expires_at=token.get("access_expires_at"),
             delay=args.delay,
-            user_agent=config["user_agent"] or utils.android_user_agent(),
+            user_agent=config["user_agent"] or utils.hh_android_useragent(),
             session=self.session,
         )
         return api
@@ -283,9 +283,8 @@ class HHApplicantTool(MegaTool):
 
         redactor = RedactingFilter(
             [
-                r"\bUSER[A-Z0-9]{60}\b",
-                r"\b[a-fA-F0-9]{32}\b",  # request_id, возвращаемый сервером содержит хеш от айпи  # noqa: E501
-                ANDROID_CLIENT_SECRET,
+                r"\b[A-Z0-9]{64,}\b",
+                r"\b[a-fA-F0-9]{32,}\b",  # request_id, resume_id
             ]
         )
 
@@ -298,7 +297,7 @@ class HHApplicantTool(MegaTool):
         self.args = parser.parse_args(argv, namespace=BaseNamespace())
 
         if sys.platform == "win32":
-            utils.fix_windows_colors()
+            utils.enable_terminal_colors()
 
         # Создаем путь до конфига
         self.config_path.mkdir(
@@ -310,6 +309,8 @@ class HHApplicantTool(MegaTool):
 
         if self.args.run:
             try:
+                self.check_system()
+
                 res = self.args.run(self)
 
                 if self.api_client.access_token != self.config.get(
@@ -317,8 +318,6 @@ class HHApplicantTool(MegaTool):
                 ).get("access_token"):
                     logger.info("Токен был обновлен.")
                     self.config.save(token=self.api_client.get_access_token())
-
-                self.check_system()
 
                 return res
             except KeyboardInterrupt:
