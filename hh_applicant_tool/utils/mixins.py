@@ -129,7 +129,7 @@ class MegaTool(BugReporter):
         ts = int(self.storage.settings.get_setting("_last_report", 0))
         last_report = datetime.fromtimestamp(ts)
 
-        if datetime.now() >= last_report + timedelta(seconds=1):
+        if datetime.now() >= last_report + timedelta(hours=48):
             try:
                 # Передаем self как первый аргумент build_report
                 report_dict = self.build_report(self, last_report)
