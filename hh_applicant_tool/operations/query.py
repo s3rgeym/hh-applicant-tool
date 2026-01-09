@@ -21,6 +21,9 @@ try:
 except ImportError:
     readline = None
 
+MAX_RESULTS = 10
+
+
 logger = logging.getLogger(__package__)
 
 
@@ -65,23 +68,25 @@ class Operation(BaseOperation):
                         writer.writerows(cursor.fetchall())
 
                         if applicant_tool.args.output:
-                            print(f"✅ Exported to {applicant_tool.args.output.name}")
+                            print(
+                                f"✅ Exported to {applicant_tool.args.output.name}"
+                            )
                         return
 
-                    rows = cursor.fetchmany(11)
+                    rows = cursor.fetchmany(MAX_RESULTS + 1)
                     if not rows:
                         print("No results found.")
                         return
 
                     table = PrettyTable()
                     table.field_names = columns
-                    for row in rows[:10]:
+                    for row in rows[:MAX_RESULTS]:
                         table.add_row(row)
 
                     print(table)
-                    if len(rows) > 10:
+                    if len(rows) > MAX_RESULTS:
                         print(
-                            "⚠️  Warning: Showing only first 10 results. Use --csv to see all."
+                            f"⚠️  Warning: Showing only first {MAX_RESULTS} results."
                         )
                 else:
                     applicant_tool.db.commit()
@@ -97,12 +102,16 @@ class Operation(BaseOperation):
         if not sys.stdin.isatty():
             return execute(sys.stdin.read())
 
-        print("SQL Console (Enter to exit, Ctrl+C to clear line)")
+        print("SQL Console (q or ^D to exit)")
         try:
             while True:
                 try:
-                    user_input = input("sql> ").strip()
-                    if not user_input or user_input in ("exit", "quite", r"\q", "q"):
+                    user_input = input("query> ").strip()
+                    if user_input.lower() in (
+                        "exit",
+                        "quit",
+                        "q",
+                    ):
                         break
                     execute(user_input)
                     print()

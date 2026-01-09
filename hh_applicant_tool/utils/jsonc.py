@@ -1,11 +1,11 @@
-# Unused
 """Парсер JSON с комментариями"""
 
-import re
-import enum
-from dataclasses import dataclass
 import ast
+import enum
+import re
+from dataclasses import dataclass
 from typing import Any, Iterator
+
 # from collections import OrderedDict
 
 
@@ -42,7 +42,8 @@ def tokenize(s: str) -> Iterator[Token]:
 class JSONCParser:
     def parse(self, s: str) -> Any:
         self.token_it = filter(
-            lambda t: t.token_type not in [TokenType.COMMENT, TokenType.WHITESPACE],
+            lambda t: t.token_type
+            not in [TokenType.COMMENT, TokenType.WHITESPACE],
             tokenize(s),
         )
         self.token: Token
@@ -90,7 +91,9 @@ class JSONCParser:
             num = self.token.value
             return float(num) if "." in num else int(num)
         elif self.match(TokenType.KEYWORD):
-            return {"null": None, "true": True, "false": False}[self.token.value]
+            return {"null": None, "true": True, "false": False}[
+                self.token.value
+            ]
         else:
             raise SyntaxError(f"Unexpected token: {self.token.token_type.name}")
 
@@ -103,7 +106,10 @@ class JSONCParser:
         # print(f"{self.token =}, {self.next_token =}")
 
     def match(self, token_type: TokenType) -> bool:
-        if self.next_token is not None and self.next_token.token_type == token_type:
+        if (
+            self.next_token is not None
+            and self.next_token.token_type == token_type
+        ):
             self.advance()
             return True
         return False

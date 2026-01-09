@@ -51,7 +51,7 @@ class Operation(BaseOperation):
             L = len(migrations)
             if n := int(
                 input(
-                    f"Choose migraion [1{f'-{L}' if L > 1 else ''}] (Keep empty to exit): "  # noqa: E501
+                    f"Choose migration [1{f'-{L}' if L > 1 else ''}] (Keep empty to exit): "  # noqa: E501
                 )
                 or 0
             ):

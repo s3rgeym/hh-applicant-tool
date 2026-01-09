@@ -185,6 +185,52 @@ class ResumeShort(TypedDict):
     alternate_url: str
 
 
+class ResumeCounters(TypedDict):
+    total_views: int
+    new_views: int
+    invitations: int
+    new_invitations: int
+
+
+class Resume(ResumeShort):
+    status: IdName
+    created_at: str
+    updated_at: str
+    can_publish_or_update: bool
+    counters: ResumeCounters
+
+
+class UserCounters(TypedDict):
+    resumes_count: int
+    new_resume_views: int
+    unread_negotiations: int
+    # ... and more
+
+
+class User(TypedDict):
+    id: int
+    first_name: str
+    last_name: str
+    middle_name: Optional[str]
+    email: Optional[str]
+    phone: Optional[str]
+    is_applicant: bool
+    is_employer: bool
+    is_admin: bool
+    is_anonymous: bool
+    is_application: bool
+    counters: UserCounters
+    # ... and more
+
+
+class Message(TypedDict):
+    id: str
+    text: str
+    author: dict  # Could be more specific, e.g. Participant(TypedDict)
+    created_at: str
+    viewed_by_opponent: bool
+
+
 class Counters(TypedDict):
     messages: int
     unread_messages: int

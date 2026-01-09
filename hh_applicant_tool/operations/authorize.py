@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlsplit
 
@@ -30,7 +31,7 @@ async def ainput(prompt: str) -> str:
 class Operation(BaseOperation):
     """Авторизация через Playwright"""
 
-    __aliases__: list = ["auth"]
+    __aliases__: list = ["auth", "authenticate"]
 
     # Селекторы
     SEL_LOGIN_INPUT = 'input[data-qa="login-input-username"]'
@@ -72,21 +73,35 @@ class Operation(BaseOperation):
 
     def run(self, applicant_tool: HHApplicantTool) -> None:
         self._args = applicant_tool.args
+        last_login_success = False
         try:
             asyncio.run(self._main(applicant_tool))
+            last_login_success = True
         except (KeyboardInterrupt, asyncio.TimeoutError):
             logger.warning("Что-то пошло не так")
             os._exit(1)
+        finally:
+            applicant_tool.storage.settings.set_value(
+                "auth.last_login", datetime.now()
+            )
+            applicant_tool.storage.settings.set_value(
+                "auth.last_login_success", last_login_success
+            )
 
     async def _main(self, applicant_tool: HHApplicantTool) -> None:
         args = applicant_tool.args
         api_client = applicant_tool.api_client
+        storage = applicant_tool.storage
         username = (
-            args.username or (await ainput("👤 Введите email или телефон: "))
+            args.username
+            or storage.settings.get_setting("auth.username")
+            or (await ainput("👤 Введите email или телефон: "))
         ).strip()
 
         if not username:
             raise RuntimeError("Empty username")
+
+        logger.debug(f"authenticate with: {username}")
 
         proxies = api_client.proxies
         proxy_url = proxies.get("https")
@@ -173,7 +188,9 @@ class Operation(BaseOperation):
                     await self._onetime_code_login(page)
 
                 # Шаг 3: Ожидание OAuth кода
-                logger.debug("Ожидание появления OAuth кода в трафике (таймаут 30с)...")
+                logger.debug(
+                    "Ожидание появления OAuth кода в трафике (таймаут 30с)..."
+                )
                 auth_code = await asyncio.wait_for(code_future, timeout=30.0)
 
                 page.remove_listener("request", handle_request)
@@ -184,6 +201,11 @@ class Operation(BaseOperation):
                     auth_code,
                 )
                 api_client.handle_access_token(token)
+
+                # Сохраняем логин и пароль
+                storage.settings.set_value("auth.username", username)
+                if args.password:
+                    storage.settings.set_value("auth.password", args.password)
 
                 print("🔓 Авторизация прошла успешно!")
 
@@ -210,7 +232,9 @@ class Operation(BaseOperation):
         logger.info("Вход по одноразовому коду...")
         await page.press(self.SEL_LOGIN_INPUT, "Enter")
 
-        logger.debug(f"Ожидание контейнера ввода кода: {self.SEL_CODE_CONTAINER}")
+        logger.debug(
+            f"Ожидание контейнера ввода кода: {self.SEL_CODE_CONTAINER}"
+        )
         await page.wait_for_selector(
             self.SEL_CODE_CONTAINER, timeout=self.selector_timeout
         )

@@ -7,13 +7,13 @@ import time
 from dataclasses import dataclass
 from functools import cached_property
 from threading import Lock
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 from urllib.parse import urlencode, urljoin
 
 import requests
 from requests import Session
 
-from ..types import AccessToken
+from ..datatypes import AccessToken
 from . import errors
 
 __all__ = ("ApiClient", "OAuthClient")
@@ -21,6 +21,8 @@ __all__ = ("ApiClient", "OAuthClient")
 DEFAULT_DELAY = 0.334
 
 AllowedMethods = Literal["GET", "POST", "PUT", "DELETE"]
+T = TypeVar("T")
+
 
 logger = logging.getLogger(__package__)
 
@@ -63,7 +65,7 @@ class BaseClient:
         params: dict[str, Any] | None = None,
         delay: float | None = None,
         **kwargs: Any,
-    ) -> dict:
+    ) -> T:
         # Не знаю насколько это "правильно"
         assert method in AllowedMethods.__args__
         params = dict(params or {})
@@ -119,16 +121,16 @@ class BaseClient:
         )
         return rv
 
-    def get(self, *args, **kwargs):
+    def get(self, *args, **kwargs) -> T:
         return self.request("GET", *args, **kwargs)
 
-    def post(self, *args, **kwargs):
+    def post(self, *args, **kwargs) -> T:
         return self.request("POST", *args, **kwargs)
 
-    def put(self, *args, **kwargs):
+    def put(self, *args, **kwargs) -> T:
         return self.request("PUT", *args, **kwargs)
 
-    def delete(self, *args, **kwargs):
+    def delete(self, *args, **kwargs) -> T:
         return self.request("DELETE", *args, **kwargs)
 
     def resolve_url(self, url: str) -> str:
@@ -228,9 +230,11 @@ class ApiClient(BaseClient):
         params: dict[str, Any] | None = None,
         delay: float | None = None,
         **kwargs: Any,
-    ) -> dict:
+    ) -> T:
         def do_request():
-            return BaseClient.request(self, method, endpoint, params, delay, **kwargs)
+            return BaseClient.request(
+                self, method, endpoint, params, delay, **kwargs
+            )
 
         try:
             return do_request()

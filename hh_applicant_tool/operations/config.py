@@ -82,7 +82,9 @@ class Operation(BaseOperation):
             action="store_true",
             help="Открыть конфигурационный файл в редакторе",
         )
-        group.add_argument("-k", "--key", help="Вывести отдельное значение из конфига")
+        group.add_argument(
+            "-k", "--key", help="Вывести отдельное значение из конфига"
+        )
         group.add_argument(
             "-s",
             "--set",

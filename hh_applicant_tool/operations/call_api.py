@@ -44,7 +44,9 @@ class Operation(BaseOperation):
         api_client = applicant_tool.api_client
         params = dict(x.split("=", 1) for x in args.param)
         try:
-            result = api_client.request(args.method, args.endpoint, params=params)
+            result = api_client.request(
+                args.method, args.endpoint, params=params
+            )
             print(json.dumps(result, ensure_ascii=False))
         except ApiError as ex:
             json.dump(ex.data, sys.stderr, ensure_ascii=False)

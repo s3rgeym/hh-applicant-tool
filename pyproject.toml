@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hh-applicant-tool"
-version = "1.2.1"
+version = "1.3.0"
 description = "HH-Applicant-Tool: An automation utility for HeadHunter (hh.ru) designed to streamline the job search process by auto-applying to relevant vacancies and periodically refreshing resumes to stay at the top of recruiter searches."
 homepage = "https://github.com/s3rgeym/hh-applicant-tool"
 repository = "https://github.com/s3rgeym/hh-applicant-tool"
@@ -43,4 +43,21 @@ hh-applicant-tool = "hh_applicant_tool.main:main"
 typeCheckingMode = "off"
 
 [tool.ruff]
-select = ["E", "F"]
+line-length = 80
+# E - pycodestyle
+# F - Pyflakes
+# B - flake8-bugbear (советую добавить, ловит реальные баги)
+select = ["E", "F", "B"]
+
+ignore = [
+    "E501", # Игнорим длину строк (или полагаемся на автоформаттер)
+    "E731", # Разрешаем лямбды
+    "B008", # Разрешаем вызов функций в дефолтных аргументах (удобно для FastAPI Depends или Fields)
+]
+
+# Заебал удалять импорты
+lint.unfixable = ["F401"]
+
+[tool.ruff.lint.per-file-ignores]
+# Игнорим неиспользуемые импорты только в конфигах или __init__
+# "__init__.py" = ["F401"]

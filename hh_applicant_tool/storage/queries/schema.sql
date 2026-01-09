@@ -61,7 +61,7 @@ CREATE INDEX IF NOT EXISTS idx_vacancies_remote ON vacancies(remote);
 CREATE INDEX IF NOT EXISTS idx_vacancies_experience ON vacancies(experience);
 /* ===================== negotiations ===================== */
 CREATE TABLE IF NOT EXISTS negotiations (
-    id TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY,
     state TEXT NOT NULL,
     vacancy_id INTEGER NOT NULL,
     employer_id INTEGER NOT NULL,
@@ -80,7 +80,32 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+/* ===================== resumes ===================== */
+CREATE TABLE IF NOT EXISTS resumes (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    url TEXT,
+    alternate_url TEXT,
+    status_id TEXT,
+    status_name TEXT,
+    can_publish_or_update BOOLEAN,
+    total_views INTEGER,
+    new_views INTEGER,
+    created_at DATETIME,
+    updated_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_resumes_status_id ON resumes(status_id);
+CREATE INDEX IF NOT EXISTS idx_resumes_created_at ON resumes(created_at);
+CREATE INDEX IF NOT EXISTS idx_resumes_updated_at ON resumes(updated_at);
 /* триггеры */
+CREATE TRIGGER IF NOT EXISTS trg_resumes_updated
+AFTER
+UPDATE ON resumes FOR EACH ROW
+    WHEN NEW.updated_at <= OLD.updated_at BEGIN
+UPDATE resumes
+SET updated_at = CURRENT_TIMESTAMP
+WHERE id = OLD.id;
+END;
 CREATE TRIGGER IF NOT EXISTS trg_employers_updated
 AFTER
 UPDATE ON employers FOR EACH ROW

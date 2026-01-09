@@ -3,12 +3,12 @@ from __future__ import annotations
 import argparse
 import logging
 import random
-import re
 from typing import TYPE_CHECKING
 
+from .. import datatypes
 from ..api import ApiError
 from ..main import BaseNamespace, BaseOperation
-from ..utils import rand_text
+from ..utils.string import rand_text
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -23,11 +23,6 @@ try:
 except ImportError:
     pass
 
-
-GOOGLE_DOCS_RE = re.compile(
-    r"\b(?:https?:\/\/)?(?:docs|forms|sheets|slides|drive)\.google\.com\/(?:document|spreadsheets|presentation|forms|file)\/(?:d|u)\/[a-zA-Z0-9_\-]+(?:\/[a-zA-Z0-9_\-]+)?\/?(?:[?#].*)?\b|\b(?:https?:\/\/)?(?:goo\.gl|forms\.gle)\/[a-zA-Z0-9]+\b",
-    re.I,
-)
 
 logger = logging.getLogger(__package__)
 
@@ -96,7 +91,8 @@ class Operation(BaseOperation):
     def reply_chats(self) -> None:
         blacklisted = self.applicant_tool.get_blacklisted()
         logger.debug(f"{blacklisted = }")
-        me = self.me = self.applicant_tool.get_me()
+        me: datatypes.User
+        self.me = me = self.applicant_tool.get_me()
 
         basic_message_placeholders = {
             "first_name": me.get("first_name", ""),
@@ -148,7 +144,9 @@ class Operation(BaseOperation):
                 last_message: dict | None = None
                 message_history: list[str] = []
                 while True:
-                    messages_res = self.api_client.get(
+                    messages_res: datatypes.PaginatedItems[
+                        datatypes.Message
+                    ] = self.api_client.get(
                         f"/negotiations/{nid}/messages", page=page
                     )
 
@@ -175,7 +173,9 @@ class Operation(BaseOperation):
                     last_message["author"]["participant_type"] == "employer"
                 )
 
-                if is_employer_message or not negotiation.get("viewed_by_opponent"):
+                if is_employer_message or not negotiation.get(
+                    "viewed_by_opponent"
+                ):
                     if self.reply_message:
                         send_message = (
                             rand_text(self.reply_message) % message_placeholders
@@ -190,7 +190,11 @@ class Operation(BaseOperation):
                             salary_to = salary.get("to") or "-"
                             salary_currency = salary.get("currency")
                             print(
-                                "💵 от", salary_from, "до", salary_to, salary_currency
+                                "💵 от",
+                                salary_from,
+                                "до",
+                                salary_to,
+                                salary_currency,
                             )
                         print("")
                         print("Последние сообщения:")
@@ -224,7 +228,10 @@ class Operation(BaseOperation):
                         continue
 
                     if send_message.startswith("/ban"):
-                        self.api_client.put(f"/employers/blacklisted/{employer['id']}")
+                        self.applicant_tool.storage.employers.save(employer)
+                        self.api_client.put(
+                            f"/employers/blacklisted/{employer['id']}"
+                        )
                         blacklisted.append(employer["id"])
                         print(
                             "🚫 Работодатель добавлен в черный список",
