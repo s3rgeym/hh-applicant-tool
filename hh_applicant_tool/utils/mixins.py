@@ -32,103 +32,97 @@ def get_package_version() -> Version | None:
         pass
 
 
+TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
+
+
+def collect_traceback_logs(
+    fp,
+    after_dt: datetime,
+    maxlen=1000,
+) -> str:
+    error_lines = deque(maxlen=maxlen)
+    prev_line = ""
+    log_dt = None
+    collecting_traceback = False
+    for line in fp:
+        if ts_match := TS_RE.match(line):
+            log_dt = datetime.strptime(ts_match.group(0), "%Y-%m-%d %H:%M:%S")
+            collecting_traceback = False
+
+        if (
+            line.startswith("Traceback (most recent call last):")
+            and log_dt
+            and log_dt >= after_dt
+        ):
+            error_lines.append(prev_line)
+            collecting_traceback = True
+
+        if collecting_traceback:
+            error_lines.append(line)
+
+        prev_line = line
+    return "".join(error_lines)
+
+
 class ErrorReporter:
     def build_report(
         self,
         tool: HHApplicantTool,
         last_report: datetime,
     ) -> dict:
-        # Ограничиваем количество строк, чтобы не взорвать память
-        error_lines = deque(maxlen=1000)
-
+        error_logs = ""
         if tool.log_file.exists():
-            with tool.log_file.open(encoding="utf-8", errors="ignore") as f:
-                is_after_dt = False
-                collecting_traceback = False
-                previous_line = ""
-
-                for line in f:
-                    # Проверка даты: 2026-01-09 05:29:11
-                    ts_match = re.match(
-                        r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", line
-                    )
-
-                    if ts_match:
-                        try:
-                            log_dt = datetime.strptime(
-                                ts_match.group(1), "%Y-%m-%d %H:%M:%S"
-                            )
-                            is_after_dt = log_dt >= last_report
-                        except ValueError:
-                            pass
-
-                        collecting_traceback = False
-
-                    # Фильтруем: только новые И только ошибки
-                    if is_after_dt:
-                        if "Traceback (most recent call last):" in line:
-                            if not collecting_traceback and previous_line:
-                                error_lines.append(previous_line)
-                            collecting_traceback = True
-
-                        # Если внутри блока ошибки и это не новая строка лога
-                        if collecting_traceback and not ts_match:
-                            error_lines.append(line)
-
-                    previous_line = line
+            with tool.log_file.open(encoding="utf-8", errors="ignore") as fp:
+                error_logs = collect_traceback_logs(fp, last_report, maxlen=10000)
 
         # Эти данные нужны для воспроизведения ошибок. Среди них ваших нет
         contacts = [
             c.to_dict()
             for c in tool.storage.contacts.find(updated_at__ge=last_report)
         ]
+        
         for c in contacts:
-            c.pop("id", None)
+            c.pop("id", 0)
 
-        employers = []
-        for emp in tool.storage.employers.find(updated_at__ge=last_report):
-            d = emp.to_dict()
-            employers.append(
-                {
-                    k: v
-                    for k, v in d.items()
-                    if k
-                    in [
-                        "id",
-                        "alternate_url",
-                        "area_id",
-                        "area_name",
-                        "name",
-                        "site_url",
-                        "created_at",
-                    ]
-                }
-            )
+        employers = [
+            {
+                k: v
+                for k, v in emp.to_dict().items()
+                if k
+                in [
+                    "id",
+                    "type",
+                    "alternate_url",
+                    "area_id",
+                    "area_name",
+                    "name",
+                    "site_url",
+                    "created_at",
+                ]
+            } for emp in tool.storage.employers.find(updated_at__ge=last_report)
+        ]
 
-        vacancies = []
-        vac: VacancyModel
-        for vac in tool.storage.vacancies.find(updated_at__ge=last_report):
-            vacancies.append(
-                {
-                    k: v
-                    for k, v in vac.to_dict().items()
-                    if k
-                    in [
-                        "id",
-                        "alternate_url",
-                        "area_id",
-                        "area_name",
-                        "salary_from",
-                        "salary_to",
-                        "currency",
-                        "name",
-                        "professional_roles",
-                        "experience",
-                        "remote",
-                        "created_at",
-                    ]
-                }
-            )
+        vacancies = [
+            {
+                k: v
+                for k, v in vac.to_dict().items()
+                if k
+                in [
+                    "id",
+                    "alternate_url",
+                    "area_id",
+                    "area_name",
+                    "salary_from",
+                    "salary_to",
+                    "currency",
+                    "name",
+                    "professional_roles",
+                    "experience",
+                    "remote",
+                    "created_at",
+                ]
+            } for vac in tool.storage.vacancies.find(updated_at__ge=last_report)
+        ]
 
         system_info = {
             "os": platform.system(),
