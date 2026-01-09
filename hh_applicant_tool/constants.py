@@ -9,6 +9,3 @@ ANDROID_CLIENT_SECRET = (
 # Используется для прямой авторизации. Этот способ мной не используется, так как
 # для отображения капчи все равно нужен webview.
 # K811HJNKQA8V1UN53I6PN1J1CMAD2L1M3LU6LPAU849BCT031KDSSM485FDPJ6UF
-
-# Кривой формат, который используют эти долбоебы
-DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S%z"

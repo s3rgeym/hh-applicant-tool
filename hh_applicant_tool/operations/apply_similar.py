@@ -6,18 +6,14 @@ import random
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator, TextIO
 
+from .. import datatypes
 from ..ai.base import AIError
 from ..ai.openai import OpenAIChat
 from ..api import BadResponse, Redirect
 from ..api.errors import ApiError, LimitExceeded
+from ..datatypes import PaginatedItems, SearchVacancy
 from ..main import BaseNamespace, BaseOperation
-from ..types import PaginatedItems, SearchVacancy
-from ..utils import (
-    bool2str,
-    list2str,
-    rand_text,
-    shorten,
-)
+from ..utils import bool2str, list2str, rand_text, shorten
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -155,7 +151,9 @@ class Operation(BaseOperation):
         search_params_group.add_argument(
             "--employment", nargs="+", help="Тип занятости"
         )
-        search_params_group.add_argument("--area", nargs="+", help="Регион (area id)")
+        search_params_group.add_argument(
+            "--area", nargs="+", help="Регион (area id)"
+        )
         search_params_group.add_argument(
             "--metro", nargs="+", help="Станции метро (metro id)"
         )
@@ -178,7 +176,9 @@ class Operation(BaseOperation):
             "--salary", type=int, help="Минимальная зарплата"
         )
         search_params_group.add_argument(
-            "--only-with-salary", default=False, action=argparse.BooleanOptionalAction
+            "--only-with-salary",
+            default=False,
+            action=argparse.BooleanOptionalAction,
         )
         search_params_group.add_argument(
             "--label", nargs="+", help="Метки вакансий (label)"
@@ -226,7 +226,9 @@ class Operation(BaseOperation):
             help="Только премиум вакансии",
         )
         search_params_group.add_argument(
-            "--search-field", nargs="+", help="Поля поиска (name, company_name и т.п.)"
+            "--search-field",
+            nargs="+",
+            help="Поля поиска (name, company_name и т.п.)",
         )
 
     def run(
@@ -236,7 +238,9 @@ class Operation(BaseOperation):
         self.applicant_tool = applicant_tool
         self.api_client = applicant_tool.api_client
         args: Namespace = applicant_tool.args
-        self.application_messages = self._get_application_messages(args.message_list)
+        self.application_messages = self._get_application_messages(
+            args.message_list
+        )
         self.area = args.area
         self.bottom_lat = args.bottom_lat
         self.currency = args.currency
@@ -291,7 +295,9 @@ class Operation(BaseOperation):
             session=self.applicant_tool.session,
         )
 
-    def _get_application_messages(self, message_list: TextIO | None) -> list[str]:
+    def _get_application_messages(
+        self, message_list: TextIO | None
+    ) -> list[str]:
         return (
             list(filter(None, map(str.strip, message_list)))
             if message_list
@@ -302,7 +308,7 @@ class Operation(BaseOperation):
         )
 
     def _apply_similar(self) -> None:
-        me = self.applicant_tool.get_me()
+        me: datatypes.User = self.applicant_tool.get_me()
 
         basic_placeholders = {
             "first_name": me.get("first_name", ""),
@@ -321,21 +327,20 @@ class Operation(BaseOperation):
                     **basic_placeholders,
                 }
 
-                logger.debug(
-                    "Вакансия от %(employer_name)s: %(vacancy_name)s" % placeholders
-                )
-                self.applicant_tool.storage.vacancies.save(vacancy)
+                storage = self.applicant_tool.storage
+                storage.vacancies.save(vacancy)
+                if employer := vacancy.get("employer"):
+                    try:
+                        employer_profile: datatypes.Employer = (
+                            self.api_client.get(f"/employers/{employer['id']}")
+                        )
+                        storage.employers.save(employer_profile)
+                    except ApiError:
+                        storage.employers.save(employer)
 
                 # По факту контакты можно получить только здесь?!
-                if contacts := vacancy.get("contacts"):
-                    # Профиль компании могут снести и тогда о ней ничего не узнать
-                    if employer_id := employer.get("id"):
-                        employer_profile = self.api_client.get(
-                            f"/employers/{employer_id}"
-                        )
-                        # Сначала нужно работодателя сохранить, так как контакты на него ссылаются
-                        self.applicant_tool.storage.employers.save(employer_profile)
-                        self.applicant_tool.storage.contacts.save(employer_id, contacts)
+                if vacancy.get("contacts"):
+                    storage.contacts.save(vacancy)
 
                 if vacancy.get("has_test"):
                     logger.debug(
@@ -369,7 +374,9 @@ class Operation(BaseOperation):
                         vacancy["alternate_url"],
                     )
                     if "got_rejection" in relations:
-                        logger.debug("Вы получили отказ: %s", vacancy["alternate_url"])
+                        logger.debug(
+                            "Вы получили отказ: %s", vacancy["alternate_url"]
+                        )
                         print("⛔  Пришел отказ", vacancy["alternate_url"])
                     continue
 
@@ -379,7 +386,9 @@ class Operation(BaseOperation):
                     "message": "",
                 }
 
-                if self.force_message or vacancy.get("response_letter_required"):
+                if self.force_message or vacancy.get(
+                    "response_letter_required"
+                ):
                     if self.ai_chat:
                         msg = self.pre_prompt + "\n\n"
                         msg += placeholders["vacancy_name"]
@@ -402,7 +411,9 @@ class Operation(BaseOperation):
                             delay=random.uniform(1, 3),
                         )
                         assert res == {}
-                        logger.debug("Отправили отклик: %s", vacancy["alternate_url"])
+                        logger.debug(
+                            "Отправили отклик: %s", vacancy["alternate_url"]
+                        )
                     print(
                         "📨 Отправили отклик:",
                         vacancy["alternate_url"],

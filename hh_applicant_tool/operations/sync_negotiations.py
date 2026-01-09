@@ -5,8 +5,9 @@ import logging
 from typing import TYPE_CHECKING
 
 from ..api.errors import ApiError
+from ..datatypes import NegotiationState
 from ..main import BaseNamespace, BaseOperation
-from ..types import NegotiationState
+from ..storage.models.negotiation import NegotiationModel
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -15,9 +16,8 @@ logger = logging.getLogger(__package__)
 
 
 class Namespace(BaseNamespace):
-    older_than: int
-    blacklist_discard: bool
     cleanup: bool
+    blacklist_discard: bool
     dry_run: bool
 
 
@@ -28,8 +28,15 @@ class Operation(BaseOperation):
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
+            "--cleanup",
+            "--clean",
+            action=argparse.BooleanOptionalAction,
+            help="Удалить отклики с отказами",
+        )
+        parser.add_argument(
             "-b",
             "--blacklist-discard",
+            "--blacklist",
             action=argparse.BooleanOptionalAction,
             help="Блокировать работодателя за отказ",
         )
@@ -43,13 +50,24 @@ class Operation(BaseOperation):
     def run(self, applicant_tool: HHApplicantTool) -> None:
         self.applicant_tool = applicant_tool
         self.args = applicant_tool.args
-        self.cleanup()
+        self._sync()
 
-    def cleanup(self) -> None:
+    def _sync(self) -> None:
+        storage = self.applicant_tool.storage
         for negotiation in self.applicant_tool.get_negotiations():
+            storage.negotiations.save(
+                NegotiationModel.from_api(negotiation),
+            )
+            # if vacancy := negotiation.get("vacancy"):
+            #     storage.vacancies.save(VacancyModel.from_api(vacancy))
+            #     if employer := vacancy.get("employer"):
+            #         storage.employers.save(EmployerModel.from_api(employer))
+            #     if vacancy.get("contacts"):
+            #         storage.contacts.save(EmployerContactModel.from_api(vacancy))
+
             state_id: NegotiationState = negotiation["state"]["id"]
-            if contacts := negotiation["vacancy"].get("contacts"):
-                logger.info("Найдены контакты: %r", contacts)
+            if not self.args.cleanup:
+                continue
             if state_id != "discard":
                 continue
             try:
@@ -67,7 +85,9 @@ class Operation(BaseOperation):
                 )
 
                 employer = vacancy.get("employer", {})
-                if (employer_id := employer.get("id")) and self.args.blacklist_discard:
+                if (
+                    employer_id := employer.get("id")
+                ) and self.args.blacklist_discard:
                     if not self.args.dry_run:
                         self.applicant_tool.api_client.put(
                             f"/employers/blacklisted/{employer_id}"
@@ -81,4 +101,4 @@ class Operation(BaseOperation):
             except ApiError as err:
                 logger.error(err)
 
-        print("✅ Отклики удалены.")
+        print("✅ Синхронизация завершена.")

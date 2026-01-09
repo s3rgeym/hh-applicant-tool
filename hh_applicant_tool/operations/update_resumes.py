@@ -6,9 +6,10 @@ import logging
 from typing import TYPE_CHECKING
 
 from ..api import ApiError
+from ..datatypes import PaginatedItems
 from ..main import BaseNamespace, BaseOperation
-from ..types import PaginatedItems
-from ..utils import print_err, shorten
+from ..utils import print_err
+from ..utils.string import shorten
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool

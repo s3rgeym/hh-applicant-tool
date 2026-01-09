@@ -5,6 +5,7 @@ import argparse
 import logging
 from typing import TYPE_CHECKING
 
+from .. import datatypes
 from ..main import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:
@@ -33,7 +34,7 @@ class Operation(BaseOperation):
 
     def run(self, applicant_tool: HHApplicantTool) -> None:
         api_client = applicant_tool.api_client
-        result = api_client.get("me")
+        result: datatypes.User = api_client.get("me")
         full_name = " ".join(
             filter(
                 None,
@@ -44,6 +45,10 @@ class Operation(BaseOperation):
                 ],
             )
         )
+        with applicant_tool.storage.settings as s:
+            s.set_value("user.full_name", full_name)
+            s.set_value("user.email", result.get("email"))
+            s.set_value("user.phone", result.get("phone"))
         counters = result["counters"]
         print(
             f"🆔 {result['id']} {full_name or 'Анонимный аккаунт'} "

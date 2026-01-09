@@ -6,11 +6,12 @@ from typing import TYPE_CHECKING
 
 from prettytable import PrettyTable
 
+from ..datatypes import PaginatedItems
 from ..main import BaseNamespace, BaseOperation
-from ..types import PaginatedItems
-from ..utils import shorten
+from ..utils.string import shorten
 
 if TYPE_CHECKING:
+    from .. import datatypes
     from ..main import HHApplicantTool
 
 
@@ -30,8 +31,14 @@ class Operation(BaseOperation):
         pass
 
     def run(self, applicant_tool: HHApplicantTool) -> None:
-        resumes: PaginatedItems = applicant_tool.get_resumes()
-        t = PrettyTable(field_names=["ID", "Название", "Статус"], align="l", valign="t")
+        resumes: PaginatedItems[datatypes.Resume] = applicant_tool.get_resumes()
+        storage = applicant_tool.storage
+        for resume in resumes["items"]:
+            storage.resumes.save(resume)
+
+        t = PrettyTable(
+            field_names=["ID", "Название", "Статус"], align="l", valign="t"
+        )
         t.add_rows(
             [
                 (
@@ -43,3 +50,4 @@ class Operation(BaseOperation):
             ]
         )
         print(t)
+        print(f"\nНайдено резюме: {resumes['found']}")

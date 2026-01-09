@@ -5,6 +5,7 @@ import logging
 import os
 import sqlite3
 import sys
+from collections.abc import Sequence
 from functools import cached_property
 from importlib import import_module
 from itertools import count
@@ -12,24 +13,21 @@ from logging.handlers import RotatingFileHandler
 from os import getenv
 from pathlib import Path
 from pkgutil import iter_modules
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable
 
 import requests
 import urllib3
 
-from . import types
+from . import datatypes, utils
 from .api import ApiClient
 from .constants import ANDROID_CLIENT_ID, ANDROID_CLIENT_SECRET
-from .log import ColorHandler, RedactingFilter
 from .storage import StorageFacade
-from .utils import (
-    Config,
-    android_user_agent,
-    fix_windows_color_output,
-    get_config_path,
-)
+from .utils.log import ColorHandler, RedactingFilter
+from .utils.mixins import MegaTool
 
-DEFAULT_CONFIG_DIR = get_config_path() / (__package__ or "").replace("_", "-")
+DEFAULT_CONFIG_DIR = utils.get_config_path() / (__package__ or "").replace(
+    "_", "-"
+)
 DEFAULT_CONFIG_FILENAME = "config.json"
 DEFAULT_LOG_FILENAME = "log.txt"
 DEFAULT_DATABASE_FILENAME = "data"
@@ -64,7 +62,7 @@ class BaseNamespace(argparse.Namespace):
     disable_telemetry: bool
 
 
-class HHApplicantTool:
+class HHApplicantTool(MegaTool):
     """Утилита для автоматизации действий соискателя на сайте hh.ru.
 
     Исходники и предложения: <https://github.com/s3rgeym/hh-applicant-tool>
@@ -176,8 +174,8 @@ class HHApplicantTool:
         return (self.args.config_dir / self.args.profile_id).resolve()
 
     @cached_property
-    def config(self) -> Config:
-        return Config(self.config_path / DEFAULT_CONFIG_FILENAME)
+    def config(self) -> utils.Config:
+        return utils.Config(self.config_path / DEFAULT_CONFIG_FILENAME)
 
     @cached_property
     def log_file(self) -> Path:
@@ -208,15 +206,15 @@ class HHApplicantTool:
             refresh_token=token.get("refresh_token"),
             access_expires_at=token.get("access_expires_at"),
             delay=args.delay,
-            user_agent=config["user_agent"] or android_user_agent(),
+            user_agent=config["user_agent"] or utils.android_user_agent(),
             session=self.session,
         )
         return api
 
-    def get_me(self) -> dict:
+    def get_me(self) -> datatypes.User:
         return self.api_client.get("me")
 
-    def get_resumes(self) -> dict:
+    def get_resumes(self) -> datatypes.PaginatedItems[datatypes.Resume]:
         return self.api_client.get("/resumes/mine")
 
     def first_resume_id(self):
@@ -227,13 +225,17 @@ class HHApplicantTool:
     def get_blacklisted(self) -> list[str]:
         rv = []
         for page in count():
-            r = self.api_client.get("/employers/blacklisted", page=page)
+            r: datatypes.PaginatedItems[datatypes.EmployerShort] = (
+                self.api_client.get("/employers/blacklisted", page=page)
+            )
             rv += [item["id"] for item in r["items"]]
             if page + 1 >= r["pages"]:
                 break
         return rv
 
-    def get_negotiations(self, status: str = "active") -> Iterable[types.Negotiation]:
+    def get_negotiations(
+        self, status: str = "active"
+    ) -> Iterable[datatypes.Negotiation]:
         for page in count():
             r: dict[str, Any] = self.api_client.get(
                 "/negotiations",
@@ -262,7 +264,9 @@ class HHApplicantTool:
         log_level = max(logging.DEBUG, logging.WARNING - args.verbosity * 10)
         color_handler = ColorHandler()
         # [C] Critical Error Occurred
-        color_handler.setFormatter(logging.Formatter("[%(levelname).1s] %(message)s"))
+        color_handler.setFormatter(
+            logging.Formatter("[%(levelname).1s] %(message)s")
+        )
         color_handler.setLevel(log_level)
 
         # Логи
@@ -294,7 +298,7 @@ class HHApplicantTool:
         self.args = parser.parse_args(argv, namespace=BaseNamespace())
 
         if sys.platform == "win32":
-            fix_windows_color_output()
+            utils.fix_windows_colors()
 
         # Создаем путь до конфига
         self.config_path.mkdir(
@@ -308,11 +312,13 @@ class HHApplicantTool:
             try:
                 res = self.args.run(self)
 
-                if self.api_client.access_token != self.config.get("token", {}).get(
-                    "access_token"
-                ):
+                if self.api_client.access_token != self.config.get(
+                    "token", {}
+                ).get("access_token"):
                     logger.info("Токен был обновлен.")
                     self.config.save(token=self.api_client.get_access_token())
+
+                self.check_system()
 
                 return res
             except KeyboardInterrupt:
