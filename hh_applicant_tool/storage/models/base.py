@@ -49,7 +49,7 @@ class BaseModel:
                 continue
             if f.metadata.get("store_json"):
                 value = jsonutil.dumps(value)
-            # Точно не нужно сохранять
+            # Точно не нужно типы приводить перед сохранением
             # else:
             #     value = self._coerce_type(value, f)
             data[f.name] = value
