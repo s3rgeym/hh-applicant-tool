@@ -24,7 +24,7 @@ log = getLogger(__package__)
 
 
 @cache
-def get_package_version() -> Version | None:
+def get_package_version() -> str | None:
     try:
         return version("hh-applicant-tool")
     except (PackageNotFoundError, TypeError, ValueError):
@@ -154,7 +154,7 @@ class ErrorReporter:
                 timeout=15.0,
             )
             r.raise_for_status()
-            log.debug(f"Report was sent: {r.status_code}")
+            log.debug("Report was sent")
             return r.status_code
         except RequestException as e:
             log.error("Network error: %s", e)
