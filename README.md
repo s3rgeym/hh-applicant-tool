@@ -508,7 +508,7 @@ $ . ~/.local/share/pipx/venvs/hh-applicant-tool/bin/activate
 import hh_applicant_tool.main
 
 # Передаем аргументы как в команду
-tool = hh_applicant_tool.main.HHApplicantTool(["--proxy-url", "socks5://localhost:9050"])
+tool = hh_applicant_tool.main.HHApplicantTool(["--proxy-url", "socks5://localhost:1080"])
 print(tool.api_client.get('/me'))
 
 # Какую-то вспомогательную информацию можно сохранять в настройках
