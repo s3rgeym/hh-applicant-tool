@@ -210,7 +210,7 @@ class VersionChecker:
             if v := self.get_latest_version():
                 self.storage.settings.set_value("_latest_version", v)
                 self.storage.settings.set_value(
-                    "_next_version_check", datetime.now() + timedelta(hours=24)
+                    "_next_version_check", datetime.now() + timedelta(hours=1)
                 )
 
         if (
