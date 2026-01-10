@@ -6,12 +6,11 @@ import socket
 from collections import deque
 from datetime import datetime, timedelta
 from functools import cache
-from importlib.metadata import PackageNotFoundError, version
+from importlib.metadata import version
 from logging import getLogger
 from typing import TYPE_CHECKING, Literal
 
 import requests
-from packaging.version import Version
 from requests.exceptions import RequestException
 
 from ..ai.openai import ChatOpenAI
@@ -23,12 +22,13 @@ if TYPE_CHECKING:
 log = getLogger(__package__)
 
 
+def parse_version(v: str) -> tuple[int, int, int]:
+    return tuple(map(int, v.split(".")))
+
+
 @cache
 def get_package_version() -> str | None:
-    try:
-        return version("hh-applicant-tool")
-    except (PackageNotFoundError, TypeError, ValueError):
-        pass
+    return version("hh-applicant-tool")
 
 
 TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
@@ -218,7 +218,7 @@ class VersionChecker:
         if (
             latest_ver := self.storage.settings.get_value("_latest_version")
         ) and (cur_ver := get_package_version()):
-            if Version(latest_ver) > Version(cur_ver):
+            if parse_version(latest_ver) > parse_version(cur_ver):
                 log.warning(
                     "ТЕКУЩАЯ ВЕРСИЯ %s УСТАРЕЛА. РЕКОМЕНДУЕТСЯ ЕЕ ОБНОВИТЬ ДО ВЕРСИИ %s.",
                     cur_ver,

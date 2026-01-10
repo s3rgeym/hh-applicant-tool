@@ -47,10 +47,10 @@ class Operation(BaseOperation):
     @property
     def is_headless(self) -> bool:
         """Свойство, определяющее режим работы браузера"""
-        return not self._args.no_headless and self.is_automate
+        return not self._args.no_headless and self.is_automated
 
     @property
-    def is_automate(self) -> bool:
+    def is_automated(self) -> bool:
         return not self._args.manual
 
     @property
@@ -80,20 +80,20 @@ class Operation(BaseOperation):
             help="Ручной режим ввода кредов, редирект будет перехвачен.",
         )
 
-    def run(self, applicant_tool: HHApplicantTool) -> None:
-        self._args = applicant_tool.args
+    def run(self, tool: HHApplicantTool) -> None:
+        self._args = tool.args
         try:
-            asyncio.run(self._main(applicant_tool))
+            asyncio.run(self._main(tool))
         except (KeyboardInterrupt, asyncio.TimeoutError):
             logger.warning("Что-то пошло не так")
             os._exit(1)
 
-    async def _main(self, applicant_tool: HHApplicantTool) -> None:
-        args = applicant_tool.args
-        api_client = applicant_tool.api_client
-        storage = applicant_tool.storage
+    async def _main(self, tool: HHApplicantTool) -> None:
+        args = tool.args
+        api_client = tool.api_client
+        storage = tool.storage
 
-        if self.is_automate:
+        if self.is_automated:
             username = (
                 args.username
                 or storage.settings.get_value("auth.username")
@@ -175,7 +175,7 @@ class Operation(BaseOperation):
                     wait_until="load",
                 )
 
-                if self.is_automate:
+                if self.is_automated:
                     # Шаг 1: Логин
                     logger.debug(f"Ожидание поля логина {self.SEL_LOGIN_INPUT}")
                     await page.wait_for_selector(
@@ -194,7 +194,7 @@ class Operation(BaseOperation):
                 logger.debug("Ожидание появления OAuth кода в трафике...")
 
                 auth_code = await asyncio.wait_for(
-                    code_future, timeout=[None, 30.0][self.is_automate]
+                    code_future, timeout=[None, 30.0][self.is_automated]
                 )
 
                 page.remove_listener("request", handle_request)
@@ -209,7 +209,7 @@ class Operation(BaseOperation):
                 print("🔓 Авторизация прошла успешно!")
 
                 # Сохраняем логин и пароль
-                if self.is_automate:
+                if self.is_automated:
                     storage.settings.set_value("auth.username", username)
                     if args.password:
                         storage.settings.set_value(
