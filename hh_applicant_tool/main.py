@@ -307,37 +307,43 @@ class HHApplicantTool(MegaTool):
 
         self._setup_logger()
 
-        if self.args.run:
+        try:
+            if self.args.run:
+                try:
+                    res = self.args.run(self)
+
+                    if self.api_client.access_token != self.config.get(
+                        "token", {}
+                    ).get("access_token"):
+                        logger.info("Токен был обновлен.")
+                        self.config.save(
+                            token=self.api_client.get_access_token()
+                        )
+
+                    return res
+                except KeyboardInterrupt:
+                    logger.warning("Выполнение прервано пользователем!")
+                    return 1
+                except sqlite3.Error as ex:
+                    logger.exception(ex)
+
+                    script_name = sys.argv[0].split(os.sep)[-1]
+
+                    logger.warning(
+                        f"Возможно база данных повреждена, попробуйте выполнить команду:\n\n"  # noqa: E501
+                        f"  {script_name} migrate-db"
+                    )
+                    return 1
+                except Exception as e:
+                    logger.exception(e)
+                    return 1
+            parser.print_help(file=sys.stderr)
+            return 2
+        finally:
             try:
                 self.check_system()
-
-                res = self.args.run(self)
-
-                if self.api_client.access_token != self.config.get(
-                    "token", {}
-                ).get("access_token"):
-                    logger.info("Токен был обновлен.")
-                    self.config.save(token=self.api_client.get_access_token())
-
-                return res
-            except KeyboardInterrupt:
-                logger.warning("Выполнение прервано пользователем!")
-                return 1
-            except sqlite3.Error as ex:
+            except Exception as ex:
                 logger.exception(ex)
-
-                script_name = sys.argv[0].split(os.sep)[-1]
-
-                logger.warning(
-                    f"Возможно база данных повреждена, попробуйте выполнить команду:\n\n"  # noqa: E501
-                    f"  {script_name} migrate-db"
-                )
-                return 1
-            except Exception as e:
-                logger.exception(e, exc_info=True)
-                return 1
-        parser.print_help(file=sys.stderr)
-        return 2
 
 
 def main(argv: Sequence[str] | None = None) -> None | int:
