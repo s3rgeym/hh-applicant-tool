@@ -503,12 +503,21 @@ hh-applicant-tool config -e
 
 `test_script.py`:
 ```python
-import hh_applicant_tool.main
+from hh_applicant_tool.main import HHApplicantTool
 
-# Передаем аргументы как в команду (см вывод `hh-applicant-tool -h`)
-tool = hh_applicant_tool.main.HHApplicantTool([
-    "--proxy-url", "socks5://localhost:1080",
-    "--config-dir", "/path/to/config-dir"
+# Вызов команд
+HHApplicantTool([
+    # глобальные настройки
+    # "--proxy-url", "socks5://localhost:1080",
+    # "--config-dir", "/path/to/config"
+
+    # Команда и ее аргументы
+    "authorize", "логин", "-p", "пароль"
+]).run()
+
+# Работа напрямую с API
+tool = HHApplicantTool([
+    " ...
 ])
 
 print(tool.api_client.get('/me'))
@@ -517,9 +526,11 @@ print(tool.api_client.get('/me'))
 import datetime as dt
 
 tool.storage.settings.set_value("_last_script_run", dt.datetime.now())
-```
 
-Авторизоваться придется через команду `hh-applicant-tool authorize`, так же в скриптовом режиме не будет работать логирование (чтобы не засирать логи нерелевантным мусором).
+# Учтите что в таком случае токены, которые могут обновиться при выполнении запросов,
+# нужно сохранять вручную
+tool.save_token()
+```
 
 ### Дополнительные настройки
 
