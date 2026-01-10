@@ -135,6 +135,12 @@ class HHApplicantTool(MegaTool):
     def __init__(self, argv: Sequence[str] | None):
         self._parse_args(argv)
 
+        # Создаем путь до конфига
+        self.config_path.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
     def _get_proxies(self) -> dict[str, str]:
         proxy_url = self.args.proxy_url or self.config.get("proxy_url")
 
@@ -253,13 +259,15 @@ class HHApplicantTool(MegaTool):
             if page + 1 >= r.get("pages", 0):
                 break
 
-    def run(self) -> None | int:
-        # Создаем путь до конфига
-        self.config_path.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
+    def save_token(self) -> bool:
+        if self.api_client.access_token != self.config.get("token", {}).get(
+            "access_token"
+        ):
+            self.config.save(token=self.api_client.get_access_token())
+            return True
+        return False
 
+    def run(self) -> None | int:
         verbosity_level = max(
             logging.DEBUG,
             logging.WARNING - self.args.verbosity * 10,
@@ -274,15 +282,8 @@ class HHApplicantTool(MegaTool):
             if self.args.run:
                 try:
                     res = self.args.run(self)
-
-                    if self.api_client.access_token != self.config.get(
-                        "token", {}
-                    ).get("access_token"):
+                    if self.save_token():
                         logger.info("Токен был обновлен.")
-                        self.config.save(
-                            token=self.api_client.get_access_token()
-                        )
-
                     return res
                 except KeyboardInterrupt:
                     logger.warning("Выполнение прервано пользователем!")
