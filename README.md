@@ -502,17 +502,10 @@ hh-applicant-tool config -e
 Если хотите использовать `hh-applicant-tool` в своих скриптах, то можно это сделать так:
 
 ```python
->>> from hh_applicant_tool import HHApplicantTool
-zcnbvm@proton.me']).run()
-📨 Код был отправлен. Проверьте почту или SMS.
-📩 Введите полученный код:
-```
-
-Пример работы с API:
-
-```python
 tool = HHApplicantTool([
-    # ...
+    # Передаем глобальные настройки как обычно
+    "--proxy-url", "socks5://localhost:1080",
+    "--config-path", "/path/to/config"
 ])
 
 print(tool.api_client.get('/me'))
@@ -525,6 +518,15 @@ tool.storage.settings.set_value("_last_script_run", dt.datetime.now())
 # Учтите что в таком случае токены, которые могут обновиться при выполнении запросов,
 # нужно сохранять вручную
 tool.save_token()
+```
+
+Команды тоже можно вызывать:
+
+```python
+>>> from hh_applicant_tool import HHApplicantTool
+zcnbvm@proton.me']).run()
+📨 Код был отправлен. Проверьте почту или SMS.
+📩 Введите полученный код:
 ```
 
 ### Дополнительные настройки
