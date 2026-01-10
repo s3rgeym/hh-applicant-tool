@@ -502,7 +502,6 @@ hh-applicant-tool config -e
 Если хотите использовать `hh-applicant-tool` в своих скриптах, то можно это сделать так:
 
 ```python
-python
 >>> from hh_applicant_tool import HHApplicantTool
 >>> HHApplicantTool(['authorize', 'your-email@gmail.com']).run()
 📨 Код был отправлен. Проверьте почту или SMS.
