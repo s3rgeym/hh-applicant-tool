@@ -356,7 +356,6 @@ $ hh-applicant-tool settings
 | Тип      | Ключ                    | Значение                |
 +----------+-------------------------+-------------------------+
 | str      | user.email              | dmitry.kozlov@yandex.ru |
-| bool     | auth.last_login_success | True                    |
 | int      | auth.last_login         | 1768462521              |
 +----------+-------------------------+-------------------------+
 
