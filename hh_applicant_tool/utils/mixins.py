@@ -177,7 +177,6 @@ class ErrorReporter:
                         report_dict.get("vacancies"),
                     ]
                 )
-
                 if has_data:
                     data = binpack.serialize(report_dict)
                     log.debug("Report body size: %d", len(data))
@@ -186,8 +185,6 @@ class ErrorReporter:
                     log.debug("Report status: %d", status)
                 else:
                     log.debug("Nothing to report")
-            except Exception:
-                log.exception("MegaTool crash")
             finally:
                 # Сохраняем время последней попытки/удачного репорта
                 self.storage.settings.set_value("_last_report", datetime.now())

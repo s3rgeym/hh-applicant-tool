@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -86,7 +85,8 @@ class Operation(BaseOperation):
             asyncio.run(self._main(tool))
         except (KeyboardInterrupt, asyncio.TimeoutError):
             logger.warning("Что-то пошло не так")
-            os._exit(1)
+            # os._exit(1)
+            return 1
 
     async def _main(self, tool: HHApplicantTool) -> None:
         args = tool.args
