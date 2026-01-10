@@ -85,7 +85,7 @@ docker/
 # Vim
 .vim/
 
-/telemetry-server/*
+/report-server/*
 /*.json
 /*.css
 /*.html

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Generic, List, Literal, Optional, TypedDict, TypeVar
 
-NegotiationState = Literal[
+NegotiationStateId = Literal[
     "discard",  # отказ
     "interview",  # собес
     "response",  # отклик
@@ -239,6 +239,10 @@ class Counters(TypedDict):
 class ChatStates(TypedDict):
     # response_reminder_state: {"allowed": bool}
     response_reminder_state: dict[str, bool]
+
+
+class NegotiaionState(IdName):
+    id: NegotiationStateId
 
 
 class Negotiation(TypedDict):

@@ -1,15 +1,15 @@
 #!/usr/bin/bash
-cd "$(dirname "$0")"
-. .venv/bin/activate
+# Я так раньше собирал ссылки на сайты работодателей, а теперь утилита сама все собирает
+cd "$(dirname "$0")" || exit
 
 page=0
 per_page=100
 while true; do
-  output=$(python -m applicant_tool -vv call-api /negotiations "page=$page" "per_page=$per_page")
-  jq -r '.items[].vacancy.employer.url' <<< "$output"
-  pages=$(jq .pages <<< "$output")
+  output=$(hh-applicant-tool -vv call-api /negotiations "page=$page" "per_page=$per_page")
+  jq -r '.items[].vacancy.employer.url' <<<"$output"
+  pages=$(jq .pages <<<"$output")
   ((++page))
-  if [ $page -ge $pages ]; then
+  if [ $page -ge "$pages" ]; then
     break
   fi
 done
