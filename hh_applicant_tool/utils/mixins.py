@@ -217,7 +217,7 @@ class VersionChecker:
         ) and (cur_ver := get_package_version()):
             if parse_version(latest_ver) > parse_version(cur_ver):
                 log.warning(
-                    "ТЕКУЩАЯ ВЕРСИЯ %s УСТАРЕЛА. РЕКОМЕНДУЕТСЯ ЕЕ ОБНОВИТЬ ДО ВЕРСИИ %s.",
+                    "ТЕКУЩАЯ ВЕРСИЯ %s УСТАРЕЛА. РЕКОМЕНДУЕТСЯ ОБНОВИТЬ ЕЁ ДО ВЕРСИИ %s.",
                     cur_ver,
                     latest_ver,
                 )
