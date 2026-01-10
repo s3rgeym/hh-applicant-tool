@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 from ..api.errors import ApiError
 from ..datatypes import NegotiationStateId
 from ..main import BaseNamespace, BaseOperation
-from ..storage.models.negotiation import NegotiationModel
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -22,9 +21,9 @@ class Namespace(BaseNamespace):
 
 
 class Operation(BaseOperation):
-    """Синхронизирует отклики с локальной базой и опционально удаляет отказы."""
+    """Проверяет и синхронизирует отклики с локальной базой и опционально удаляет отказы."""
 
-    __aliases__ = ["sync-negotians", "sync"]
+    __aliases__ = ["sync-negotiations"]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
@@ -55,15 +54,15 @@ class Operation(BaseOperation):
     def _sync(self) -> None:
         storage = self.tool.storage
         for negotiation in self.tool.get_negotiations():
-            storage.negotiations.save(
-                NegotiationModel.from_api(negotiation),
-            )
-            # if vacancy := negotiation.get("vacancy"):
-            #     storage.vacancies.save(VacancyModel.from_api(vacancy))
-            #     if employer := vacancy.get("employer"):
-            #         storage.employers.save(EmployerModel.from_api(employer))
-            #     if vacancy.get("contacts"):
-            #         storage.contacts.save(EmployerContactModel.from_api(vacancy))
+            vacancy = negotiation["vacancy"]
+            employer = vacancy.get("employer", {})
+            employer_id = employer.get("id")
+
+            # Если работодателя блокируют, то он превращается в null
+            # ХХ позволяет скрывать компанию, когда id нет, а вместо имени "Крупная российская компания"
+            # sqlite3.IntegrityError: NOT NULL constraint failed: negotiations.employer_id
+            if employer_id:
+                storage.negotiations.save(negotiation)
 
             state_id: NegotiationStateId = negotiation["state"]["id"]
             if not self.args.cleanup:
@@ -77,17 +76,16 @@ class Operation(BaseOperation):
                         with_decline_message=True,
                     )
 
-                vacancy = negotiation["vacancy"]
                 print(
                     "🗑️ Отменили отклик на вакансию:",
                     vacancy["name"],
                     vacancy["alternate_url"],
                 )
 
-                employer = vacancy.get("employer", {})
                 if (
-                    employer_id := employer.get("id")
-                ) and self.args.blacklist_discard:
+                    employer_id
+                    and employer_id not in self.args.blacklist_discard
+                ):
                     if not self.args.dry_run:
                         self.tool.api_client.put(
                             f"/employers/blacklisted/{employer_id}"

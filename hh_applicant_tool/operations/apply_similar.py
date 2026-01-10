@@ -237,11 +237,11 @@ class Operation(BaseOperation):
 
     def run(
         self,
-        applicant_tool: HHApplicantTool,
+        tool: HHApplicantTool,
     ) -> None:
-        self.applicant_tool = applicant_tool
-        self.api_client = applicant_tool.api_client
-        args: Namespace = applicant_tool.args
+        self.tool = tool
+        self.api_client = tool.api_client
+        args: Namespace = tool.args
         self.application_messages = self._get_application_messages(
             args.message_list
         )
@@ -268,7 +268,7 @@ class Operation(BaseOperation):
         self.pre_prompt = args.prompt
         self.premium = args.premium
         self.professional_role = args.professional_role
-        self.resume_id = args.resume_id or applicant_tool.first_resume_id()
+        self.resume_id = args.resume_id or tool.first_resume_id()
         self.right_lng = args.right_lng
         self.salary = args.salary
         self.schedule = args.schedule
@@ -279,9 +279,7 @@ class Operation(BaseOperation):
         self.top_lat = args.top_lat
         self.total_pages = args.total_pages
         self.openai_chat = (
-            applicant_tool.get_openai_chat(args.first_prompt)
-            if args.use_ai
-            else None
+            tool.get_openai_chat(args.first_prompt) if args.use_ai else None
         )
         self._apply_similar()
 
@@ -298,7 +296,7 @@ class Operation(BaseOperation):
         )
 
     def _apply_similar(self) -> None:
-        me: datatypes.User = self.applicant_tool.get_me()
+        me: datatypes.User = self.tool.get_me()
 
         basic_placeholders = {
             "first_name": me.get("first_name", ""),
@@ -318,7 +316,7 @@ class Operation(BaseOperation):
                     **basic_placeholders,
                 }
 
-                storage = self.applicant_tool.storage
+                storage = self.tool.storage
                 storage.vacancies.save(vacancy)
                 if employer := vacancy.get("employer"):
                     employer_id = employer.get("id")
@@ -330,7 +328,7 @@ class Operation(BaseOperation):
 
                 # По факту контакты можно получить только здесь?!
                 if vacancy.get("contacts"):
-                    storage.contacts.save(vacancy)
+                    storage.employer_contacts.save(vacancy)
 
                 if vacancy.get("has_test"):
                     logger.debug(
@@ -416,6 +414,7 @@ class Operation(BaseOperation):
             except LimitExceeded:
                 logger.info("Достигли лимита на отклики")
                 print("⚠️ Достигли лимита рассылки")
+                self.tool.storage.settings.set_value("_")
                 break
             except ApiError as ex:
                 logger.warning(ex)

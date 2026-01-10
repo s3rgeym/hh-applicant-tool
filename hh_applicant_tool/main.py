@@ -9,7 +9,6 @@ from collections.abc import Sequence
 from functools import cached_property
 from importlib import import_module
 from itertools import count
-from logging.handlers import RotatingFileHandler
 from os import getenv
 from pathlib import Path
 from pkgutil import iter_modules
@@ -22,7 +21,7 @@ from . import datatypes, utils
 from .api import ApiClient
 from .constants import ANDROID_CLIENT_ID, ANDROID_CLIENT_SECRET
 from .storage import StorageFacade
-from .utils.log import ColorHandler, RedactingFilter
+from .utils.log import setup_logger
 from .utils.mixins import MegaTool
 
 DEFAULT_CONFIG_DIR = utils.get_config_path() / (__package__ or "").replace(
@@ -32,9 +31,6 @@ DEFAULT_CONFIG_FILENAME = "config.json"
 DEFAULT_LOG_FILENAME = "log.txt"
 DEFAULT_DATABASE_FILENAME = "data"
 DEFAULT_PROFILE_ID = "."
-
-# 10MB
-MAX_LOG_SIZE = 10 << 20
 
 logger = logging.getLogger(__package__)
 
@@ -136,6 +132,9 @@ class HHApplicantTool(MegaTool):
         parser.set_defaults(run=None)
         return parser
 
+    def __init__(self, argv: Sequence[str] | None):
+        self._parse_args(argv)
+
     def _get_proxies(self) -> dict[str, str]:
         proxy_url = self.args.proxy_url or self.config.get("proxy_url")
 
@@ -212,7 +211,7 @@ class HHApplicantTool(MegaTool):
         return api
 
     def get_me(self) -> datatypes.User:
-        return self.api_client.get("me")
+        return self.api_client.get("/me")
 
     def get_resumes(self) -> datatypes.PaginatedItems[datatypes.Resume]:
         return self.api_client.get("/resumes/mine")
@@ -254,58 +253,22 @@ class HHApplicantTool(MegaTool):
             if page + 1 >= r.get("pages", 0):
                 break
 
-    def _setup_logger(self) -> None:
-        args = self.args
-
-        # В лог-файл пишем все!
-        logger.setLevel(logging.DEBUG)
-
-        # В консоль стараемся не мусорить
-        log_level = max(logging.DEBUG, logging.WARNING - args.verbosity * 10)
-        color_handler = ColorHandler()
-        # [C] Critical Error Occurred
-        color_handler.setFormatter(
-            logging.Formatter("[%(levelname).1s] %(message)s")
-        )
-        color_handler.setLevel(log_level)
-
-        # Логи
-        file_handler = RotatingFileHandler(
-            self.log_file,
-            maxBytes=MAX_LOG_SIZE,
-            # backupCount=1,
-            encoding="utf-8",
-        )
-        file_handler.setFormatter(
-            logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-        )
-        file_handler.setLevel(logging.DEBUG)
-
-        redactor = RedactingFilter(
-            [
-                r"\b[A-Z0-9]{64,}\b",
-                r"\b[a-fA-F0-9]{32,}\b",  # request_id, resume_id
-            ]
-        )
-
-        for h in [color_handler, file_handler]:
-            h.addFilter(redactor)
-            logger.addHandler(h)
-
-    def run(self, argv: Sequence[str] | None) -> None | int:
-        parser = self._create_parser()
-        self.args = parser.parse_args(argv, namespace=BaseNamespace())
-
-        if sys.platform == "win32":
-            utils.setup_terminal()
-
+    def run(self) -> None | int:
         # Создаем путь до конфига
         self.config_path.mkdir(
             parents=True,
             exist_ok=True,
         )
 
-        self._setup_logger()
+        verbosity_level = max(
+            logging.DEBUG,
+            logging.WARNING - self.args.verbosity * 10,
+        )
+
+        setup_logger(logger, verbosity_level, self.log_file)
+
+        if sys.platform == "win32":
+            utils.setup_terminal()
 
         try:
             if self.args.run:
@@ -337,7 +300,7 @@ class HHApplicantTool(MegaTool):
                 except Exception as e:
                     logger.exception(e)
                     return 1
-            parser.print_help(file=sys.stderr)
+            self._parser.print_help(file=sys.stderr)
             return 2
         finally:
             try:
@@ -345,6 +308,10 @@ class HHApplicantTool(MegaTool):
             except Exception:
                 pass
 
+    def _parse_args(self, argv) -> None:
+        self._parser = self._create_parser()
+        self.args = self._parser.parse_args(argv, namespace=BaseNamespace())
+
 
 def main(argv: Sequence[str] | None = None) -> None | int:
-    return HHApplicantTool().run(argv)
+    return HHApplicantTool(argv).run()
