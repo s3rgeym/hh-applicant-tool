@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import json
 import platform
 from functools import cache
 from os import getenv
 from pathlib import Path
 from threading import Lock
 from typing import Any
+
+from . import jsonutil as json
 
 
 @cache
@@ -38,11 +39,12 @@ class Config(dict):
         self.update(*args, **kwargs)
         self._config_path.parent.mkdir(exist_ok=True, parents=True)
         with self._lock:
-            with self._config_path.open("w+", encoding="utf-8", errors="replace") as fp:
+            with self._config_path.open(
+                "w+", encoding="utf-8", errors="replace"
+            ) as fp:
                 json.dump(
                     self,
                     fp,
-                    ensure_ascii=True,
                     indent=2,
                     sort_keys=True,
                 )

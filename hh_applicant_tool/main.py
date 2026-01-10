@@ -44,7 +44,7 @@ class BaseOperation:
 
     def run(
         self,
-        applicant_tool: HHApplicantTool,
+        tool: HHApplicantTool,
     ) -> None | int:
         raise NotImplementedError()
 
@@ -297,7 +297,7 @@ class HHApplicantTool(MegaTool):
         self.args = parser.parse_args(argv, namespace=BaseNamespace())
 
         if sys.platform == "win32":
-            utils.enable_terminal_colors()
+            utils.setup_terminal()
 
         # Создаем путь до конфига
         self.config_path.mkdir(

@@ -9,8 +9,8 @@ from .dateutil import (
 )
 from .misc import calc_hash, print_err
 from .string import bool2str, list2str, rand_text, shorten
+from .terminal import setup_terminal
 from .user_agent import hh_android_useragent
-from .windows import enable_terminal_colors
 
 # Add all public symbols to __all__ for consistent import behavior
 __all__ = [
@@ -26,6 +26,6 @@ __all__ = [
     "list2str",
     "calc_hash",
     "hh_android_useragent",
-    "enable_terminal_colors",
+    "setup_terminal",
     "print_err",
 ]
