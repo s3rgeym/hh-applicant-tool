@@ -392,6 +392,8 @@ $ hh-applicant-tool settings auth.username 'user@example.com'
 | **query**                          | Выполнение SQL-запросов к базе. Схема БД находится в файле   [schema.sql](./hh_hh_applicant_tool/storage/queries/schema.sql). Если скормить ее [DeepSeek](https://chat.deepseek.com), то он поможет написать любой запрос. |
 | **log**                            | Просмотр файла-лога. С флагом -f будет следить за изменениями.                                                                                                                                                             |
 
+Утилита использует систему плагинов. Все они лежат в [operations](https://github.com/s3rgeym/hh-applicant-tool/tree/main/hh_applicant_tool/operations). Модули, расположенные там, автоматически добавляются как доступные команды. За основу для своего плагина можно взять [whoami.py](https://github.com/s3rgeym/hh-applicant-tool/tree/main/hh_applicant_tool/operations/whoami.py).
+
 Для тестирования запросов к API используйте команду `call-api` совместно с `jq` для обработки JSON.
 
 Примеры поиска работодателей:
@@ -491,9 +493,7 @@ hh-applicant-tool config -e
 }
 ```
 
-### Прочее
-
-Утилита использует систему плагинов. Все они лежат в [operations](https://github.com/s3rgeym/hh-applicant-tool/tree/main/hh_applicant_tool/operations). Модули, расположенные там, автоматически добавляются как доступные команды. За основу для своего плагина можно взять [whoami.py](https://github.com/s3rgeym/hh-applicant-tool/tree/main/hh_applicant_tool/operations/whoami.py).
+### Прочие настройки
 
 Отключение проверки версии с выводом предупреждения:
 
