@@ -502,6 +502,8 @@ hh-applicant-tool config -e
 Если хотите использовать `hh-applicant-tool` в своих скриптах, то можно это сделать так:
 
 ```python
+from hh_applicant_tool import HHApplicantTool
+
 tool = HHApplicantTool([
     # Передаем глобальные настройки как обычно
     "--proxy-url", "socks5://localhost:1080",
