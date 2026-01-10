@@ -342,8 +342,8 @@ class HHApplicantTool(MegaTool):
         finally:
             try:
                 self.check_system()
-            except Exception as ex:
-                logger.exception(ex)
+            except Exception:
+                pass
 
 
 def main(argv: Sequence[str] | None = None) -> None | int:
