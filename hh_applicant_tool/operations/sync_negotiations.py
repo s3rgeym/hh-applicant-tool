@@ -5,7 +5,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from ..api.errors import ApiError
-from ..datatypes import NegotiationState
+from ..datatypes import NegotiationStateId
 from ..main import BaseNamespace, BaseOperation
 from ..storage.models.negotiation import NegotiationModel
 
@@ -47,14 +47,14 @@ class Operation(BaseOperation):
             help="Тестовый запуск без реального удаления",
         )
 
-    def run(self, applicant_tool: HHApplicantTool) -> None:
-        self.applicant_tool = applicant_tool
-        self.args = applicant_tool.args
+    def run(self, tool: HHApplicantTool) -> None:
+        self.tool = tool
+        self.args = tool.args
         self._sync()
 
     def _sync(self) -> None:
-        storage = self.applicant_tool.storage
-        for negotiation in self.applicant_tool.get_negotiations():
+        storage = self.tool.storage
+        for negotiation in self.tool.get_negotiations():
             storage.negotiations.save(
                 NegotiationModel.from_api(negotiation),
             )
@@ -65,14 +65,14 @@ class Operation(BaseOperation):
             #     if vacancy.get("contacts"):
             #         storage.contacts.save(EmployerContactModel.from_api(vacancy))
 
-            state_id: NegotiationState = negotiation["state"]["id"]
+            state_id: NegotiationStateId = negotiation["state"]["id"]
             if not self.args.cleanup:
                 continue
             if state_id != "discard":
                 continue
             try:
                 if not self.args.dry_run:
-                    self.applicant_tool.api_client.delete(
+                    self.tool.api_client.delete(
                         f"/negotiations/active/{negotiation['id']}",
                         with_decline_message=True,
                     )
@@ -89,7 +89,7 @@ class Operation(BaseOperation):
                     employer_id := employer.get("id")
                 ) and self.args.blacklist_discard:
                     if not self.args.dry_run:
-                        self.applicant_tool.api_client.put(
+                        self.tool.api_client.put(
                             f"/employers/blacklisted/{employer_id}"
                         )
 

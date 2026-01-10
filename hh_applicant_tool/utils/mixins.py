@@ -15,8 +15,7 @@ from packaging.version import Version
 from requests.exceptions import RequestException
 
 from ..ai.openai import ChatOpenAI
-from ..storage.models.vacancy import VacancyModel
-from .binary_serializer import BinarySerializer
+from . import binpack
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -66,21 +65,22 @@ def collect_traceback_logs(
 
 class ErrorReporter:
     def build_report(
-        self,
-        tool: HHApplicantTool,
+        self: HHApplicantTool,
         last_report: datetime,
     ) -> dict:
         error_logs = ""
-        if tool.log_file.exists():
-            with tool.log_file.open(encoding="utf-8", errors="ignore") as fp:
-                error_logs = collect_traceback_logs(fp, last_report, maxlen=10000)
+        if self.log_file.exists():
+            with self.log_file.open(encoding="utf-8", errors="ignore") as fp:
+                error_logs = collect_traceback_logs(
+                    fp, last_report, maxlen=10000
+                )
 
         # Эти данные нужны для воспроизведения ошибок. Среди них ваших нет
         contacts = [
             c.to_dict()
-            for c in tool.storage.contacts.find(updated_at__ge=last_report)
+            for c in self.storage.contacts.find(updated_at__ge=last_report)
         ][-10000:]
-        
+
         for c in contacts:
             c.pop("id", 0)
 
@@ -99,7 +99,8 @@ class ErrorReporter:
                     "site_url",
                     "created_at",
                 ]
-            } for emp in tool.storage.employers.find(updated_at__ge=last_report)
+            }
+            for emp in self.storage.employers.find(updated_at__ge=last_report)
         ][-10000:]
 
         vacancies = [
@@ -121,8 +122,11 @@ class ErrorReporter:
                     "remote",
                     "created_at",
                 ]
-            } for vac in tool.storage.vacancies.find(updated_at__ge=last_report)
+            }
+            for vac in self.storage.vacancies.find(updated_at__ge=last_report)
         ][-10000:]
+
+        # log.info("num vacncies: %d", len(vacancies))
 
         system_info = {
             "os": platform.system(),
@@ -141,13 +145,16 @@ class ErrorReporter:
             report_created=datetime.now(),
         )
 
-    def send_report(self, tool: HHApplicantTool, data: bytes) -> int:
+    def send_report(self: HHApplicantTool, data: bytes) -> int:
         try:
-            r = tool.session.post(
+            r = self.session.post(
+                # "http://localhost:8000/report",
                 "https://hh-applicant-tool.mooo.com:54157/report",
                 data=data,
                 timeout=15.0,
             )
+            r.raise_for_status()
+            log.debug(f"Report was sent: {r.status_code}")
             return r.status_code
         except RequestException as e:
             log.error("Network error: %s", e)
@@ -161,19 +168,21 @@ class ErrorReporter:
 
         if datetime.now() >= last_report + timedelta(hours=48):
             try:
-                # Передаем self как первый аргумент build_report
-                report_dict = self.build_report(self, last_report)
-                if (
-                    report_dict["errors"]
-                    or report_dict["employers"]
-                    or report_dict["contacts"]
-                    or report_dict["vacancies"]
-                ):
-                    serializer = BinarySerializer()
-                    data = serializer.serialize(report_dict)
+                report_dict = self.build_report(last_report)
+                has_data = any(
+                    [
+                        report_dict.get("error_logs"),
+                        report_dict.get("employers"),
+                        report_dict.get("contacts"),
+                        report_dict.get("vacancies"),
+                    ]
+                )
+
+                if has_data:
+                    data = binpack.serialize(report_dict)
                     log.debug("Report body size: %d", len(data))
-                    # print(serializer.deserialize(data))
-                    status = self.send_report(self, data)
+                    # print(binpack.deserialize(data))
+                    status = self.send_report(data)
                     log.debug("Report status: %d", status)
                 else:
                     log.debug("Nothing to report")
