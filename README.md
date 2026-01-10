@@ -493,7 +493,12 @@ hh-applicant-tool config -e
 }
 ```
 
-### Прочие настройки
+### Прочее
+
+<details>
+<summary>
+Дополнительные настройки
+</summary>
 
 Отключение проверки версии с выводом предупреждения:
 
@@ -506,6 +511,7 @@ $ hh-applicant-tool settings disable_version_check true
 ```sh
 $ hh-applicant-tool settings send_error_reports false
 ```
+</details>
 
 ### Лицензия / License
 
