@@ -529,7 +529,7 @@ tool.storage.settings.set_value("_last_script_run", dt.datetime.now())
 
 # Учтите что в таком случае токены, которые могут обновиться при выполнении запросов,
 # нужно сохранять вручную
-tool.save_token()
+tool.sync_token()
 ```
 
 ### Дополнительные настройки
