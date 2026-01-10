@@ -44,6 +44,7 @@
   - [Формат текста сообщений](#формат-текста-сообщений)
   - [Использование AI](#использование-ai)
     - [OpenAI/ChatGPT](#openaichatgpt)
+  - [Использование в скриптах](#использование-в-скриптах)
   - [Прочее](#прочее)
   - [Лицензия / License](#лицензия--license)
 
@@ -381,7 +382,7 @@ $ hh-applicant-tool settings auth.username 'user@example.com'
 | **update-resumes**, **update**     | Обновить все резюме. Аналогично нажатию кнопки «Обновить дату».                                                                                                                                                            |
 | **apply-similar**                  | Откликнуться на все подходящие вакансии. Лимит = 200 в день. На HH есть спам-фильтры, так что лучше не рассылайте отклики со ссылками, иначе рискуете попасть в теневой бан.                                               |
 | **reply-employers**, **reply**     | Ответить во все чаты с работодателями, где нет ответа либо не прочитали ваш предыдущий ответ                                                                                                                               |
-| **sync-negotiations**              | Синхронизация откликов с возможностью их отмены                                                                                                                                                                            |
+| **check-negotiations**             | Синхронизация откликов с возможностью их отмены                                                                                                                                                                            |
 | **call-api**, **api**              | Вызов произвольного метода API с выводом результата.                                                                                                                                                                       |
 | **refresh-token**, **refresh**     | Обновляет access_token.                                                                                                                                                                                                    |
 | **config**                         | Показывает содержимое конфига. С флагом -e открывает его для редактирования.                                                                                                                                               |
@@ -494,11 +495,38 @@ hh-applicant-tool config -e
 }
 ```
 
+### Использование в скриптах
+
+Если хотите использовать hh_applicant_tool в своих скриптах, то можно это сделать так:
+
+```sh
+$ . ~/.local/share/pipx/venvs/hh-applicant-tool/bin/activate
+```
+
+`test_script.py`:
+```python
+import hh_applicant_tool.main
+
+# Передаем аргументы как в команду
+tool = hh_applicant_tool.main.HHApplicantTool(["--proxy-url", "socks5://localhost:9050"])
+print(tool.api_client.get('/me'))
+
+# Какую-то вспомогательную информацию можно сохранять в настройках
+import datetime as dt
+
+tool.storage.settings.set_value("_last_script_run", dt.datetime.now())
+```
+Выведет справку:
+
+```sh
+$ python test_script.py
+```
+
 ### Прочее
 
 <details>
 <summary>
-Дополнительные настройки
+Дополнительные настройки (скрыты чтобы не сломали чего)
 </summary>
 
 Отключение проверки версии с выводом предупреждения:

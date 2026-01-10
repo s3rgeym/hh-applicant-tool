@@ -18,7 +18,7 @@ class StorageFacade:
         init_db(conn)
         self.employers = EmployersRepository(conn)
         self.vacancies = VacanciesRepository(conn)
-        self.contacts = EmployerContactsRepository(conn)
+        self.employer_contacts = EmployerContactsRepository(conn)
         self.negotiations = NegotiationRepository(conn)
         self.settings = SettingsRepository(conn)
         self.resumes = ResumesRepository(conn)

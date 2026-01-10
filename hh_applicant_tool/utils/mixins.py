@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import platform
-import re
 import socket
-from collections import deque
 from datetime import datetime, timedelta
 from functools import cache
 from importlib.metadata import version
@@ -15,6 +13,7 @@ from requests.exceptions import RequestException
 
 from ..ai.openai import ChatOpenAI
 from . import binpack
+from .log import collect_traceback_logs
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -29,38 +28,6 @@ def parse_version(v: str) -> tuple[int, int, int]:
 @cache
 def get_package_version() -> str | None:
     return version("hh-applicant-tool")
-
-
-TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
-
-
-def collect_traceback_logs(
-    fp,
-    after_dt: datetime,
-    maxlen=1000,
-) -> str:
-    error_lines = deque(maxlen=maxlen)
-    prev_line = ""
-    log_dt = None
-    collecting_traceback = False
-    for line in fp:
-        if ts_match := TS_RE.match(line):
-            log_dt = datetime.strptime(ts_match.group(0), "%Y-%m-%d %H:%M:%S")
-            collecting_traceback = False
-
-        if (
-            line.startswith("Traceback (most recent call last):")
-            and log_dt
-            and log_dt >= after_dt
-        ):
-            error_lines.append(prev_line)
-            collecting_traceback = True
-
-        if collecting_traceback:
-            error_lines.append(line)
-
-        prev_line = line
-    return "".join(error_lines)
 
 
 class ErrorReporter:
@@ -78,7 +45,9 @@ class ErrorReporter:
         # Эти данные нужны для воспроизведения ошибок. Среди них ваших нет
         contacts = [
             c.to_dict()
-            for c in self.storage.contacts.find(updated_at__ge=last_report)
+            for c in self.storage.employer_contacts.find(
+                updated_at__ge=last_report
+            )
         ][-10000:]
 
         for c in contacts:
@@ -165,7 +134,7 @@ class ErrorReporter:
             self.storage.settings.get_value("_last_report", 0)
         )
 
-        if datetime.now() >= last_report + timedelta(hours=48):
+        if datetime.now() >= last_report + timedelta(hours=72):
             try:
                 report_dict = self.build_report(last_report)
                 has_data = any(
