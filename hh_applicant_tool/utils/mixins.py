@@ -154,11 +154,10 @@ class ErrorReporter:
                 timeout=15.0,
             )
             r.raise_for_status()
-            log.debug("Report was sent")
-            return r.status_code
-        except RequestException as e:
-            log.error("Network error: %s", e)
-            return -1
+            return r.status_code == 200
+        except RequestException:
+            # log.error("Network error: %s", e)
+            return False
 
     def process_reporting(self):
         # Получаем timestamp последнего репорта
@@ -181,8 +180,10 @@ class ErrorReporter:
                     data = binpack.serialize(report_dict)
                     log.debug("Report body size: %d", len(data))
                     # print(binpack.deserialize(data))
-                    status = self.send_report(data)
-                    log.debug("Report status: %d", status)
+                    if self.send_report(data):
+                        log.debug("Report was sent")
+                    else:
+                        log.debug("Report failed")
                 else:
                     log.debug("Nothing to report")
             finally:
