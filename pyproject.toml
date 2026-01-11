@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hh-applicant-tool"
-version = "1.4.4"
+version = "1.4.5"
 description = "HH-Applicant-Tool: An automation utility for HeadHunter (hh.ru) designed to streamline the job search process by auto-applying to relevant vacancies and periodically refreshing resumes to stay at the top of recruiter searches."
 homepage = "https://github.com/s3rgeym/hh-applicant-tool"
 repository = "https://github.com/s3rgeym/hh-applicant-tool"
@@ -19,7 +19,6 @@ include = [
 python = "^3.10"
 requests = {extras = ["socks"], version = "^2.32.3"}
 prettytable = "^3.6.0"
-playwright = "^1.57.0"
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.12.0"
@@ -27,6 +26,9 @@ pylint = "^2.16.4"
 pytest = "^7.2.2"
 ruff = "^0.14.9"
 basedpyright = "^1.36.1"
+
+[tool.poetry.group.playwright.dependencies]
+playwright = "^1.57.0"
 
 [build-system]
 requires = ["poetry-core"]

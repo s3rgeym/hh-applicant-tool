@@ -48,29 +48,27 @@ class Operation(BaseOperation):
             help="Файл для сохранения",
         )
 
-    def run(self, applicant_tool: HHApplicantTool) -> None:
+    def run(self, tool: HHApplicantTool) -> None:
         def execute(sql_query: str) -> None:
             sql_query = sql_query.strip()
             if not sql_query:
                 return
             try:
-                cursor = applicant_tool.db.cursor()
+                cursor = tool.db.cursor()
                 cursor.execute(sql_query)
 
                 if cursor.description:
                     columns = [d[0] for d in cursor.description]
 
-                    if applicant_tool.args.csv or applicant_tool.args.output:
+                    if tool.args.csv or tool.args.output:
                         # Если -o не задан, используем sys.stdout
-                        output = applicant_tool.args.output or sys.stdout
+                        output = tool.args.output or sys.stdout
                         writer = csv.writer(output)
                         writer.writerow(columns)
                         writer.writerows(cursor.fetchall())
 
-                        if applicant_tool.args.output:
-                            print(
-                                f"✅ Exported to {applicant_tool.args.output.name}"
-                            )
+                        if tool.args.output:
+                            print(f"✅ Exported to {tool.args.output.name}")
                         return
 
                     rows = cursor.fetchmany(MAX_RESULTS + 1)
@@ -89,14 +87,14 @@ class Operation(BaseOperation):
                             f"⚠️  Warning: Showing only first {MAX_RESULTS} results."
                         )
                 else:
-                    applicant_tool.db.commit()
+                    tool.db.commit()
                     print(f"OK. Rows affected: {cursor.rowcount}")
 
             except sqlite3.Error as ex:
                 print(f"❌ SQL Error: {ex}")
                 return 1
 
-        if initial_sql := applicant_tool.args.sql:
+        if initial_sql := tool.args.sql:
             return execute(initial_sql)
 
         if not sys.stdin.isatty():

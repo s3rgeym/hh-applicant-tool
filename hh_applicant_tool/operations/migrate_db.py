@@ -30,13 +30,13 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("name", nargs="?", help="Имя миграции")
 
-    def run(self, applicant_tool: HHApplicantTool) -> None:
+    def run(self, tool: HHApplicantTool) -> None:
         def apply(name: str) -> None:
-            apply_migration(applicant_tool.db, name)
+            apply_migration(tool.db, name)
             print(SUCKASS)
 
         try:
-            if a := applicant_tool.args.name:
+            if a := tool.args.name:
                 return apply(a)
             if not (migrations := list_migrations()):
                 return
@@ -60,6 +60,6 @@ class Operation(BaseOperation):
             logger.exception(ex)
             logger.warning(
                 f"Если ничего не помогает, то вы можете просто удалить базу, сделав бекап:\n\n"
-                f"  $ mv {applicant_tool.db_path}{{,.bak}}"
+                f"  $ mv {tool.db_path}{{,.bak}}"
             )
             return 1

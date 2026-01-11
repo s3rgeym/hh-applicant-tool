@@ -33,8 +33,8 @@ class Operation(BaseOperation):
             help="Следить за файлом (режим follow, аналог less +F)",
         )
 
-    def run(self, applicant_tool: HHApplicantTool) -> None:
-        log_path = applicant_tool.log_file
+    def run(self, tool: HHApplicantTool) -> None:
+        log_path = tool.log_file
 
         if not os.path.exists(log_path):
             logger.error("Файл лога не найден: %s", log_path)
@@ -59,7 +59,7 @@ class Operation(BaseOperation):
             # -R позволяет отображать цвета (ANSI codes)
             # -S отключает перенос строк (удобно для логов)
             cmd.extend(["-R", "-S"])
-            if applicant_tool.args.follow:
+            if tool.args.follow:
                 # В less режим слежения включается через команду +F
                 cmd.append("+F")
 

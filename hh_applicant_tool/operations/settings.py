@@ -56,9 +56,9 @@ class Operation(BaseOperation):
             default=MISSING,
         )
 
-    def run(self, applicant_tool: HHApplicantTool) -> None:
-        args: Namespace = applicant_tool.args
-        settings = applicant_tool.storage.settings
+    def run(self, tool: HHApplicantTool) -> None:
+        args: Namespace = tool.args
+        settings = tool.storage.settings
 
         if args.delete:
             if args.key is not MISSING:
