@@ -25,14 +25,14 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Список резюме"""
 
-    __aliases__ = ("ls-resumes", "resumes", "list", "ls")
+    __aliases__ = ("ls-resumes", "resumes")
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, applicant_tool: HHApplicantTool) -> None:
-        resumes: PaginatedItems[datatypes.Resume] = applicant_tool.get_resumes()
-        storage = applicant_tool.storage
+    def run(self, tool: HHApplicantTool) -> None:
+        resumes: PaginatedItems[datatypes.Resume] = tool.get_resumes()
+        storage = tool.storage
         for resume in resumes["items"]:
             storage.resumes.save(resume)
 
