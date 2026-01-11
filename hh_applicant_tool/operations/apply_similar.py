@@ -414,7 +414,7 @@ class Operation(BaseOperation):
             except LimitExceeded:
                 logger.info("Достигли лимита на отклики")
                 print("⚠️ Достигли лимита рассылки")
-                self.tool.storage.settings.set_value("_")
+                # self.tool.storage.settings.set_value("_")
                 break
             except ApiError as ex:
                 logger.warning(ex)
