@@ -8,7 +8,10 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlsplit
 
-from playwright.async_api import async_playwright
+try:
+    from playwright.async_api import async_playwright
+except ImportError:
+    pass
 
 from ..main import BaseOperation
 

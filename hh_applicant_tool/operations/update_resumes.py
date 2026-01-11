@@ -30,11 +30,11 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, applicant_tool: HHApplicantTool) -> None:
-        resumes: PaginatedItems = applicant_tool.get_resumes()
+    def run(self, tool: HHApplicantTool) -> None:
+        resumes: PaginatedItems = tool.get_resumes()
         for resume in resumes["items"]:
             try:
-                res = applicant_tool.api_client.post(
+                res = tool.api_client.post(
                     f"/resumes/{resume['id']}/publish",
                 )
                 assert res == {}

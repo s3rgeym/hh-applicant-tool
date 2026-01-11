@@ -90,12 +90,12 @@ class Operation(BaseOperation):
             default="Напиши короткий ответ работодателю на основе истории переписки.",
         )
 
-    def run(self, applicant_tool: HHApplicantTool) -> None:
-        args: Namespace = applicant_tool.args
-        self.applicant_tool = applicant_tool
-        self.api_client = applicant_tool.api_client
-        self.resume_id = applicant_tool.first_resume_id()
-        self.reply_message = args.reply_message or applicant_tool.config.get(
+    def run(self, tool: HHApplicantTool) -> None:
+        args: Namespace = tool.args
+        self.applicant_tool = tool
+        self.api_client = tool.api_client
+        self.resume_id = tool.first_resume_id()
+        self.reply_message = args.reply_message or tool.config.get(
             "reply_message"
         )
         self.max_pages = args.max_pages
@@ -104,9 +104,7 @@ class Operation(BaseOperation):
 
         self.pre_prompt = args.prompt
         self.openai_chat = (
-            applicant_tool.get_openai_chat(args.first_prompt)
-            if args.use_ai
-            else None
+            tool.get_openai_chat(args.first_prompt) if args.use_ai else None
         )
 
         logger.debug(f"{self.reply_message = }")

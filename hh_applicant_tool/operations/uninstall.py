@@ -21,6 +21,6 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, applicant_tool: HHApplicantTool) -> None:
+    def run(self, tool: HHApplicantTool) -> None:
         sys.argv = ["playwright", "uninstall", "chromium"]
         run_module("playwright", run_name="__main__")

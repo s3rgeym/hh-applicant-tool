@@ -25,6 +25,6 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, applicant_tool: HHApplicantTool) -> None:
-        applicant_tool.api_client.refresh_access_token()
+    def run(self, tool: HHApplicantTool) -> None:
+        tool.api_client.refresh_access_token()
         print("✅ Токен обновлен!")
