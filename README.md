@@ -117,7 +117,7 @@ git clone https://github.com/s3rgeym/hh-applicant-tool
 cd hh-applicant-tool
 ```
 
-Теперь авторизуйтмся:
+Теперь авторизуемся:
 
 ```sh
 docker-compose run --rm -it -e TERM=$TERM hh-applicant-tool \
