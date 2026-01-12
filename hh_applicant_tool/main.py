@@ -19,7 +19,7 @@ import urllib3
 
 from . import utils
 from .api import ApiClient, datatypes
-from .constants import ANDROID_CLIENT_ID, ANDROID_CLIENT_SECRET
+from .api.client_keys import ANDROID_CLIENT_ID, ANDROID_CLIENT_SECRET
 from .storage import StorageFacade
 from .utils.log import setup_logger
 from .utils.mixins import MegaTool

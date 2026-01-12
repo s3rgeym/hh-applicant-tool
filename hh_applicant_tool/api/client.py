@@ -14,6 +14,7 @@ import requests
 from requests import Session
 
 from . import errors
+from .client_keys import ANDROID_CLIENT_ID, ANDROID_CLIENT_SECRET
 from .datatypes import AccessToken
 
 __all__ = ("ApiClient", "OAuthClient")
@@ -195,8 +196,8 @@ class ApiClient(BaseClient):
     refresh_token: str | None = None
     access_expires_at: int = 0
     _: dataclasses.KW_ONLY
-    client_id: str | None = None
-    client_secret: str | None = None
+    client_id: str = ANDROID_CLIENT_ID
+    client_secret: str = ANDROID_CLIENT_SECRET
     base_url: str = "https://api.hh.ru/"
 
     @property
