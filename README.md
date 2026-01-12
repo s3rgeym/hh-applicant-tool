@@ -127,10 +127,6 @@ docker-compose run --rm -it -e TERM=$TERM hh-applicant-tool \
 Пример вывода:
 
 ```
-WARN[0000] No services to build
-WARN[0000] No services to build
-Container docker-tool-run-dfbc9f44c6a9 Creating
-Container docker-tool-run-dfbc9f44c6a9 Created
 zcnbvm@proton.me
 📨 Код был отправлен. Проверьте почту или SMS.
 📩 Введите полученный код: 1234
