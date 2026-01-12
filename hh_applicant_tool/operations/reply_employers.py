@@ -3,13 +3,14 @@ from __future__ import annotations
 import argparse
 import logging
 import random
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from .. import datatypes
 from ..ai.base import AIError
-from ..api import ApiError
+from ..api import ApiError, datatypes
 from ..main import BaseNamespace, BaseOperation
-from ..utils.dateutil import parse_api_datetime
+from ..storage.repositories.errors import RepositoryError
+from ..utils.date import parse_api_datetime
 from ..utils.string import rand_text
 
 if TYPE_CHECKING:
@@ -37,20 +38,29 @@ class Namespace(BaseNamespace):
     use_ai: bool
     first_prompt: str
     prompt: str
+    period: int
 
 
 class Operation(BaseOperation):
     """Ответ всем работодателям."""
 
-    __aliases__ = ["reply-chats", "reply-all"]
+    __aliases__ = ["reply-empls", "reply-chats", "reall"]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
-        parser.add_argument("--resume-id", help="Идентификатор резюме")
+        parser.add_argument(
+            "--resume-id",
+            help="Идентификатор резюме. Если не указан, то просматриваем чаты для всех резюме",
+        )
         parser.add_argument(
             "-m",
             "--reply-message",
             "--reply",
             help="Отправить сообщение во все чаты. Если не передать сообщение, то нужно будет вводить его в интерактивном режиме.",  # noqa: E501
+        )
+        parser.add_argument(
+            "--period",
+            type=int,
+            help="Игнорировать отклики, которые не обновлялись больше N дней",
         )
         parser.add_argument(
             "-p",
@@ -92,7 +102,7 @@ class Operation(BaseOperation):
 
     def run(self, tool: HHApplicantTool) -> None:
         args: Namespace = tool.args
-        self.applicant_tool = tool
+        self.tool = tool
         self.api_client = tool.api_client
         self.resume_id = tool.first_resume_id()
         self.reply_message = args.reply_message or tool.config.get(
@@ -106,27 +116,56 @@ class Operation(BaseOperation):
         self.openai_chat = (
             tool.get_openai_chat(args.first_prompt) if args.use_ai else None
         )
+        self.period = args.period
 
         logger.debug(f"{self.reply_message = }")
-        self.reply_chats()
+        self.reply_employers()
 
-    def reply_chats(self) -> None:
-        blacklisted = self.applicant_tool.get_blacklisted()
-        logger.debug(f"{blacklisted = }")
-        me: datatypes.User = self.applicant_tool.get_me()
+    def reply_employers(self):
+        blacklist = set(self.tool.get_blacklisted())
+        me: datatypes.User = self.tool.get_me()
+        resumes = self.tool.get_resumes()
+        resumes = (
+            list(filter(lambda x: x["id"] == self.resume_id, resumes))
+            if self.resume_id
+            else resumes
+        )
+        for resume in resumes:
+            if resume["status"]["id"] == "published":
+                self._reply_chats(user=me, resume=resume, blacklist=blacklist)
 
-        basic_message_placeholders = {
-            "first_name": me.get("first_name", ""),
-            "last_name": me.get("last_name", ""),
-            "email": me.get("email", ""),
-            "phone": me.get("phone", ""),
+    def _reply_chats(
+        self,
+        resume: datatypes.Resume,
+        user: datatypes.User,
+        blacklist: set[str],
+    ) -> None:
+        base_placeholders = {
+            "resume_title": resume.get("title") or "",
+            "first_name": user.get("first_name") or "",
+            "last_name": user.get("last_name") or "",
+            "email": user.get("email") or "",
+            "phone": user.get("phone") or "",
         }
 
-        for negotiation in self.applicant_tool.get_negotiations():
+        for negotiation in self.tool.get_negotiations():
             try:
-                self.applicant_tool.storage.negotiations.save(negotiation)
+                try:
+                    self.tool.storage.negotiations.save(negotiation)
+                except RepositoryError as e:
+                    logger.exception(e)
 
-                if self.resume_id != negotiation["resume"]["id"]:
+                if resume["id"] != negotiation["resume"]["id"]:
+                    continue
+
+                updated_at = parse_api_datetime(negotiation["updated_at"])
+
+                # Пропуск откликов, которые не обновлялись более N дней (при просмотре они обновляются вроде)
+                if (
+                    self.period
+                    and (datetime().now(updated_at.tzinfo) - updated_at).days
+                    > self.period
+                ):
                     continue
 
                 state_id = negotiation["state"]["id"]
@@ -141,26 +180,26 @@ class Operation(BaseOperation):
                 employer = vacancy.get("employer") or {}
                 salary = vacancy.get("salary") or {}
 
-                if employer.get("id") in blacklisted:
+                if employer.get("id") in blacklist:
                     print(
                         "🚫 Пропускаем заблокированного работодателя",
                         employer.get("alternate_url"),
                     )
                     continue
 
-                message_placeholders = {
+                placeholders = {
                     "vacancy_name": vacancy.get("name", ""),
                     "employer_name": employer.get("name", ""),
-                    **basic_message_placeholders,
+                    **base_placeholders,
                 }
 
                 logger.debug(
                     "Вакансия %(vacancy_name)s от %(employer_name)s"
-                    % message_placeholders
+                    % placeholders
                 )
 
                 page: int = 0
-                last_message: dict | None = None
+                last_message: datatypes.Message | None = None
                 message_history: list[str] = []
                 while True:
                     messages_res: datatypes.PaginatedItems[
@@ -205,13 +244,13 @@ class Operation(BaseOperation):
                     send_message = ""
                     if self.reply_message:
                         send_message = (
-                            rand_text(self.reply_message) % message_placeholders
+                            rand_text(self.reply_message) % placeholders
                         )
                         logger.debug(f"Template message: {send_message}")
                     elif self.openai_chat:
                         try:
                             ai_query = (
-                                f"Вакансия: {message_placeholders['vacancy_name']}\n"
+                                f"Вакансия: {placeholders['vacancy_name']}\n"
                                 f"История переписки:\n"
                                 + "\n".join(message_history[-10:])
                                 + f"\n\nИнструкция: {self.pre_prompt}"
@@ -228,9 +267,9 @@ class Operation(BaseOperation):
                     else:
                         print(
                             "\n🏢",
-                            message_placeholders["employer_name"],
+                            placeholders["employer_name"],
                             "| 💼",
-                            message_placeholders["vacancy_name"],
+                            placeholders["vacancy_name"],
                         )
                         if salary:
                             print(
@@ -255,6 +294,7 @@ class Operation(BaseOperation):
                             print(
                                 "Команды: /ban, /cancel <опционально сообщение для отмены>"
                             )
+                            print("Активное резюме:", resume.get("name") or "")
                             send_message = input("Ваше сообщение: ").strip()
                         except EOFError:
                             continue
@@ -264,13 +304,12 @@ class Operation(BaseOperation):
                             continue
 
                         if send_message.startswith("/ban"):
-                            self.applicant_tool.storage.employers.save(employer)
                             self.api_client.put(
                                 f"/employers/blacklisted/{employer['id']}"
                             )
-                            blacklisted.append(employer["id"])
+                            blacklist.add(employer["id"])
                             print(
-                                "🚫 Работодатель в ЧС",
+                                "🚫 Работодатель заблокирован",
                                 employer.get("alternate_url"),
                             )
                             continue

@@ -4,11 +4,10 @@ import logging
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
-from functools import cached_property
 from typing import Any, ClassVar, Iterator, Mapping, Self, Type
 
 from ..models.base import BaseModel
-from ..utils import model2table
+from .errors import wrap_db_errors
 
 DEFAULT_PRIMARY_KEY = "id"
 
@@ -19,18 +18,23 @@ logger = logging.getLogger(__package__)
 class BaseRepository:
     model: ClassVar[Type[BaseModel] | None] = None
     pkey: ClassVar[str] = DEFAULT_PRIMARY_KEY
+    conflict_columns: ClassVar[tuple[str, ...] | None] = None
+    update_excludes: ClassVar[tuple[str, ...]] = ("created_at", "updated_at")
+    __table__: ClassVar[str | None] = None
 
     conn: sqlite3.Connection
     auto_commit: bool = True
 
-    @cached_property
+    @property
     def table_name(self) -> str:
-        return model2table(self.model)
+        return self.__table__ or self.model.__name__
 
+    @wrap_db_errors
     def commit(self):
         if self.conn.in_transaction:
             self.conn.commit()
 
+    @wrap_db_errors
     def rollback(self):
         if self.conn.in_transaction:
             self.conn.rollback()
@@ -53,6 +57,7 @@ class BaseRepository:
         data = {col[0]: value for col, value in zip(cursor.description, row)}  # noqa: B905
         return self.model.from_db(data)
 
+    @wrap_db_errors
     def find(self, **kwargs: Any) -> Iterator[BaseModel]:
         # logger.debug(kwargs)
         operators = {
@@ -94,17 +99,24 @@ class BaseRepository:
         if conditions:
             sql += f" WHERE {' AND '.join(conditions)}"
         sql += " ORDER BY rowid DESC;"
-        logger.debug("%.2000s", sql)
-        cur = self.conn.execute(sql, sql_params)
+        try:
+            cur = self.conn.execute(sql, sql_params)
+        except sqlite3.Error:
+            logger.warning("SQL ERROR: %s", sql)
+            raise
+
         yield from (self._row_to_model(cur, row) for row in cur.fetchall())
 
+    @wrap_db_errors
     def get(self, pk: Any) -> BaseModel | None:
         return next(self.find(**{f"{self.pkey}": pk}), None)
 
+    @wrap_db_errors
     def count_total(self) -> int:
         cur = self.conn.execute(f"SELECT count(*) FROM {self.table_name};")
         return cur.fetchone()[0]
 
+    @wrap_db_errors
     def delete(self, o: BaseModel, /, commit: bool | None = None) -> None:
         sql = f"DELETE FROM {self.table_name} WHERE {self.pkey} = ?"
         pk_value = getattr(o, self.pkey)
@@ -113,6 +125,7 @@ class BaseRepository:
 
     remove = delete
 
+    @wrap_db_errors
     def clear(self, commit: bool | None = None):
         self.conn.execute(f"DELETE FROM {self.table_name};")
         self.maybe_commit(commit)
@@ -121,14 +134,21 @@ class BaseRepository:
 
     def _insert(
         self,
-        data: Mapping[str, Any],
+        data: Mapping[str, Any] | list[Mapping[str, Any]],
         /,
+        batch: bool = False,
         upsert: bool = True,
         conflict_columns: Sequence[str] | None = None,
-        update_excludes: Sequence[str] = ("created_at", "updated_at"),
+        update_excludes: Sequence[str] | None = None,
         commit: bool | None = None,
     ):
-        columns = list(data.keys())
+        conflict_columns = conflict_columns or self.conflict_columns
+        update_excludes = update_excludes or self.update_excludes
+
+        if batch and not data:
+            return
+
+        columns = list(dict(data[0] if batch else data).keys())
         sql = (
             f"INSERT INTO {self.table_name} ({', '.join(columns)})"
             f" VALUES (:{', :'.join(columns)})"
@@ -151,7 +171,10 @@ class BaseRepository:
                 # 2. Primary key (никогда не меняем)
                 # 3. Технические поля (created_at и т.д.)
                 update_set = (
-                    cols_set - conflict_set - {self.pkey} - set(update_excludes)
+                    cols_set
+                    - conflict_set
+                    - {self.pkey}
+                    - set(update_excludes or [])
                 )
 
                 if update_set:
@@ -163,14 +186,41 @@ class BaseRepository:
                     sql += " DO NOTHING"
 
         sql += ";"
-        logger.debug("%.2000s", sql)
-        self.conn.execute(sql, data)
+        # logger.debug("%.2000s", sql)
+        try:
+            if batch:
+                self.conn.executemany(sql, data)
+            else:
+                self.conn.execute(sql, data)
+        except sqlite3.Error:
+            logger.warning("SQL ERROR: %s", sql)
+
+            raise
         self.maybe_commit(commit)
 
+    @wrap_db_errors
     def save(
-        self, obj: BaseModel | Mapping[str, Any], /, **kwargs: Any
+        self,
+        obj: BaseModel | Mapping[str, Any],
+        /,
+        **kwargs: Any,
     ) -> None:
         if isinstance(obj, Mapping):
             obj = self.model.from_api(obj)
         data = obj.to_db()
         self._insert(data, **kwargs)
+
+    @wrap_db_errors
+    def save_batch(
+        self,
+        items: list[BaseModel | Mapping[str, Any]],
+        /,
+        **kwargs: Any,
+    ) -> None:
+        if not items:
+            return
+        data = [
+            (self.model.from_api(i) if isinstance(i, Mapping) else i).to_db()
+            for i in items
+        ]
+        self._insert(data, batch=True, **kwargs)

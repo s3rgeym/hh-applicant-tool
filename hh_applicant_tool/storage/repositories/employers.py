@@ -7,6 +7,7 @@ from .base import BaseRepository
 
 
 class EmployersRepository(BaseRepository):
+    __table__ = "employers"
     model = EmployerModel
 
     def find(self, **kwargs) -> Iterator[EmployerModel]:

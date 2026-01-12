@@ -7,6 +7,7 @@ Default = TypeVar("Default")
 
 
 class SettingsRepository(BaseRepository):
+    __table__ = "settings"
     pkey: str = "key"
     model = SettingModel
 

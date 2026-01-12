@@ -31,7 +31,7 @@ def get_package_version() -> str | None:
 
 
 class ErrorReporter:
-    def build_report(
+    def __build_report(
         self: HHApplicantTool,
         last_report: datetime,
     ) -> dict:
@@ -43,14 +43,14 @@ class ErrorReporter:
                 )
 
         # Эти данные нужны для воспроизведения ошибок. Среди них ваших нет
-        contacts = [
+        vacancy_contacts = [
             c.to_dict()
-            for c in self.storage.employer_contacts.find(
+            for c in self.storage.vacancy_contacts.find(
                 updated_at__ge=last_report
             )
         ][-10000:]
 
-        for c in contacts:
+        for c in vacancy_contacts:
             c.pop("id", 0)
 
         employers = [
@@ -106,7 +106,7 @@ class ErrorReporter:
 
         return dict(
             error_logs=error_logs,
-            contacts=contacts,
+            vacancy_contacts=vacancy_contacts,
             employers=employers,
             vacancies=vacancies,
             package_version=get_package_version(),
@@ -114,7 +114,7 @@ class ErrorReporter:
             report_created=datetime.now(),
         )
 
-    def send_report(self: HHApplicantTool, data: bytes) -> int:
+    def __send_report(self: HHApplicantTool, data: bytes) -> int:
         try:
             r = self.session.post(
                 # "http://localhost:8000/report",
@@ -128,7 +128,7 @@ class ErrorReporter:
             # log.error("Network error: %s", e)
             return False
 
-    def process_reporting(self):
+    def _process_reporting(self):
         # Получаем timestamp последнего репорта
         last_report = datetime.fromtimestamp(
             self.storage.settings.get_value("_last_report", 0)
@@ -136,12 +136,12 @@ class ErrorReporter:
 
         if datetime.now() >= last_report + timedelta(hours=72):
             try:
-                report_dict = self.build_report(last_report)
+                report_dict = self.__build_report(last_report)
                 has_data = any(
                     [
                         report_dict.get("error_logs"),
                         report_dict.get("employers"),
-                        report_dict.get("contacts"),
+                        report_dict.get("vacancy_contacts"),
                         report_dict.get("vacancies"),
                     ]
                 )
@@ -149,7 +149,7 @@ class ErrorReporter:
                     data = binpack.serialize(report_dict)
                     log.debug("Report body size: %d", len(data))
                     # print(binpack.deserialize(data))
-                    if self.send_report(data):
+                    if self.__send_report(data):
                         log.debug("Report was sent")
                     else:
                         log.debug("Report failed")
@@ -161,7 +161,7 @@ class ErrorReporter:
 
 
 class VersionChecker:
-    def get_latest_version(self: HHApplicantTool) -> Literal[False] | str:
+    def __get_latest_version(self: HHApplicantTool) -> Literal[False] | str:
         try:
             response = self.session.get(
                 "https://pypi.org/pypi/hh-applicant-tool/json", timeout=15
@@ -172,11 +172,11 @@ class VersionChecker:
         except requests.RequestException:
             return False
 
-    def check_version(self: HHApplicantTool) -> bool:
+    def _check_version(self: HHApplicantTool) -> bool:
         if datetime.now().timestamp() >= self.storage.settings.get_value(
             "_next_version_check", 0
         ):
-            if v := self.get_latest_version():
+            if v := self.__get_latest_version():
                 self.storage.settings.set_value("_latest_version", v)
                 self.storage.settings.set_value(
                     "_next_version_check", datetime.now() + timedelta(hours=1)
@@ -210,11 +210,11 @@ class ChatOpenAISupport:
 
 
 class MegaTool(ErrorReporter, VersionChecker, ChatOpenAISupport):
-    def check_system(self: HHApplicantTool):
+    def _check_system(self: HHApplicantTool):
         if not self.storage.settings.get_value("disable_version_check", False):
-            self.check_version()
+            self._check_version()
 
         if self.storage.settings.get_value("send_error_reports", True):
-            self.process_reporting()
+            self._process_reporting()
         else:
             log.warning("ОТКЛЮЧЕНА ОТПРАВКА СООБЩЕНИЙ ОБ ОШИБКАХ!")

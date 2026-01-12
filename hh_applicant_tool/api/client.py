@@ -13,8 +13,8 @@ from urllib.parse import urlencode, urljoin
 import requests
 from requests import Session
 
-from ..datatypes import AccessToken
 from . import errors
+from .datatypes import AccessToken
 
 __all__ = ("ApiClient", "OAuthClient")
 

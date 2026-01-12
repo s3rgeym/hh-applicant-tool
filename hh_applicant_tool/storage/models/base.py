@@ -4,8 +4,8 @@ from datetime import datetime
 from logging import getLogger
 from typing import Any, Callable, Mapping, Self, dataclass_transform, get_origin
 
-from hh_applicant_tool.utils import jsonutil
-from hh_applicant_tool.utils.dateutil import try_parse_datetime
+from hh_applicant_tool.utils import json
+from hh_applicant_tool.utils.date import try_parse_datetime
 
 logger = getLogger(__package__)
 
@@ -48,7 +48,7 @@ class BaseModel:
             if value is MISSING:
                 continue
             if f.metadata.get("store_json"):
-                value = jsonutil.dumps(value)
+                value = json.dumps(value)
             # Точно не нужно типы приводить перед сохранением
             # else:
             #     value = self._coerce_type(value, f)
@@ -118,7 +118,7 @@ class BaseModel:
                     continue
 
                 if f.metadata.get("store_json"):
-                    value = jsonutil.loads(value)
+                    value = json.loads(value)
                 else:
                     value = cls._coerce_type(value, f)
 

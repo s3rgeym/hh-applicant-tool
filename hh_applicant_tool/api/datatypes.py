@@ -32,6 +32,8 @@ class PaginatedItems(TypedDict, Generic[Item]):
     arguments: Optional[Any]
     fixes: Optional[Any]
     suggests: Optional[Any]
+    # Это выглядит как глюк. Я нейронке скармливал выхлоп апи, а она писала эти
+    # типы
     alternate_url: str
 
 

@@ -14,17 +14,29 @@ CREATE TABLE IF NOT EXISTS employers (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-/* ===================== employer_contacts ===================== */
-CREATE TABLE IF NOT EXISTS employer_contacts (
+/* ===================== contacts ===================== */
+CREATE TABLE IF NOT EXISTS vacancy_contacts (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-    employer_id INTEGER NOT NULL,
-    -- Просто поле, без REFERENCES
+    vacancy_id INTEGER NOT NULL,
+    -- Все это избыточные поля
+    vacancy_alternate_url TEXT,
+    vacancy_name TEXT,
+    vacancy_area_id INTEGER,
+    vacancy_area_name TEXT,
+    vacancy_salary_from INTEGER,
+    vacancy_salary_to INTEGER,
+    vacancy_currency VARCHAR(3),
+    vacancy_gross BOOLEAN,
+    --
+    employer_id INTEGER,
+    employer_name TEXT,
+    --
     name TEXT,
     email TEXT,
     phone_numbers TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (employer_id, email)
+    UNIQUE (vacancy_id, email)
 );
 /* ===================== vacancies ===================== */
 CREATE TABLE IF NOT EXISTS vacancies (
@@ -49,7 +61,8 @@ CREATE TABLE IF NOT EXISTS negotiations (
     id INTEGER PRIMARY KEY,
     state TEXT NOT NULL,
     vacancy_id INTEGER NOT NULL,
-    employer_id INTEGER NOT NULL,
+    employer_id INTEGER,
+    -- Может обнулиться при блокировке раб-о-тодателя
     chat_id INTEGER NOT NULL,
     resume_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -95,10 +108,10 @@ UPDATE employers
 SET updated_at = CURRENT_TIMESTAMP
 WHERE id = OLD.id;
 END;
-CREATE TRIGGER IF NOT EXISTS trg_employer_contacts_updated
+CREATE TRIGGER IF NOT EXISTS trg_vacancy_contacts_updated
 AFTER
-UPDATE ON employer_contacts BEGIN
-UPDATE employer_contacts
+UPDATE ON vacancy_contacts BEGIN
+UPDATE vacancy_contacts
 SET updated_at = CURRENT_TIMESTAMP
 WHERE id = OLD.id;
 END;

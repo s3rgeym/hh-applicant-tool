@@ -17,8 +17,8 @@ from typing import Any, Iterable
 import requests
 import urllib3
 
-from . import datatypes, utils
-from .api import ApiClient
+from . import utils
+from .api import ApiClient, datatypes
 from .constants import ANDROID_CLIENT_ID, ANDROID_CLIENT_SECRET
 from .storage import StorageFacade
 from .utils.log import setup_logger
@@ -219,13 +219,12 @@ class HHApplicantTool(MegaTool):
     def get_me(self) -> datatypes.User:
         return self.api_client.get("/me")
 
-    def get_resumes(self) -> datatypes.PaginatedItems[datatypes.Resume]:
-        return self.api_client.get("/resumes/mine")
+    def get_resumes(self) -> list[datatypes.Resume]:
+        return self.api_client.get("/resumes/mine")["items"]
 
-    def first_resume_id(self):
-        resumes = self.api_client.get("/resumes/mine")
-        assert len(resumes["items"]), "Empty resume list"
-        return resumes["items"][0]["id"]
+    def first_resume_id(self) -> str:
+        resumes = self.get_resumes()
+        return resumes[0]["id"]
 
     def get_blacklisted(self) -> list[str]:
         rv = []
@@ -305,9 +304,10 @@ class HHApplicantTool(MegaTool):
             return 2
         finally:
             try:
-                self.check_system()
+                self._check_system()
             except Exception:
                 pass
+                # raise
 
     def _parse_args(self, argv) -> None:
         self._parser = self._create_parser()

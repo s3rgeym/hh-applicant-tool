@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import logging
 from typing import TYPE_CHECKING
 
 from ..api.errors import ApiError
-from ..datatypes import NegotiationStateId
 from ..main import BaseNamespace, BaseOperation
+from ..storage.repositories.errors import RepositoryError
+from ..utils.date import parse_api_datetime
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -17,6 +19,7 @@ logger = logging.getLogger(__package__)
 class Namespace(BaseNamespace):
     cleanup: bool
     blacklist_discard: bool
+    older_than: int
     dry_run: bool
 
 
@@ -40,6 +43,12 @@ class Operation(BaseOperation):
             help="Блокировать работодателя за отказ",
         )
         parser.add_argument(
+            "-o",
+            "--older-than",
+            type=int,
+            help="С флагом --clean удаляет любые отклики старше N дней",
+        )
+        parser.add_argument(
             "-n",
             "--dry-run",
             action=argparse.BooleanOptionalAction,
@@ -48,26 +57,35 @@ class Operation(BaseOperation):
 
     def run(self, tool: HHApplicantTool) -> None:
         self.tool = tool
-        self.args = tool.args
+        self.args: Namespace = tool.args
         self._sync()
 
     def _sync(self) -> None:
+        blacklisted = set(self.tool.get_blacklisted())
         storage = self.tool.storage
         for negotiation in self.tool.get_negotiations():
             vacancy = negotiation["vacancy"]
-            employer = vacancy.get("employer", {})
-            employer_id = employer.get("id")
 
             # Если работодателя блокируют, то он превращается в null
             # ХХ позволяет скрывать компанию, когда id нет, а вместо имени "Крупная российская компания"
             # sqlite3.IntegrityError: NOT NULL constraint failed: negotiations.employer_id
-            if employer_id:
+            try:
                 storage.negotiations.save(negotiation)
+            except RepositoryError as e:
+                logger.exception(e)
 
-            state_id: NegotiationStateId = negotiation["state"]["id"]
             if not self.args.cleanup:
                 continue
-            if state_id != "discard":
+            if self.args.older_than:
+                updated_at = parse_api_datetime(negotiation["updated_at"])
+                # А хз какую временную зону сайт возвращает
+                days_passed = (
+                    dt.datetime.now(updated_at.tzinfo) - updated_at
+                ).days
+                logger.debug(f"{days_passed = }")
+                if days_passed <= self.args.older_than:
+                    continue
+            elif negotiation["state"]["id"] != "discard":
                 continue
             try:
                 if not self.args.dry_run:
@@ -78,18 +96,24 @@ class Operation(BaseOperation):
 
                 print(
                     "🗑️ Отменили отклик на вакансию:",
-                    vacancy["name"],
                     vacancy["alternate_url"],
+                    vacancy["name"],
                 )
 
+                employer = vacancy.get("employer", {})
+                employer_id = employer.get("id")
+
                 if (
-                    employer_id
-                    and employer_id not in self.args.blacklist_discard
+                    self.args.blacklist_discard
+                    and employer
+                    and employer_id
+                    and employer_id not in blacklisted
                 ):
                     if not self.args.dry_run:
                         self.tool.api_client.put(
                             f"/employers/blacklisted/{employer_id}"
                         )
+                        blacklisted.add(employer_id)
 
                     print(
                         "🚫 Работодатель заблокирован:",

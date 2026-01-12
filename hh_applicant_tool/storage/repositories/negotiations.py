@@ -9,4 +9,5 @@ logger = getLogger(__package__)
 
 
 class NegotiationRepository(BaseRepository):
+    __table__ = "negotiations"
     model = NegotiationModel

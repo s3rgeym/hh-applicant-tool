@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from .attrdict import AttrDict
 from .config import Config, get_config_path
-from .dateutil import (
+from .date import (
     DATETIME_FORMAT,
     parse_api_datetime,
     try_parse_datetime,
