@@ -313,11 +313,11 @@ class Operation(BaseOperation):
             )
 
         # Синхронизация откликов
-        for neg in self.tool.get_negotiations():
-            try:
-                self.tool.storage.negotiations.save(neg)
-            except RepositoryError as e:
-                logger.warning(e)
+        # for neg in self.tool.get_negotiations():
+        #     try:
+        #         self.tool.storage.negotiations.save(neg)
+        #     except RepositoryError as e:
+        #         logger.warning(e)
 
         print("📝 Отклики на вакансии разосланы!")
 

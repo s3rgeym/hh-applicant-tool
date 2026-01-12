@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import io
 import logging
-import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -15,15 +13,8 @@ try:
 except ImportError:
     pass
 
-SIXEL_INSTALLED = False
-
-try:
-    from libsixel.encoder import SIXEL_OPTFLAG_WIDTH, Encoder
-    from PIL import Image
-except ImportError:
-    SIXEL_INSTALLED = True
-
 from ..main import BaseOperation
+from ..utils.terminal import print_kitty_image
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -85,13 +76,22 @@ class Operation(BaseOperation):
         )
         parser.add_argument(
             "--no-headless",
+            "-n",
             action="store_true",
             help="Показать окно браузера для отладки (отключает headless режим).",
         )
         parser.add_argument(
+            "-m",
             "--manual",
             action="store_true",
             help="Ручной режим ввода кредов, редирект будет перехвачен.",
+        )
+        parser.add_argument(
+            "-k",
+            "--use-kitty",
+            "--kitty",
+            action="store_true",
+            help="Использовать kitty protocol для вывода изображения в терминал. Гуглите поддерживает ли ваш терминал его",
         )
 
     def run(self, tool: HHApplicantTool) -> None:
@@ -99,6 +99,7 @@ class Operation(BaseOperation):
         try:
             asyncio.run(self._main(tool))
         except (KeyboardInterrupt, asyncio.TimeoutError):
+            # _executor.shutdown(wait=False, cancel_futures=True)
             logger.warning("Что-то пошло не так")
             # os._exit(1)
             return 1
@@ -254,8 +255,7 @@ class Operation(BaseOperation):
         )
         await page.click(self.SELECT_EXPAND_PASSWORD)
 
-        if SIXEL_INSTALLED:
-            await self._handle_captcha(page)
+        await self._handle_captcha(page)
 
         logger.debug(f"Ожидание поля пароля: {self.SELECT_PASSWORD_INPUT}")
         await page.wait_for_selector(
@@ -270,8 +270,7 @@ class Operation(BaseOperation):
 
         await page.press(self.SELECT_LOGIN_INPUT, "Enter")
 
-        if SIXEL_INSTALLED:
-            await self._handle_captcha(page)
+        await self._handle_captcha(page)
 
         logger.debug(
             f"Ожидание контейнера ввода кода: {self.SELECT_CODE_CONTAINER}"
@@ -285,7 +284,7 @@ class Operation(BaseOperation):
         code = (await ainput("📩 Введите полученный код: ")).strip()
 
         if not code:
-            raise RuntimeError("Код подтверждения не может быть пустым")
+            raise RuntimeError("Код подтверждения не может быть пустым.")
 
         logger.debug(f"Ввод кода в {self.SELECT_PIN_CODE_INPUT}")
         await page.fill(self.SELECT_PIN_CODE_INPUT, code)
@@ -300,39 +299,32 @@ class Operation(BaseOperation):
                 state="visible",
             )
         except Exception:
+            logger.debug("Капчи нет, продолжаем как обычно.")
             return
+
+        if not self._args.use_kitty:
+            raise RuntimeError(
+                "Используйте флаг --use-kitty/-k для вывода капчи в терминал."
+                "Работает не во всех терминалах!",
+            )
 
         logger.info("Обнаружена капча!")
 
+        # box = await captcha_element.bounding_box()
+
+        # width = int(box["width"])
+        # height = int(box["height"])
+
         img_bytes = await captcha_element.screenshot()
 
-        self._print_captcha(img_bytes)
+        print(
+            "Если вы не видите картинку ниже, то ваш терминал не поддерживает"
+            " kitty protocol."
+        )
+        print()
+        print_kitty_image(img_bytes)
 
         captcha_text = (await ainput("Введите текст с картинки: ")).strip()
 
         await page.fill(self.SELECT_CAPTCHA_INPUT, captcha_text)
         await page.press(self.SELECT_CAPTCHA_INPUT, "Enter")
-
-    def _print_captcha(self, data: bytes) -> None:
-        """Вывод изображения в терминал с использованием Pillow и libsixel"""
-
-        # Загружаем изображение из байтов Playwright
-        img = Image.open(io.BytesIO(data)).convert("RGB")
-
-        w, h = img.size
-
-        # 2. Подготавливаем энкодер
-        encoder = Encoder()
-        encoder.setopt(SIXEL_OPTFLAG_WIDTH, w)
-
-        pixel_data = img.tobytes()
-
-        encoder.encode_bytes(
-            pixel_data,
-            img.width,
-            img.height,
-            3,  # SIXEL_PIXELFORMAT_RGB888
-            0,  # truecolor
-        )
-        sys.stdout.flush()
-        print()

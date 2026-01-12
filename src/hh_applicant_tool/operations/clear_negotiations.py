@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from ..api.errors import ApiError
 from ..main import BaseNamespace, BaseOperation
-from ..storage.repositories.errors import RepositoryError
 from ..utils.date import parse_api_datetime
 
 if TYPE_CHECKING:
@@ -63,10 +62,10 @@ class Operation(BaseOperation):
             # Если работодателя блокируют, то он превращается в null
             # ХХ позволяет скрывать компанию, когда id нет, а вместо имени "Крупная российская компания"
             # sqlite3.IntegrityError: NOT NULL constraint failed: negotiations.employer_id
-            try:
-                storage.negotiations.save(negotiation)
-            except RepositoryError as e:
-                logger.exception(e)
+            # try:
+            #     storage.negotiations.save(negotiation)
+            # except RepositoryError as e:
+            #     logger.exception(e)
 
             if self.args.older_than:
                 updated_at = parse_api_datetime(negotiation["updated_at"])
