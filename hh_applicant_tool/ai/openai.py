@@ -24,7 +24,7 @@ class ChatOpenAI:
     max_completion_tokens: int = 1000
     session: requests.Session = field(default_factory=requests.Session)
 
-    def default_headers(self) -> dict[str, str]:
+    def _default_headers(self) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self.token}",
         }
@@ -44,7 +44,7 @@ class ChatOpenAI:
             response = self.session.post(
                 self.chat_endpoint,
                 json=payload,
-                headers=self.default_headers(),
+                headers=self._default_headers(),
                 timeout=30,
             )
             response.raise_for_status()
