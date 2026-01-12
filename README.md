@@ -114,7 +114,7 @@ git clone https://github.com/s3rgeym/hh-applicant-tool
 Переходим в каталог с `docker-compose.yml`:
 
 ```sh
-cd hh-applicant-tool/docker
+cd hh-applicant-tool
 ```
 
 Теперь авторизуйтесь:
@@ -133,7 +133,6 @@ zcnbvm@proton.me
 🔓 Авторизация прошла успешно!
 ```
 
-
 Капча отобразится только в терминале с поддержкой протокола **kitty**, например, в **Kitty** или **Konsole**.
 
 В случае успешной авторизации можно запускать рассылку откликов по крону:
@@ -147,9 +146,23 @@ docker-compose up -d
 - Рассылать отклики со всех опубликованных резюме.
 - Поднимать резюме.
 
-Информацию об ошибках можно посмотреть в файле `config/log.txt`, а контакты работодателей посмотреть в `config/data` с помощью `sqlite3`.
+Просмотр логов `cron`:
 
-Для остановки выполните:
+```sh
+docker compose logs -f
+```
+
+В выводе должно быть что-то типа:
+
+```sh
+hh_applicant_tool  | [Mon Jan 12 23:23:49 UTC 2026] Running startup tasks...
+hh_applicant_tool  | [E] token not expired
+hh_applicant_tool  | ✅ Обновлено Программист
+```
+
+Информацию об ошибках можно посмотреть в файле `config/log.txt`, а контакты работодателей — в `config/data` с помощью `sqlite3`.
+
+Для остановки рассылки откликов... выполните:
 
 ```sh
 docker-compose down
