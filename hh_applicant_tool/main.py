@@ -19,7 +19,6 @@ import urllib3
 
 from . import utils
 from .api import ApiClient, datatypes
-from .api.client_keys import ANDROID_CLIENT_ID, ANDROID_CLIENT_SECRET
 from .storage import StorageFacade
 from .utils.log import setup_logger
 from .utils.mixins import MegaTool
@@ -205,13 +204,13 @@ class HHApplicantTool(MegaTool):
         config = self.config
         token = config.get("token", {})
         api = ApiClient(
-            client_id=config.get("client_id", ANDROID_CLIENT_ID),
-            client_secret=config.get("client_id", ANDROID_CLIENT_SECRET),
+            client_id=config.get("client_id"),
+            client_secret=config.get("client_id"),
             access_token=token.get("access_token"),
             refresh_token=token.get("refresh_token"),
             access_expires_at=token.get("access_expires_at"),
             delay=args.delay,
-            user_agent=config["user_agent"] or utils.hh_android_useragent(),
+            user_agent=config.get("user_agent"),
             session=self.session,
         )
         return api

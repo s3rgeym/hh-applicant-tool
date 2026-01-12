@@ -2,7 +2,7 @@ import random
 import uuid
 
 
-def hh_android_useragent() -> str:
+def generate_android_useragent() -> str:
     """Generates Android App User-Agent"""
     devices = (
         "23053RN02A, 23053RN02Y, 23053RN02I, 23053RN02L, 23077RABDC".split(", ")
