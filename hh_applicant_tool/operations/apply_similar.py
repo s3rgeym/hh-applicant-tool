@@ -4,14 +4,14 @@ import argparse
 import logging
 import random
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterator, TextIO
+from typing import TYPE_CHECKING, Iterator
 
-from .. import datatypes
 from ..ai.base import AIError
-from ..api import BadResponse, Redirect
+from ..api import BadResponse, Redirect, datatypes
+from ..api.datatypes import PaginatedItems, SearchVacancy
 from ..api.errors import ApiError, LimitExceeded
-from ..datatypes import PaginatedItems, SearchVacancy
 from ..main import BaseNamespace, BaseOperation
+from ..storage.repositories.errors import RepositoryError
 from ..utils import bool2str, list2str, rand_text, shorten
 
 if TYPE_CHECKING:
@@ -23,7 +23,7 @@ logger = logging.getLogger(__package__)
 
 class Namespace(BaseNamespace):
     resume_id: str | None
-    message_list: TextIO
+    message_list_path: Path
     ignore_employers: Path | None
     force_message: bool
     use_ai: bool
@@ -62,10 +62,9 @@ class Namespace(BaseNamespace):
 
 
 class Operation(BaseOperation):
-    """Откликнуться на все подходящие вакансии.
+    """Откликнуться на все подходящие вакансии."""
 
-    Описание фильтров для поиска вакансий: <https://api.hh.ru/openapi/redoc#tag/Poisk-vakansij-dlya-soiskatelya/operation/get-vacancies-similar-to-resume>
-    """
+    __aliases__ = ("apply",)
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
@@ -76,9 +75,10 @@ class Operation(BaseOperation):
         )
         parser.add_argument(
             "-L",
+            "--message-list-path",
             "--message-list",
             help="Путь до файла, где хранятся сообщения для отклика на вакансии. Каждое сообщение — с новой строки.",  # noqa: E501
-            type=argparse.FileType("r", encoding="utf-8", errors="replace"),
+            type=Path,
         )
         parser.add_argument(
             "-f",
@@ -243,7 +243,7 @@ class Operation(BaseOperation):
         self.api_client = tool.api_client
         args: Namespace = tool.args
         self.application_messages = self._get_application_messages(
-            args.message_list
+            args.message_list_path
         )
         self.area = args.area
         self.bottom_lat = args.bottom_lat
@@ -268,7 +268,7 @@ class Operation(BaseOperation):
         self.pre_prompt = args.prompt
         self.premium = args.premium
         self.professional_role = args.professional_role
-        self.resume_id = args.resume_id or tool.first_resume_id()
+        self.resume_id = args.resume_id
         self.right_lng = args.right_lng
         self.salary = args.salary
         self.schedule = args.schedule
@@ -283,52 +283,88 @@ class Operation(BaseOperation):
         )
         self._apply_similar()
 
-    def _get_application_messages(
-        self, message_list: TextIO | None
-    ) -> list[str]:
-        return (
-            list(filter(None, map(str.strip, message_list)))
-            if message_list
-            else [
-                "{Меня заинтересовала|Мне понравилась} ваша вакансия %(vacancy_name)s",
-                "{Прошу рассмотреть|Предлагаю рассмотреть} {мою кандидатуру|мое резюме} на вакансию %(vacancy_name)s",  # noqa: E501
-            ]
-        )
-
     def _apply_similar(self) -> None:
-        me: datatypes.User = self.tool.get_me()
+        resumes: list[datatypes.Resume] = self.tool.get_resumes()
+        try:
+            self.tool.storage.resumes.save_batch(resumes)
+        except RepositoryError as ex:
+            logger.exception(ex)
+        resumes = (
+            list(filter(lambda x: x["id"] == self.resume_id, resumes))
+            if self.resume_id
+            else resumes
+        )
+        # Выбираем только опубликованные
+        resumes = list(
+            filter(lambda x: x["status"]["id"] == "published", resumes)
+        )
+        if not resumes:
+            logger.warning("У вас нет опубликованных резюме")
+            return
 
-        basic_placeholders = {
-            "first_name": me.get("first_name", ""),
-            "last_name": me.get("last_name", ""),
-            "email": me.get("email", ""),
-            "phone": me.get("phone", ""),
+        me: datatypes.User = self.tool.get_me()
+        seen_employers = set()
+        for resume in resumes:
+            self._apply_resume(
+                resume=resume,
+                user=me,
+                seen_employers=seen_employers,
+            )
+
+        print("📝 Отклики на вакансии разосланы!")
+
+    def _apply_resume(
+        self,
+        resume: datatypes.Resume,
+        user: datatypes.User,
+        seen_employers: set[str],
+    ) -> None:
+        logger.info("Начинаю рассылку откликов для резюме: %s", resume["title"])
+
+        placeholders = {
+            "first_name": user.get("first_name") or "",
+            "last_name": user.get("last_name") or "",
+            "email": user.get("email") or "",
+            "phone": user.get("phone") or "",
+            "resume_title": resume.get("title") or "",
         }
 
-        seen_employers = set()
-        for vacancy in self._get_vacancies():
+        for vacancy in self._get_similar_vacancies(resume_id=resume["id"]):
             try:
                 employer = vacancy.get("employer", {})
 
-                placeholders = {
+                message_placeholders = {
                     "vacancy_name": vacancy.get("name", ""),
                     "employer_name": employer.get("name", ""),
-                    **basic_placeholders,
+                    **placeholders,
                 }
 
                 storage = self.tool.storage
-                storage.vacancies.save(vacancy)
+
+                try:
+                    storage.vacancies.save(vacancy)
+                except RepositoryError as ex:
+                    logger.debug(ex)
+
                 if employer := vacancy.get("employer"):
                     employer_id = employer.get("id")
                     if employer_id and employer_id not in seen_employers:
                         employer_profile: datatypes.Employer = (
                             self.api_client.get(f"/employers/{employer_id}")
                         )
-                        storage.employers.save(employer_profile)
+
+                        try:
+                            storage.employers.save(employer_profile)
+                        except RepositoryError as ex:
+                            logger.exception(ex)
 
                 # По факту контакты можно получить только здесь?!
                 if vacancy.get("contacts"):
-                    storage.employer_contacts.save(vacancy)
+                    try:
+                        # logger.debug(vacancy)
+                        storage.vacancy_contacts.save(vacancy)
+                    except RecursionError as ex:
+                        logger.exception(ex)
 
                 if vacancy.get("has_test"):
                     logger.debug(
@@ -363,13 +399,20 @@ class Operation(BaseOperation):
                     )
                     if "got_rejection" in relations:
                         logger.debug(
-                            "Вы получили отказ: %s", vacancy["alternate_url"]
+                            "Вы получили отказ от %s на резюме %s",
+                            vacancy["alternate_url"],
+                            resume["alternate_url"],
                         )
-                        print("⛔  Пришел отказ", vacancy["alternate_url"])
+                        print(
+                            "⛔  Пришел отказ от",
+                            vacancy["alternate_url"],
+                            "на резюме",
+                            resume["alternate_url"],
+                        )
                     continue
 
                 params = {
-                    "resume_id": self.resume_id,
+                    "resume_id": resume["id"],
                     "vacancy_id": vacancy_id,
                     "message": "",
                 }
@@ -379,13 +422,19 @@ class Operation(BaseOperation):
                 ):
                     if self.openai_chat:
                         msg = self.pre_prompt + "\n\n"
-                        msg += placeholders["vacancy_name"]
+                        msg += (
+                            "Название вакансии: "
+                            + message_placeholders["vacancy_name"]
+                        )
+                        msg += (
+                            "Мое резюме:" + message_placeholders["resume_title"]
+                        )
                         logger.debug("prompt: %s", msg)
                         msg = self.openai_chat.send_message(msg)
                     else:
                         msg = (
                             rand_text(random.choice(self.application_messages))
-                            % placeholders
+                            % message_placeholders
                         )
 
                     logger.debug(msg)
@@ -400,12 +449,18 @@ class Operation(BaseOperation):
                         )
                         assert res == {}
                         logger.debug(
-                            "Отправили отклик: %s", vacancy["alternate_url"]
+                            "Откликнулись на %s с резюме %s",
+                            vacancy["alternate_url"],
+                            resume["alternate_url"],
                         )
                     print(
-                        "📨 Отправили отклик:",
+                        "📨 Отправили отклик для резюме",
+                        resume["alternate_url"],
+                        "на вакансию",
                         vacancy["alternate_url"],
+                        "(",
                         shorten(vacancy["name"]),
+                        ")",
                     )
                 except Redirect:
                     logger.warning(
@@ -414,14 +469,11 @@ class Operation(BaseOperation):
             except LimitExceeded:
                 logger.info("Достигли лимита на отклики")
                 print("⚠️ Достигли лимита рассылки")
-                # self.tool.storage.settings.set_value("_")
                 break
             except ApiError as ex:
                 logger.warning(ex)
             except (BadResponse, AIError) as ex:
                 logger.error(ex)
-
-        print("📝 Отклики на вакансии разосланы!")
 
     def _get_search_params(self, page: int) -> dict:
         params = {
@@ -489,11 +541,11 @@ class Operation(BaseOperation):
 
         return params
 
-    def _get_vacancies(self) -> Iterator[SearchVacancy]:
+    def _get_similar_vacancies(self, resume_id: str) -> Iterator[SearchVacancy]:
         for page in range(self.total_pages):
             params = self._get_search_params(page)
             res: PaginatedItems[SearchVacancy] = self.api_client.get(
-                f"/resumes/{self.resume_id}/similar_vacancies",
+                f"/resumes/{resume_id}/similar_vacancies",
                 params,
             )
             if not res["items"]:
@@ -503,3 +555,21 @@ class Operation(BaseOperation):
 
             if page >= res["pages"] - 1:
                 return
+
+    def _get_application_messages(self, path: Path | None) -> list[str]:
+        return (
+            list(
+                filter(
+                    None,
+                    map(
+                        str.strip,
+                        path.open(encoding="utf-8", errors="replace"),
+                    ),
+                )
+            )
+            if path
+            else [
+                "Здравствуйте, меня зовут %(first_name)s. {Меня заинтересовала|Мне понравилась} ваша вакансия «%(vacancy_name)s». Хотелось бы {пообщаться|задать вопросы} о ней.",
+                "{Прошу|Предлагаю} рассмотреть {мою кандидатуру|мое резюме «%(resume_title)s»} на вакансию «%(vacancy_name)s». С уважением, %(first_name)s.",  # noqa: E501
+            ]
+        )

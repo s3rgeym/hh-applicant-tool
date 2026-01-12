@@ -39,9 +39,9 @@ class Operation(BaseOperation):
             "-m", "--method", "--meth", "-X", default="GET", help="HTTP Метод"
         )
 
-    def run(self, applicant_tool: HHApplicantTool) -> None:
-        args = applicant_tool.args
-        api_client = applicant_tool.api_client
+    def run(self, tool: HHApplicantTool) -> None:
+        args = tool.args
+        api_client = tool.api_client
         params = dict(x.split("=", 1) for x in args.param)
         try:
             result = api_client.request(

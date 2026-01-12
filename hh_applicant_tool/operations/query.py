@@ -88,7 +88,9 @@ class Operation(BaseOperation):
                         )
                 else:
                     tool.db.commit()
-                    print(f"OK. Rows affected: {cursor.rowcount}")
+
+                    if cursor.rowcount > 0:
+                        print(f"Rows affected: {cursor.rowcount}")
 
             except sqlite3.Error as ex:
                 print(f"❌ SQL Error: {ex}")

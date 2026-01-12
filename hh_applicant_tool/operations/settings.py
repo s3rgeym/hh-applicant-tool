@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 from prettytable import PrettyTable
 
+from .. import utils
 from ..main import BaseNamespace, BaseOperation
-from ..utils import jsonutil
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -28,7 +28,7 @@ class Namespace(BaseNamespace):
 
 def parse_value(v):
     try:
-        return jsonutil.loads(v)
+        return utils.json.loads(v)
     except json.JSONDecodeError:
         return v
 

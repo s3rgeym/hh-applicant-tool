@@ -5,8 +5,7 @@ import argparse
 import logging
 from typing import TYPE_CHECKING
 
-from ..api import ApiError
-from ..datatypes import PaginatedItems
+from ..api import ApiError, datatypes
 from ..main import BaseNamespace, BaseOperation
 from ..utils import print_err
 from ..utils.string import shorten
@@ -31,8 +30,10 @@ class Operation(BaseOperation):
         pass
 
     def run(self, tool: HHApplicantTool) -> None:
-        resumes: PaginatedItems = tool.get_resumes()
-        for resume in resumes["items"]:
+        resumes: list[datatypes.Resume] = tool.get_resumes()
+        # Там вызов API меняет поля
+        # tool.storage.resumes.save_batch(resumes)
+        for resume in resumes:
             try:
                 res = tool.api_client.post(
                     f"/resumes/{resume['id']}/publish",

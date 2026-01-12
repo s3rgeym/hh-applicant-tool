@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 import sqlite3
 from pathlib import Path
 
@@ -17,7 +16,7 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(
         (QUERIES_PATH / "schema.sql").read_text(encoding="utf-8")
     )
-    logger.debug("Database unitialized")
+    logger.debug("Database initialized")
 
 
 def list_migrations() -> list[str]:
@@ -34,16 +33,8 @@ def apply_migration(conn: sqlite3.Connection, name: str) -> None:
     )
 
 
-def model2table(o: type) -> str:
-    name: str = o.__name__
-    if name.endswith("Model"):
-        name = name[:-5]
-    name = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
-    # y -> ies (если перед y согласная: vacancy -> vacancies)
-    if name.endswith("y") and not name.endswith(("ay", "ey", "iy", "oy", "uy")):
-        return name[:-1] + "ies"
-    # s, x, z, ch, sh -> +es (bus -> buses, match -> matches)
-    if name.endswith(("s", "x", "z", "ch", "sh")):
-        return name + "es"
-    # Обычный случай
-    return name + "s"
+# def model2table(o: type) -> str:
+#     name: str = o.__name__
+#     if name.endswith("Model"):
+#         name = name[:-5]
+#     return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()

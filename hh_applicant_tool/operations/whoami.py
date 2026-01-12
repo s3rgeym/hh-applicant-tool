@@ -5,7 +5,7 @@ import argparse
 import logging
 from typing import TYPE_CHECKING
 
-from .. import datatypes
+from ..api import datatypes
 from ..main import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:

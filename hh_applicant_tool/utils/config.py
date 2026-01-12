@@ -7,7 +7,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
-from . import jsonutil as json
+from . import json
 
 
 @cache

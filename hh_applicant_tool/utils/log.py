@@ -38,9 +38,11 @@ class ColorHandler(logging.StreamHandler):
     def format(self, record: logging.LogRecord) -> str:
         # Подавляем вывод подробного сообщения об ошибке
         orig_exc_info = record.exc_info
+
         # Детали ошибки показываем только при отладке
         if self.level > logging.DEBUG:
             record.exc_info = None
+
         message = super().format(record)
         # Обязательно нужно восстановить оригинальное значение или в файловом
         # логе не будет деталей ошибки
@@ -107,8 +109,9 @@ def setup_logger(
         ]
     )
 
+    file_handler.addFilter(redactor)
+
     for h in [color_handler, file_handler]:
-        h.addFilter(redactor)
         logger.addHandler(h)
 
 

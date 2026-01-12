@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from .repositories.contacts import EmployerContactsRepository
+from .repositories.contacts import VacancyContactsRepository
 from .repositories.employers import EmployersRepository
 from .repositories.negotiations import NegotiationRepository
 from .repositories.resumes import ResumesRepository
@@ -18,7 +18,7 @@ class StorageFacade:
         init_db(conn)
         self.employers = EmployersRepository(conn)
         self.vacancies = VacanciesRepository(conn)
-        self.employer_contacts = EmployerContactsRepository(conn)
+        self.vacancy_contacts = VacancyContactsRepository(conn)
         self.negotiations = NegotiationRepository(conn)
         self.settings = SettingsRepository(conn)
         self.resumes = ResumesRepository(conn)

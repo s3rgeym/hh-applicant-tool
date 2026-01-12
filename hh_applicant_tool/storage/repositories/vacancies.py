@@ -5,4 +5,5 @@ from .base import BaseRepository
 
 
 class VacanciesRepository(BaseRepository):
+    __table__ = "vacancies"
     model = VacancyModel
