@@ -111,13 +111,13 @@ sudo apt install docker.io docker-compose-v2
 git clone https://github.com/s3rgeym/hh-applicant-tool
 ```
 
-Переходим в каталог с `docker-compose.yml`:
+Переходим в каталог:
 
 ```sh
 cd hh-applicant-tool
 ```
 
-Теперь авторизуйтесь:
+Теперь авторизуйтмся:
 
 ```sh
 docker-compose run --rm -it -e TERM=$TERM hh-applicant-tool \
