@@ -14,11 +14,17 @@ import requests
 from requests import Session
 
 from . import errors
-from .client_keys import ANDROID_CLIENT_ID, ANDROID_CLIENT_SECRET
+from .client_keys import (
+    ANDROID_CLIENT_ID,
+    ANDROID_CLIENT_SECRET,
+)
 from .datatypes import AccessToken
+from .user_agent import generate_android_useragent
 
 __all__ = ("ApiClient", "OAuthClient")
 
+HH_API_URL = "https://api.hh.ru/"
+HH_OAUTH_URL = "https://hh.ru/oauth/"
 DEFAULT_DELAY = 0.334
 
 AllowedMethods = Literal["GET", "POST", "PUT", "DELETE"]
@@ -39,7 +45,7 @@ class BaseClient:
     _previous_request_time: float = 0.0
 
     def __post_init__(self) -> None:
-        assert self.base_url.endswith("/"), "base_url must end with /"
+        assert self.base_url.endswith("/"), "base_url must ends with /"
         self.lock = Lock()
         # logger.debug(f"user agent: {self.user_agent}")
         if not self.session:
@@ -52,10 +58,9 @@ class BaseClient:
     def proxies(self):
         return self.session.proxies
 
-    def default_headers(self) -> dict[str, str]:
+    def _default_headers(self) -> dict[str, str]:
         return {
-            "user-agent": self.user_agent
-            or "Mozilla/5.0 (+https://github.com/s3rgeym/hh-applicant-tool)",
+            "user-agent": self.user_agent or generate_android_useragent(),
             "x-hh-app-active": "true",
         }
 
@@ -88,7 +93,7 @@ class BaseClient:
                 method,
                 url,
                 **payload,
-                headers=self.default_headers(),
+                headers=self._default_headers(),
                 allow_redirects=False,
             )
             try:
@@ -140,13 +145,18 @@ class BaseClient:
 
 @dataclass
 class OAuthClient(BaseClient):
-    client_id: str
-    client_secret: str
+    client_id: str | None = None
+    client_secret: str | None = None
     _: dataclasses.KW_ONLY
-    base_url: str = "https://hh.ru/oauth/"
+    base_url: str = HH_OAUTH_URL
     state: str = ""
     scope: str = ""
     redirect_uri: str = ""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.client_id = self.client_id or ANDROID_CLIENT_ID
+        self.client_secret = self.client_secret or ANDROID_CLIENT_SECRET
 
     @property
     def authorize_url(self) -> str:
@@ -196,9 +206,9 @@ class ApiClient(BaseClient):
     refresh_token: str | None = None
     access_expires_at: int = 0
     _: dataclasses.KW_ONLY
-    client_id: str = ANDROID_CLIENT_ID
-    client_secret: str = ANDROID_CLIENT_SECRET
-    base_url: str = "https://api.hh.ru/"
+    client_id: str | None = None
+    client_secret: str | None = None
+    base_url: str = HH_API_URL
 
     @property
     def is_access_expired(self) -> bool:
@@ -213,10 +223,10 @@ class ApiClient(BaseClient):
             session=self.session,
         )
 
-    def default_headers(
+    def _default_headers(
         self,
     ) -> dict[str, str]:
-        headers = super().default_headers()
+        headers = super()._default_headers()
         if not self.access_token:
             return headers
         # Это очень интересно, что access token'ы начинаются с USER, т.е. API может содержать какую-то уязвимость, связанную с этим

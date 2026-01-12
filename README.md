@@ -53,6 +53,7 @@
     - [База данных](#база-данных)
   - [Использование в скриптах](#использование-в-скриптах)
   - [Дополнительные настройки](#дополнительные-настройки)
+  - [TODO](#todo)
   - [Лицензионное соглашение (Limited Non-Commercial License)](#лицензионное-соглашение-limited-non-commercial-license)
 
 ---
@@ -564,6 +565,11 @@ $ hh-applicant-tool settings disable_version_check true
 ```sh
 $ hh-applicant-tool settings send_error_reports false
 ```
+
+### TODO
+
+- Выкинуть ненужный функционал. Например, хранить отзывы нет смысла, так как они нигде не используются
+
 
 ### Лицензионное соглашение (Limited Non-Commercial License)
 
