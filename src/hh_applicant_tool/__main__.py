@@ -1,6 +1,6 @@
 import sys
 
-from .hh_applicant import main
+from . import main
 
 if __name__ == "__main__":
     sys.exit(main())

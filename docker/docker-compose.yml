@@ -1,8 +1,11 @@
 services:
   hh-applicant-tool:
+    container_name: hh_applicant_tool
     build:
       context: .
       dockerfile: Dockerfile
     volumes:
       - .:/app
-    restart: always
+    restart: unless-stopped
+    # environment:
+    #   - TZ=Europe/Moscow

@@ -85,6 +85,10 @@ docker/
 # Vim
 .vim/
 
+/docker/config/data
+/docker/config/log.txt
+/docker/config/config.json
+
 /report-server/*
 /*.json
 /*.css
