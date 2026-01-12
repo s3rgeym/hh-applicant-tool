@@ -1,5 +1,8 @@
-# shellcheck disable=SC2148
-@reboot /usr/local/bin/python -m applicant_tool -vv -c /app/config apply-similar
-0 13,21 * * * /usr/local/bin/python -m applicant_tool -vv -c /app/config apply-similar
-@reboot /usr/local/bin/python -m applicant_tool -vv -c /app/config refresh-token
-0 19 * * * /usr/local/bin/python -m applicant_tool -vv -c /app/config refresh-token
+# shellcheck disable=SC2148,SC2129,SC2035
+# При старте запускаем наш скрипт
+@reboot /bin/bash /app/startup.sh >>/var/log/cron.log 2>&1
+
+# Регулярные задачи
+0 */4 * * * /usr/local/bin/python -m hh_applicant_tool -c /app/config update-resumes >>/var/log/cron.log 2>&1
+0 13,21 * * * /usr/local/bin/python -m hh_applicant_tool -c /app/config apply-similar >>/var/log/cron.log 2>&1
+0 19 * * * /usr/local/bin/python -m hh_applicant_tool -c /app/config refresh-token >>/var/log/cron.log 2>&1

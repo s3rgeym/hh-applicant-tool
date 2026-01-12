@@ -46,7 +46,11 @@ class ApiError(BadResponse):
 
     @property
     def message(self) -> str:
-        return self._data.get("description") or str(self._data)
+        return (
+            self._data.get("error_description")
+            or self._data.get("description")
+            or str(self._data)
+        )
 
     #     def __getattr__(self, name: str) -> Any:
     #         try:
@@ -62,7 +66,9 @@ class ApiError(BadResponse):
         return any(v.get("value") == value for v in data.get("errors", []))
 
     @classmethod
-    def raise_for_status(cls: Type[ApiError], response: Response, data: dict) -> None:
+    def raise_for_status(
+        cls: Type[ApiError], response: Response, data: dict
+    ) -> None:
         match response.status_code:
             case status if 300 <= status <= 308:
                 raise Redirect(response, data)

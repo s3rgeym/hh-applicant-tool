@@ -1,34 +1,37 @@
-# Используем базовый образ Alpine с Python 3.12
-FROM python:3.13-alpine
+FROM python:3.13-slim
 
-# Определяем аргументы для UID и GID
+# 1. Системные зависимости
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  gcc \
+  libc6-dev \
+  procps \
+  cron \
+  dos2unix \
+  tzdata \
+  && rm -rf /var/lib/apt/lists/*
+
+# 2. Установка инструмента
+RUN pip install --no-cache-dir 'hh-applicant-tool[playwright]'
+RUN playwright install chromium --with-deps
+
+# 3. Настройка пользователя
 ARG UID=1000
 ARG GID=1000
-
-# Устанавливаем необходимые зависимости, включая пакет shadow
-RUN apk add --no-cache gcc musl-dev linux-headers shadow dos2unix tzdata
-
-# Устанавливаем библиотеку hh-applicant-tool
-RUN pip install hh-applicant-tool
-
-# Создаем группу и пользователя с указанными UID и GID
 RUN groupadd -g $GID docker && \
-  useradd -u $UID -g docker -m -s /bin/sh docker
+  useradd -u $UID -g docker -m -s /bin/bash docker
 
-# Указываем рабочую директорию
 WORKDIR /app
 
-# Копируем файлы проекта в контейнер
+# 4. Копирование файлов и настройка прав
 COPY . /app
+RUN touch /var/log/cron.log && chown docker:docker /var/log/cron.log && \
+  chown -R docker:docker /app
 
-# Копируем crontab файл в контейнер
-COPY crontab /etc/crontabs/docker
+# 5. Делаем скрипты исполняемыми и чистим их от Windows-переносов
+RUN dos2unix /app/startup.sh /app/crontab && \
+  chmod +x /app/startup.sh && \
+  chmod 0644 /app/crontab && \
+  crontab -u docker /app/crontab
 
-# если crontab сохранен в windows из-за перевода каретки работать не будет
-RUN dos2unix /etc/crontabs/docker
-
-# Переключаемся на пользователя с указанными UID и GID
-#USER docker
-
-# Команда, которая будет выполнена при запуске контейнера
-CMD ["crond", "-f", "-d", "0"]
+# 6. Запуск: демон cron + вывод лога
+CMD cron && tail -f /var/log/cron.log
