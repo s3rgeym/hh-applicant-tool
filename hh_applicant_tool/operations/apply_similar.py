@@ -304,12 +304,20 @@ class Operation(BaseOperation):
 
         me: datatypes.User = self.tool.get_me()
         seen_employers = set()
+
         for resume in resumes:
             self._apply_resume(
                 resume=resume,
                 user=me,
                 seen_employers=seen_employers,
             )
+
+        # Синхронизация откликов
+        for neg in self.tool.get_negotiations():
+            try:
+                self.tool.storage.negotiations.save(neg)
+            except RepositoryError as e:
+                logger.warning(e)
 
         print("📝 Отклики на вакансии разосланы!")
 

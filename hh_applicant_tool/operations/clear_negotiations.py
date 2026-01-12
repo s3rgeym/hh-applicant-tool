@@ -24,17 +24,11 @@ class Namespace(BaseNamespace):
 
 
 class Operation(BaseOperation):
-    """Проверяет и синхронизирует отклики с локальной базой и опционально удаляет отказы."""
+    """Удаляет отказы либо старые отклики."""
 
-    __aliases__ = ["sync-negotiations"]
+    __aliases__ = ["clear-negotiations", "delete-negotiations"]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
-        parser.add_argument(
-            "--cleanup",
-            "--clean",
-            action=argparse.BooleanOptionalAction,
-            help="Удалить отклики с отказами",
-        )
         parser.add_argument(
             "-b",
             "--blacklist-discard",
@@ -58,9 +52,9 @@ class Operation(BaseOperation):
     def run(self, tool: HHApplicantTool) -> None:
         self.tool = tool
         self.args: Namespace = tool.args
-        self._sync()
+        self.clear()
 
-    def _sync(self) -> None:
+    def clear(self) -> None:
         blacklisted = set(self.tool.get_blacklisted())
         storage = self.tool.storage
         for negotiation in self.tool.get_negotiations():
@@ -74,8 +68,6 @@ class Operation(BaseOperation):
             except RepositoryError as e:
                 logger.exception(e)
 
-            if not self.args.cleanup:
-                continue
             if self.args.older_than:
                 updated_at = parse_api_datetime(negotiation["updated_at"])
                 # А хз какую временную зону сайт возвращает
@@ -123,4 +115,4 @@ class Operation(BaseOperation):
             except ApiError as err:
                 logger.error(err)
 
-        print("✅ Синхронизация завершена.")
+        print("✅ Удаление откликов завершено.")

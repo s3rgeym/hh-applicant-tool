@@ -117,9 +117,13 @@ class BaseRepository:
         return cur.fetchone()[0]
 
     @wrap_db_errors
-    def delete(self, o: BaseModel, /, commit: bool | None = None) -> None:
+    def delete(self, obj_or_pkey: Any, /, commit: bool | None = None) -> None:
         sql = f"DELETE FROM {self.table_name} WHERE {self.pkey} = ?"
-        pk_value = getattr(o, self.pkey)
+        pk_value = (
+            getattr(obj_or_pkey, self.pkey)
+            if isinstance(obj_or_pkey, BaseModel)
+            else obj_or_pkey
+        )
         self.conn.execute(sql, (pk_value,))
         self.maybe_commit(commit=commit)
 
