@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import io
 import logging
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -12,6 +14,14 @@ try:
     from playwright.async_api import async_playwright
 except ImportError:
     pass
+
+SIXEL_INSTALLED = False
+
+try:
+    from libsixel.encoder import SIXEL_OPTFLAG_WIDTH, Encoder
+    from PIL import Image
+except ImportError:
+    SIXEL_INSTALLED = True
 
 from ..main import BaseOperation
 
@@ -36,11 +46,13 @@ class Operation(BaseOperation):
     __aliases__: list = ["auth", "authen", "authenticate"]
 
     # Селекторы
-    SEL_LOGIN_INPUT = 'input[data-qa="login-input-username"]'
-    SEL_EXPAND_PASSWORD_BTN = 'button[data-qa="expand-login-by_password"]'
-    SEL_PASSWORD_INPUT = 'input[data-qa="login-input-password"]'
-    SEL_CODE_CONTAINER = 'div[data-qa="account-login-code-input"]'
-    SEL_PIN_CODE_INPUT = 'input[data-qa="magritte-pincode-input-field"]'
+    SELECT_LOGIN_INPUT = 'input[data-qa="login-input-username"]'
+    SELECT_EXPAND_PASSWORD = 'button[data-qa="expand-login-by_password"]'
+    SELECT_PASSWORD_INPUT = 'input[data-qa="login-input-password"]'
+    SELECT_CODE_CONTAINER = 'div[data-qa="account-login-code-input"]'
+    SELECT_PIN_CODE_INPUT = 'input[data-qa="magritte-pincode-input-field"]'
+    SELECT_CAPTCHA_IMAGE = 'img[data-qa="account-captcha-picture"]'
+    SELECT_CAPTCHA_INPUT = 'input[data-qa="account-captcha-input"]'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -179,22 +191,21 @@ class Operation(BaseOperation):
                 )
 
                 if self.is_automated:
-                    # Шаг 1: Логин
-                    logger.debug(f"Ожидание поля логина {self.SEL_LOGIN_INPUT}")
-                    await page.wait_for_selector(
-                        self.SEL_LOGIN_INPUT, timeout=self.selector_timeout
+                    logger.debug(
+                        f"Ожидание поля логина {self.SELECT_LOGIN_INPUT}"
                     )
-                    await page.fill(self.SEL_LOGIN_INPUT, username)
+                    await page.wait_for_selector(
+                        self.SELECT_LOGIN_INPUT, timeout=self.selector_timeout
+                    )
+                    await page.fill(self.SELECT_LOGIN_INPUT, username)
                     logger.debug("Логин введен")
 
-                    # Шаг 2: Выбор метода входа
                     if args.password:
                         await self._direct_login(page, args.password)
                     else:
                         await self._onetime_code_login(page)
 
-                # Шаг 3: Ожидание OAuth кода
-                logger.debug("Ожидание появления OAuth кода в трафике...")
+                logger.debug("Ожидание OAuth-кода...")
 
                 auth_code = await asyncio.wait_for(
                     code_future, timeout=[None, 30.0][self.is_automated]
@@ -237,28 +248,37 @@ class Operation(BaseOperation):
 
     async def _direct_login(self, page, password: str) -> None:
         logger.info("Вход по паролю...")
-        logger.debug(
-            f"Клик по кнопке развертывания пароля: {self.SEL_EXPAND_PASSWORD_BTN}"
-        )
-        await page.click(self.SEL_EXPAND_PASSWORD_BTN)
 
-        logger.debug(f"Ожидание поля пароля: {self.SEL_PASSWORD_INPUT}")
-        await page.wait_for_selector(
-            self.SEL_PASSWORD_INPUT, timeout=self.selector_timeout
+        logger.debug(
+            f"Клик по кнопке развертывания пароля: {self.SELECT_EXPAND_PASSWORD}"
         )
-        await page.fill(self.SEL_PASSWORD_INPUT, password)
-        await page.press(self.SEL_PASSWORD_INPUT, "Enter")
+        await page.click(self.SELECT_EXPAND_PASSWORD)
+
+        if SIXEL_INSTALLED:
+            await self._handle_captcha(page)
+
+        logger.debug(f"Ожидание поля пароля: {self.SELECT_PASSWORD_INPUT}")
+        await page.wait_for_selector(
+            self.SELECT_PASSWORD_INPUT, timeout=self.selector_timeout
+        )
+        await page.fill(self.SELECT_PASSWORD_INPUT, password)
+        await page.press(self.SELECT_PASSWORD_INPUT, "Enter")
         logger.debug("Форма с паролем отправлена")
 
     async def _onetime_code_login(self, page) -> None:
         logger.info("Вход по одноразовому коду...")
-        await page.press(self.SEL_LOGIN_INPUT, "Enter")
+
+        await page.press(self.SELECT_LOGIN_INPUT, "Enter")
+
+        if SIXEL_INSTALLED:
+            await self._handle_captcha(page)
 
         logger.debug(
-            f"Ожидание контейнера ввода кода: {self.SEL_CODE_CONTAINER}"
+            f"Ожидание контейнера ввода кода: {self.SELECT_CODE_CONTAINER}"
         )
+
         await page.wait_for_selector(
-            self.SEL_CODE_CONTAINER, timeout=self.selector_timeout
+            self.SELECT_CODE_CONTAINER, timeout=self.selector_timeout
         )
 
         print("📨 Код был отправлен. Проверьте почту или SMS.")
@@ -267,7 +287,52 @@ class Operation(BaseOperation):
         if not code:
             raise RuntimeError("Код подтверждения не может быть пустым")
 
-        logger.debug(f"Ввод кода в {self.SEL_PIN_CODE_INPUT}")
-        await page.fill(self.SEL_PIN_CODE_INPUT, code)
-        await page.press(self.SEL_PIN_CODE_INPUT, "Enter")
+        logger.debug(f"Ввод кода в {self.SELECT_PIN_CODE_INPUT}")
+        await page.fill(self.SELECT_PIN_CODE_INPUT, code)
+        await page.press(self.SELECT_PIN_CODE_INPUT, "Enter")
         logger.debug("Форма с кодом отправлена")
+
+    async def _handle_captcha(self, page):
+        try:
+            captcha_element = await page.wait_for_selector(
+                self.SELECT_CAPTCHA_IMAGE,
+                timeout=self.selector_timeout,
+                state="visible",
+            )
+        except Exception:
+            return
+
+        logger.info("Обнаружена капча!")
+
+        img_bytes = await captcha_element.screenshot()
+
+        self._print_captcha(img_bytes)
+
+        captcha_text = (await ainput("Введите текст с картинки: ")).strip()
+
+        await page.fill(self.SELECT_CAPTCHA_INPUT, captcha_text)
+        await page.press(self.SELECT_CAPTCHA_INPUT, "Enter")
+
+    def _print_captcha(self, data: bytes) -> None:
+        """Вывод изображения в терминал с использованием Pillow и libsixel"""
+
+        # Загружаем изображение из байтов Playwright
+        img = Image.open(io.BytesIO(data)).convert("RGB")
+
+        w, h = img.size
+
+        # 2. Подготавливаем энкодер
+        encoder = Encoder()
+        encoder.setopt(SIXEL_OPTFLAG_WIDTH, w)
+
+        pixel_data = img.tobytes()
+
+        encoder.encode_bytes(
+            pixel_data,
+            img.width,
+            img.height,
+            3,  # SIXEL_PIXELFORMAT_RGB888
+            0,  # truecolor
+        )
+        sys.stdout.flush()
+        print()
