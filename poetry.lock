@@ -378,17 +378,6 @@ files = [
 ]
 
 [[package]]
-name = "libsixel-python"
-version = "0.5.0"
-description = "libsixel binding for Python"
-optional = false
-python-versions = "*"
-groups = ["main"]
-files = [
-    {file = "libsixel-python-0.5.0.tar.gz", hash = "sha256:030666378be9c42f9843ab3f0715c7819f54e4e4fb81cbb845dee269ca3013f0"},
-]
-
-[[package]]
 name = "mccabe"
 version = "0.7.0"
 description = "McCabe checker, plugin for flake8"
@@ -435,9 +424,10 @@ files = [
 name = "pillow"
 version = "12.1.0"
 description = "Python Imaging Library (fork)"
-optional = false
+optional = true
 python-versions = ">=3.10"
 groups = ["main"]
+markers = "extra == \"pillow\""
 files = [
     {file = "pillow-12.1.0-cp310-cp310-macosx_10_10_x86_64.whl", hash = "sha256:fb125d860738a09d363a88daa0f59c4533529a90e564785e20fe875b200b6dbd"},
     {file = "pillow-12.1.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:cad302dc10fac357d3467a74a9561c90609768a6f73a1923b0fd851b6486f8b0"},
@@ -950,9 +940,10 @@ files = [
 ]
 
 [extras]
+pillow = ["pillow"]
 playwright = ["playwright"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "582a089823430c53a7cf4362176eef5faf8a4d65d18e5434cd7943757540b7b0"
+content-hash = "76f3b5254796b44caaef3b0b7b6e9ff9d0c8f966986f027455e10d792d5174dd"

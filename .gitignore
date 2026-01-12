@@ -92,3 +92,4 @@ docker/
 /*.csv
 /*.txt
 /*.dump
+/*.png

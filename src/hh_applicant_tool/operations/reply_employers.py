@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 from ..ai.base import AIError
 from ..api import ApiError, datatypes
 from ..main import BaseNamespace, BaseOperation
-from ..storage.repositories.errors import RepositoryError
 from ..utils.date import parse_api_datetime
 from ..utils.string import rand_text
 
@@ -130,7 +129,11 @@ class Operation(BaseOperation):
             if self.resume_id
             else resumes
         )
-        resumes = list(filter(lambda resume: resume["status"]["id"] == "published", resumes))
+        resumes = list(
+            filter(
+                lambda resume: resume["status"]["id"] == "published", resumes
+            )
+        )
         self._reply_chats(user=me, resumes=resumes, blacklist=blacklist)
 
     def _reply_chats(
@@ -140,7 +143,7 @@ class Operation(BaseOperation):
         blacklist: set[str],
     ) -> None:
         resume_map = {r["id"]: r for r in resumes}
-        
+
         base_placeholders = {
             "first_name": user.get("first_name") or "",
             "last_name": user.get("last_name") or "",
@@ -150,12 +153,12 @@ class Operation(BaseOperation):
 
         for negotiation in self.tool.get_negotiations():
             try:
-                try:
-                    self.tool.storage.negotiations.save(negotiation)
-                except RepositoryError as e:
-                    logger.exception(e)
+                # try:
+                #     self.tool.storage.negotiations.save(negotiation)
+                # except RepositoryError as e:
+                #     logger.exception(e)
 
-                if not(resume := resume_map.get(negotiation["resume"]["id"])):
+                if not (resume := resume_map.get(negotiation["resume"]["id"])):
                     continue
 
                 updated_at = parse_api_datetime(negotiation["updated_at"])
@@ -223,7 +226,8 @@ class Operation(BaseOperation):
                         )
                         message_date = parse_api_datetime(
                             message.get("created_at")
-                        ).isoformat()
+                        ).strftime("%d.%m.%Y %H:%M:%S")
+
                         message_history.append(
                             f"[ {message_date} ] {author}: {message['text']}"
                         )
@@ -266,12 +270,8 @@ class Operation(BaseOperation):
                             )
                             continue
                     else:
-                        print(
-                            "\n🏢",
-                            placeholders["employer_name"],
-                            "| 💼",
-                            placeholders["vacancy_name"],
-                        )
+                        print("🏢", placeholders["employer_name"])
+                        print("💼", placeholders["vacancy_name"])
                         if salary:
                             print(
                                 "💵 от",
@@ -291,11 +291,11 @@ class Operation(BaseOperation):
                             print(msg)
 
                         try:
-                            print("-" * 10)
+                            print("-" * 40)
+                            print("Активное резюме:", resume.get("title") or "")
                             print(
-                                "Команды: /ban, /cancel <опционально сообщение для отмены>"
+                                "/ban, /cancel необязательное сообщение для отмены"
                             )
-                            print("Активное резюме:", resume.get("name") or "")
                             send_message = input("Ваше сообщение: ").strip()
                         except EOFError:
                             continue
