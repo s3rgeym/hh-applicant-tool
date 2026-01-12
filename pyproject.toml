@@ -8,11 +8,11 @@ repository = "https://github.com/s3rgeym/hh-applicant-tool"
 authors = ["Senior YAML Developer <yamldeveloper@proton.me>"]
 readme = "README.md"
 packages = [
-  { include = "hh_applicant_tool" },
+  { include = "hh_applicant_tool", from = "src" },
 ]
 include = [
   # Содержит схему и миграции
-  { path = "hh_applicant_tool/**/*.sql", format = ["sdist", "wheel"] },
+  { path = "src/hh_applicant_tool/**/*.sql", format = ["sdist", "wheel"] },
 ]
 
 [tool.poetry.dependencies]
