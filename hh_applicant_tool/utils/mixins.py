@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import platform
 import socket
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import cache
 from importlib.metadata import version
 from logging import getLogger
@@ -42,7 +42,8 @@ class ErrorReporter:
                     fp, last_report, maxlen=10000
                 )
 
-        # Эти данные нужны для воспроизведения ошибок. Среди них ваших нет
+        # Эти данные нужны для воспроизведения ошибок. Среди них ваших
+        # персональных данных нет
         vacancy_contacts = [
             c.to_dict()
             for c in self.storage.vacancy_contacts.find(
@@ -111,7 +112,7 @@ class ErrorReporter:
             vacancies=vacancies,
             package_version=get_package_version(),
             system_info=system_info,
-            report_created=datetime.now(),
+            report_created=datetime.now(timezone.utc),
         )
 
     def __send_report(self: HHApplicantTool, data: bytes) -> int:
