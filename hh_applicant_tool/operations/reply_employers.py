@@ -130,18 +130,18 @@ class Operation(BaseOperation):
             if self.resume_id
             else resumes
         )
-        for resume in resumes:
-            if resume["status"]["id"] == "published":
-                self._reply_chats(user=me, resume=resume, blacklist=blacklist)
+        resumes = list(filter(lambda resume: resume["status"]["id"] == "published", resumes))
+        self._reply_chats(user=me, resumes=resumes, blacklist=blacklist)
 
     def _reply_chats(
         self,
-        resume: datatypes.Resume,
         user: datatypes.User,
+        resumes: list[datatypes.Resume],
         blacklist: set[str],
     ) -> None:
+        resume_map = {r["id"]: r for r in resumes}
+        
         base_placeholders = {
-            "resume_title": resume.get("title") or "",
             "first_name": user.get("first_name") or "",
             "last_name": user.get("last_name") or "",
             "email": user.get("email") or "",
@@ -155,7 +155,7 @@ class Operation(BaseOperation):
                 except RepositoryError as e:
                     logger.exception(e)
 
-                if resume["id"] != negotiation["resume"]["id"]:
+                if not(resume := resume_map.get(negotiation["resume"]["id"])):
                     continue
 
                 updated_at = parse_api_datetime(negotiation["updated_at"])
@@ -190,6 +190,7 @@ class Operation(BaseOperation):
                 placeholders = {
                     "vacancy_name": vacancy.get("name", ""),
                     "employer_name": employer.get("name", ""),
+                    "resume_title": resume.get("title") or "",
                     **base_placeholders,
                 }
 
