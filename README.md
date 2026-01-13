@@ -162,8 +162,8 @@ docker compose logs -f
 В выводе должно быть что-то типа:
 
 ```sh
-hh_applicant_tool  | [Mon Jan 12 23:23:49 UTC 2026] Running startup tasks...
-hh_applicant_tool  | [E] token not expired
+hh_applicant_tool  | [Mon Jan 12 23:34:45 UTC 2026] Running startup tasks...
+hh_applicant_tool  | ℹ️ Токен не истек, обновление не требуется.
 hh_applicant_tool  | ✅ Обновлено Программист
 ```
 
@@ -178,6 +178,45 @@ docker-compose down
 ```
 
 > docker-compose нужно запускать строго из скачанного каталога!
+
+Чтобы рассылать отклики с нескольких аккаунтов, нужно переписать `docker-compose.yml`:
+
+```yaml
+services:
+  hh_applicant_tool:
+  # ...
+
+  # Просто копипастим, меняя container_name и значение HH_PROFILE_ID
+  hh_second:
+    extends: hh_applicant_tool
+    container_name: hh_second
+    environment:
+      - HH_PROFILE_ID=second
+
+  hh_third:
+    extends: hh_applicant_tool
+    container_name: hh_third
+    environment:
+      - HH_PROFILE_ID=third
+
+  hh_fourth:
+    extends: hh_applicant_tool
+    container_name: hh_fourth
+    environment:
+      - HH_PROFILE_ID=fourth
+```
+
+Здесь `HH_PROFILE_ID` — идентификатор профиля (сами придумываете). Далее нужно авторизоваться в каждом профиле:
+
+```sh
+$ docker-compose exec -it hh_applicant_tool \
+  hh-applicant-tool -c /app/config --profile-id second auth -k
+
+$ docker-compose exec -it hh_applicant_tool \
+  hh-applicant-tool -c /app/config --profile-id third auth -k
+
+# И так далее
+```
 
 ---
 
