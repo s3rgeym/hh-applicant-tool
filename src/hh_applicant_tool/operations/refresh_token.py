@@ -30,4 +30,5 @@ class Operation(BaseOperation):
             tool.api_client.refresh_access_token()
             print("✅ Токен успешно обновлен!")
         else:
-            print("ℹ️ Токен еще не истек, обновление не требуется.")
+            logger.debug("Токен валиден, игнорируем обновление.")
+            print("ℹ️ Токен не истек, обновление не требуется.")

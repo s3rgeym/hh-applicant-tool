@@ -29,7 +29,6 @@ DEFAULT_CONFIG_DIR = utils.get_config_path() / (__package__ or "").replace(
 DEFAULT_CONFIG_FILENAME = "config.json"
 DEFAULT_LOG_FILENAME = "log.txt"
 DEFAULT_DATABASE_FILENAME = "data"
-DEFAULT_PROFILE_ID = "."
 
 logger = logging.getLogger(__package__)
 
@@ -93,7 +92,7 @@ class HHApplicantTool(MegaTool):
         parser.add_argument(
             "--profile-id",
             "--profile",
-            help="Используемый профиль — подкаталог в --config-dir",
+            help="Используемый профиль — подкаталог в --config-dir. Так же можно передать через переменную окружения HH_PROFILE_ID.",
         )
         parser.add_argument(
             "-d",
@@ -166,7 +165,7 @@ class HHApplicantTool(MegaTool):
         session.verify = False
 
         if proxies := self._get_proxies():
-            logger.info("Use proxies: %r", proxies)
+            logger.info("Use proxies for requests: %r", proxies)
             session.proxies = proxies
 
         return session
@@ -258,6 +257,8 @@ class HHApplicantTool(MegaTool):
             if page + 1 >= r.get("pages", 0):
                 break
 
+    # TODO: добавить еще методов или те удалить?
+
     def save_token(self) -> bool:
         if self.api_client.access_token != self.config.get("token", {}).get(
             "access_token"
@@ -274,15 +275,14 @@ class HHApplicantTool(MegaTool):
 
         setup_logger(logger, verbosity_level, self.log_file)
 
+        logger.debug("Путь до профиля: %s", self.config_path)
+
         utils.setup_terminal()
 
         try:
             if self.args.run:
                 try:
-                    res = self.args.run(self)
-                    if self.save_token():
-                        logger.info("Токен был обновлен.")
-                    return res
+                    return self.args.run(self)
                 except KeyboardInterrupt:
                     logger.warning("Выполнение прервано пользователем!")
                     return 1
@@ -299,6 +299,10 @@ class HHApplicantTool(MegaTool):
                 except Exception as e:
                     logger.exception(e)
                     return 1
+                finally:
+                    # Токен мог автоматически обновиться
+                    if self.save_token():
+                        logger.info("Токен был обновлен.")
             self._parser.print_help(file=sys.stderr)
             return 2
         finally:

@@ -13,19 +13,20 @@ from urllib.parse import urlencode, urljoin
 import requests
 from requests import Session
 
+from hh_applicant_tool.api.user_agent import generate_android_useragent
+
 from . import errors
 from .client_keys import (
     ANDROID_CLIENT_ID,
     ANDROID_CLIENT_SECRET,
 )
 from .datatypes import AccessToken
-from .user_agent import generate_android_useragent
 
 __all__ = ("ApiClient", "OAuthClient")
 
 HH_API_URL = "https://api.hh.ru/"
 HH_OAUTH_URL = "https://hh.ru/oauth/"
-DEFAULT_DELAY = 0.334
+DEFAULT_DELAY = 0.345
 
 AllowedMethods = Literal["GET", "POST", "PUT", "DELETE"]
 T = TypeVar("T")
@@ -41,18 +42,21 @@ class BaseClient:
     _: dataclasses.KW_ONLY
     user_agent: str | None = None
     session: Session | None = None
-    delay: float = DEFAULT_DELAY
+    delay: float | None = None
     _previous_request_time: float = 0.0
 
     def __post_init__(self) -> None:
         assert self.base_url.endswith("/"), "base_url must ends with /"
-        self.lock = Lock()
+        self.delay = self.delay or DEFAULT_DELAY
+        self.user_agent = self.user_agent or generate_android_useragent()
+
         # logger.debug(f"user agent: {self.user_agent}")
+
         if not self.session:
             logger.debug("create new session")
             self.session = requests.session()
-        # if self.proxies:
-        #     logger.debug(f"client proxies: {self.proxies}")
+
+        self.lock = Lock()
 
     @property
     def proxies(self):
@@ -60,7 +64,7 @@ class BaseClient:
 
     def _default_headers(self) -> dict[str, str]:
         return {
-            "user-agent": self.user_agent or generate_android_useragent(),
+            "user-agent": self.user_agent,
             "x-hh-app-active": "true",
         }
 
