@@ -9,16 +9,16 @@ SHELL=/bin/bash
 # Символ процента в кронтабе нужно экранировать
 # sleep с рандомной задержкой от 1 до 5 минут нужен во-первых чтобы токен обновиться успел, а во
 # вторых, чтобы антиспам не сработал
-0 */4 * * * /bin/bash -c 'sleep $((60 + RANDOM \% 241))' && /usr/local/bin/python -m hh_applicant_tool -c /app/config update-resumes >> /var/log/cron.log 2>&1
+0 */4 * * * /bin/bash -c 'sleep $((60 + RANDOM \% 241))' && /usr/local/bin/python -m hh_applicant_tool update-resumes >> /var/log/cron.log 2>&1
 
 # Рассылаем отклики
-0 8-21 * * * /bin/bash -c 'sleep $((60 + RANDOM \% 241))' && /usr/local/bin/python -m hh_applicant_tool -c /app/config apply-similar >> /var/log/cron.log 2>&1
+0 8-21 * * * /bin/bash -c 'sleep $((60 + RANDOM \% 241))' && /usr/local/bin/python -m hh_applicant_tool apply-similar >> /var/log/cron.log 2>&1
 
 # Тест: каждые 5 минут (задержка до 1 минуты, чтобы не накладывались)
-#*/5 * * * * /bin/bash -c 'sleep $((1 + RANDOM \% 59))' && /usr/local/bin/python -m hh_applicant_tool -c /app/config apply-similar >> /var/log/cron.log 2>&1
+#*/5 * * * * /bin/bash -c 'sleep $((1 + RANDOM \% 59))' && /usr/local/bin/python -m hh_applicant_tool apply-similar >> /var/log/cron.log 2>&1
 
 # Пытаемся обновить токен каждую минуту. В этом нет необходимости, можно закомментировать, так как
 # токен обновляется автоматически при любом запросе
-*/1 * * * * /usr/local/bin/python -m hh_applicant_tool -c /app/config refresh-token
+*/1 * * * * /usr/local/bin/python -m hh_applicant_tool refresh-token
 
 #*/1 * * * * echo "Cron is alive at $(date)" >> /var/log/cron.log 2>&1

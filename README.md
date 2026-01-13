@@ -114,12 +114,17 @@ git clone https://github.com/s3rgeym/hh-applicant-tool
 cd hh-applicant-tool
 ```
 
+> Команды с docker-compose нужно запускать строго, находясь в данном каталоге!
+
 Теперь авторизуемся:
 
 ```sh
-docker-compose run --rm -it -e TERM=$TERM hh_applicant_tool \
-  hh-applicant-tool -vv -c /app/config auth -k
+docker-compose run -u docker -it hh_applicant_tool \
+  hh-applicant-tool -vv auth -k
 ```
+
+> `-u docker` запускает команду от имени пользователя docker, если выполнить
+> ее от root, то скрипт не сможет обновить конфиг в дальнейшем
 
 Пример вывода:
 
@@ -135,8 +140,8 @@ docker-compose run --rm -it -e TERM=$TERM hh_applicant_tool \
 Авторизация с заданными логином и паролем выглядит так:
 
 ```sh
-docker-compose run --rm -it -e TERM=$TERM hh_applicant_tool \
-  hh-applicant-tool -vv -c /app/config auth -k '<login>' -p '<password>'
+docker-compose run -u docker -it hh_applicant_tool \
+  hh-applicant-tool -vv auth -k '<login>' -p '<password>'
 ```
 
 Подробно про авторизацию можно почитать [здесь](#авторизация).
@@ -180,14 +185,15 @@ hh_applicant_tool  | [Tue Jan 13 12:56:45 MSK 2026] Startup tasks finished.
 docker-compose down
 ```
 
-> docker-compose нужно запускать строго из скачанного каталога!
-
 Чтобы рассылать отклики с нескольких аккаунтов, нужно переписать `docker-compose.yml`:
 
 ```yaml
 services:
+  # Не меняем ничего тут
   hh_applicant_tool:
   # ...
+
+  # Добавляем новые строки
 
   # Просто копипастим, меняя container_name и значение HH_PROFILE_ID
   hh_second:
@@ -212,16 +218,22 @@ services:
 Здесь `HH_PROFILE_ID` — идентификатор профиля (сами придумываете). Далее нужно авторизоваться в каждом профиле:
 
 ```sh
-$ docker-compose exec -it hh_applicant_tool \
-  hh-applicant-tool -c /app/config --profile-id second auth -k
+$ docker-compose exec -u docker -it hh_applicant_tool \
+  hh-applicant-tool --profile-id second auth -k
 
-$ docker-compose exec -it hh_applicant_tool \
-  hh-applicant-tool -c /app/config --profile-id third auth -k
+$ docker-compose exec -u docker -it hh_applicant_tool \
+  hh-applicant-tool --profile-id third auth -k
 
 # И так далее
 ```
 
 Ну и выполнить `docker-compose up -d` чтобы запустить новые сервисы.
+
+[Команды](#описание-команд) можно потестировать в запущенном контейнере:
+
+```sh
+docker compose exec -u docker -it hh_applicant_tool bash
+```
 
 ---
 
@@ -466,7 +478,6 @@ $ hh-applicant-tool settings
 | Тип      | Ключ                    | Значение                |
 +----------+-------------------------+-------------------------+
 | str      | user.email              | dmitry.kozlov@yandex.ru |
-| int      | auth.last_login         | 1768462521              |
 +----------+-------------------------+-------------------------+
 
 # Получить значение по ключу
