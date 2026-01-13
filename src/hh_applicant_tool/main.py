@@ -17,7 +17,7 @@ from typing import Any, Iterable
 import requests
 import urllib3
 
-from . import utils
+from . import api, utils
 from .api import ApiClient, datatypes
 from .storage import StorageFacade
 from .utils.log import setup_logger
@@ -288,7 +288,15 @@ class HHApplicantTool(MegaTool):
                     return self.args.run(self)
                 except KeyboardInterrupt:
                     logger.warning("Выполнение прервано пользователем!")
-                    return 1
+                except api.errors.CaptchaRequired as ex:
+                    logger.error(f"Требуется ввод капчи: {ex.captcha_url}")
+                except api.errors.InternalServerError:
+                    logger.error(
+                        "Сервер HH.RU не смог обработать запрос из-за высокой"
+                        " нагрузки или по иной причине"
+                    )
+                except api.errors.Forbidden:
+                    logger.error("Требуется авторизация")
                 except sqlite3.Error as ex:
                     logger.exception(ex)
 
@@ -298,14 +306,13 @@ class HHApplicantTool(MegaTool):
                         f"Возможно база данных повреждена, попробуйте выполнить команду:\n\n"  # noqa: E501
                         f"  {script_name} migrate-db"
                     )
-                    return 1
                 except Exception as e:
                     logger.exception(e)
-                    return 1
                 finally:
                     # Токен мог автоматически обновиться
                     if self.save_token():
                         logger.info("Токен был сохранен после обновления.")
+                return 1
             self._parser.print_help(file=sys.stderr)
             return 2
         finally:
