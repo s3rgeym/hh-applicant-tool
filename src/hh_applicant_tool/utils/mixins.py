@@ -39,7 +39,7 @@ class ErrorReporter:
         if self.log_file.exists():
             with self.log_file.open(encoding="utf-8", errors="ignore") as fp:
                 error_logs = collect_traceback_logs(
-                    fp, last_report, maxlen=10000
+                    fp, last_report, 10000
                 )
 
         # Эти данные нужны для воспроизведения ошибок. Среди них ваших
