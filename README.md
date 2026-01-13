@@ -99,7 +99,7 @@ $$('[data-qa="vacancy-serp__vacancy_response"]').forEach((el) => el.click());
 
 ## Запуск через Docker
 
-Это самый простой способ для тех, кому лень разбираться с работой утилиты.
+Это самый простой способ запуска и использования утилиты, требующий скопипастить 5 команд.
 
 Для начала нужно установить `docker` и `docker-compose`:
 
@@ -107,15 +107,10 @@ $$('[data-qa="vacancy-serp__vacancy_response"]').forEach((el) => el.click());
 sudo apt install docker.io docker-compose-v2
 ```
 
-Выкачиваем репозиторий:
+Выкачиваем репозиторий и переходим в каталог:
 
 ```sh
 git clone https://github.com/s3rgeym/hh-applicant-tool
-```
-
-Переходим в каталог:
-
-```sh
 cd hh-applicant-tool
 ```
 
@@ -162,6 +157,8 @@ hh_applicant_tool  | [E] token not expired
 hh_applicant_tool  | ✅ Обновлено Программист
 ```
 
+Чтобы прекратить просмотр логов, нажмите `Ctrl-C`.
+
 Информацию об ошибках можно посмотреть в файле `config/log.txt`, а контакты работодателей — в `config/data` с помощью `sqlite3`.
 
 Для остановки рассылки откликов... выполните:
@@ -169,6 +166,8 @@ hh_applicant_tool  | ✅ Обновлено Программист
 ```sh
 docker-compose down
 ```
+
+> docker-compose нужно запускать строго из каталога с утилитой!
 
 ---
 
