@@ -6,6 +6,9 @@ services:
       dockerfile: Dockerfile
     volumes:
       - .:/app
+      # Пробрасываем таймзону хоста
+      - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
+    # Смени таймзону на другую
     # environment:
     #   - TZ=Europe/Moscow

@@ -1,11 +1,21 @@
-# shellcheck disable=SC2148,SC2129,SC2035,SC2016
-PATH=/usr/local/bin:/usr/bin:/bin
+# shellcheck disable=all
+PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 SHELL=/bin/bash
 
-# При старте запускаем наш скрипт
-@reboot /bin/bash /app/startup.sh >>/var/log/cron.log 2>&1
+# При старте системы/контейнера
+@reboot /bin/bash /app/startup.sh >> /var/log/cron.log 2>&1
 
-# Регулярные задачи с рандомной задержкой от 1 до 15 минут
-0 */4 * * * /bin/bash -c 'sleep $((60 + RANDOM % 841))' && python3 -m hh_applicant_tool -c /app/config update-resumes >>/var/log/cron.log 2>&1
-0 13,21 * * * /bin/bash -c 'sleep $((60 + RANDOM % 841))' && python3 -m hh_applicant_tool -c /app/config apply-similar >>/var/log/cron.log 2>&1
-0 19 * * * /bin/bash -c 'sleep $((60 + RANDOM % 841))' && python3 -m hh_applicant_tool -c /app/config refresh-token >>/var/log/cron.log 2>&1
+# Символ процента в кронтабе нужно экранировать
+# Подъем резюме (раз в 4 часа)
+0 */4 * * * /bin/bash -c 'sleep $((60 + RANDOM \% 841))' && /usr/local/bin/python -m hh_applicant_tool -c /app/config update-resumes >> /var/log/cron.log 2>&1
+
+# Рассылаем отклики
+0 8-21 * * * /bin/bash -c 'sleep $((60 + RANDOM \% 841))' && /usr/local/bin/python -m hh_applicant_tool -c /app/config apply-similar >> /var/log/cron.log 2>&1
+
+# Тест: каждые 5 минут (задержка до 1 минуты, чтобы не накладывались)
+#*/5 * * * * /bin/bash -c 'sleep $((1 + RANDOM \% 59))' && /usr/local/bin/python -m hh_applicant_tool -c /app/config apply-similar >> /var/log/cron.log 2>&1
+
+# Пытаемся каждые 5 минут обновить токен
+*/5 * * * * /bin/bash -c 'sleep $((1 + RANDOM \% 59))' && /usr/local/bin/python -m hh_applicant_tool -c /app/config refresh-token >> /var/log/cron.log 2>&1
+
+#*/1 * * * * echo "Cron is alive at $(date)" >> /var/log/cron.log 2>&1
