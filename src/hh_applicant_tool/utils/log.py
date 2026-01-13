@@ -121,9 +121,9 @@ TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
 def collect_traceback_logs(
     fp: TextIO,
     after_dt: datetime,
-    maxlen: int = 1000,
+    maxlines: int = 1000,
 ) -> str:
-    error_lines = deque(maxlen=maxlen)
+    error_lines = deque(maxlen=maxlines)
     prev_line = ""
     log_dt = None
     collecting_traceback = False
