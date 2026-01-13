@@ -132,6 +132,16 @@ docker-compose run --rm -it -e TERM=$TERM hh-applicant-tool \
 
 Капча отобразится только в терминале с поддержкой протокола **kitty**, например, в **Kitty** или **Konsole**.
 
+Авторизация с заданными логином и паролем выглядит так:
+
+```sh
+docker-compose run --rm -it -e TERM=$TERM hh-applicant-tool \
+  hh-applicant-tool -vv -c /app/config auth -k '<login>' -p '<password>'
+```
+
+Подробно про авторизацию можно почитать [здесь](#авторизация).
+
+
 В случае успешной авторизации можно запускать рассылку откликов по крону:
 
 ```sh

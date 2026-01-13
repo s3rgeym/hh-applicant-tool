@@ -1,15 +1,8 @@
 {
-  "python.formatting.provider": "black",
-  "python.formatting.blackArgs": [
-    "--line-length",
-    "79"
-  ],
   "editor.wordWrap": "on",
-  "rewrap.wrappingColumn": 72,
-  "cSpell.words": [
-    "blackbox",
-    "hhandroid",
-    "pincode"
-  ],
   "python.analysis.autoImportCompletions": true,
+  "[shellscript]": {
+    "editor.defaultFormatter": null,
+    "editor.formatOnSave": false
+  }
 }
