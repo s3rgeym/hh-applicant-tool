@@ -18,7 +18,7 @@ SHELL=/bin/bash
 #*/5 * * * * /bin/bash -c 'sleep $((1 + RANDOM \% 59))' && /usr/local/bin/python -m hh_applicant_tool -c /app/config apply-similar >> /var/log/cron.log 2>&1
 
 # Пытаемся обновить токен каждую минуту. В этом нет необходимости, можно закомментировать, так как
-# токен обновляется автоматически
+# токен обновляется автоматически при любом запросе
 */1 * * * * /usr/local/bin/python -m hh_applicant_tool -c /app/config refresh-token
 
 #*/1 * * * * echo "Cron is alive at $(date)" >> /var/log/cron.log 2>&1

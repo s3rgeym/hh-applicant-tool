@@ -162,9 +162,12 @@ docker compose logs -f
 В выводе должно быть что-то типа:
 
 ```sh
-hh_applicant_tool  | [Mon Jan 12 23:34:45 UTC 2026] Running startup tasks...
-hh_applicant_tool  | ℹ️ Токен не истек, обновление не требуется.
+hh_applicant_tool  | [Tue Jan 13 12:45:56 MSK 2026] Running startup tasks...
+hh_applicant_tool  | ℹ Токен не истек, обновление не требуется.
 hh_applicant_tool  | ✅ Обновлено Программист
+...
+hh_applicant_tool  | 📝 Отклики на вакансии разосланы!
+hh_applicant_tool  | [Tue Jan 13 12:56:45 MSK 2026] Startup tasks finished.
 ```
 
 Чтобы прекратить просмотр логов, нажмите `Ctrl-C`.
@@ -217,6 +220,8 @@ $ docker-compose exec -it hh_applicant_tool \
 
 # И так далее
 ```
+
+Ну и выполнить `docker-compose up -d` чтобы запустить новые сервисы.
 
 ---
 
@@ -698,7 +703,8 @@ zcnbvm@proton.me']).run()
 
 ## Дополнительные настройки
 
-Если вы обычный пользователь, то ничего лучше не трогайте.
+<details>
+<summary>Если вы обычный пользователь, то ничего лучше не трогайте.</summary>
 
 Отключение проверки версии с выводом предупреждения:
 
@@ -711,6 +717,7 @@ $ hh-applicant-tool settings disable_version_check true
 ```sh
 $ hh-applicant-tool settings send_error_reports false
 ```
+</details>
 
 ---
 
