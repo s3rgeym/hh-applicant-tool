@@ -10,6 +10,10 @@ services:
       # Пробрасываем таймзону хоста
       - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
-    # Смени таймзону на другую
-    # environment:
-    #   - TZ=Europe/Moscow
+    environment:
+      # Это не трогаем
+      - CONFIG_DIR=/app/config
+      # Смените или закомментируйте при проблемах
+      - TERM=${TERM}
+      # Если время на сервере отличается
+      # - TZ=Europe/Moscow

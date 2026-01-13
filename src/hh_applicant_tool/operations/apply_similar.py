@@ -487,9 +487,9 @@ class Operation(BaseOperation):
         params = {
             "page": page,
             "per_page": self.per_page,
-            "order_by": self.order_by,
         }
-
+        if self.order_by:
+            params |= {"order_by": self.order_by}
         if self.search:
             params["text"] = self.search
         if self.schedule:

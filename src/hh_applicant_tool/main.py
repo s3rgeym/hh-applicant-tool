@@ -87,7 +87,7 @@ class HHApplicantTool(MegaTool):
             "--config",
             help="Путь до директории с конфигом",
             type=Path,
-            default=DEFAULT_CONFIG_DIR,
+            default=None,
         )
         parser.add_argument(
             "--profile-id",
@@ -173,7 +173,10 @@ class HHApplicantTool(MegaTool):
     @property
     def config_path(self) -> Path:
         return (
-            self.args.config_dir
+            (
+                self.args.config_dir
+                or Path(getenv("CONFIG_DIR", DEFAULT_CONFIG_DIR))
+            )
             / (self.args.profile_id or getenv("HH_PROFILE_ID", "."))
         ).resolve()
 
