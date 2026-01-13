@@ -13,10 +13,16 @@ logger: logging.Logger = logging.getLogger(__package__)
 
 def init_db(conn: sqlite3.Connection) -> None:
     """Создает схему БД"""
+    changes_before = conn.total_changes
+
     conn.executescript(
         (QUERIES_PATH / "schema.sql").read_text(encoding="utf-8")
     )
-    logger.debug("Database initialized")
+
+    if conn.total_changes > changes_before:
+        logger.info("База данных успешно инициализирована!")
+    else:
+        logger.debug("База данных не изменилась.")
 
 
 def list_migrations() -> list[str]:
