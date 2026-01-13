@@ -18,25 +18,24 @@ RUN groupadd -g $GID docker && \
 
 WORKDIR /app
 
-# Копируем файлы описания проекта
-COPY pyproject.toml poetry.lock* README.md /app/
-
-# Копируем исходники и скрипты
+# Копируем файлы пакета
 COPY src /app/src
+COPY pyproject.toml poetry.lock* README.md /app/
+# И ставим его
+RUN pip install --no-cache-dir -e '.[playwright]' && \
+  playwright install chromium --with-deps
+
+# Копируем остальное (эти файлы мешают кешированию последующих слоев)
 COPY config /app/config
 COPY crontab /app/crontab
 COPY startup.sh /app/startup.sh
 
-# Установка проекта
-RUN pip install --no-cache-dir -e '.[playwright]' && \
-  playwright install chromium --with-deps
-
-# Базовая настройка прав (для образа)
+# Настройка крона
 RUN touch /var/log/cron.log && chown docker:docker /var/log/cron.log && \
   dos2unix /app/startup.sh /app/crontab && \
   chmod +x /app/startup.sh && \
   chmod 0644 /app/crontab && \
   crontab -u docker /app/crontab
 
-# ЗАПУСК: Исправляем права на примонтированный volume и стартуем
+# Запускаем крон и читаем лог
 CMD chown -R docker:docker /app/config && cron && tail -f /var/log/cron.log
