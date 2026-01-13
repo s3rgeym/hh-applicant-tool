@@ -176,10 +176,22 @@ hh_applicant_tool  | [Tue Jan 13 12:56:45 MSK 2026] Startup tasks finished.
 
 Информацию об ошибках можно посмотреть в файле `config/log.txt`, а контакты работодателей — в `config/data` с помощью `sqlite3`.
 
-Для остановки рассылки откликов выполните:
+Запущенные сервисы докер стартуют автоматически после перезагрузки. Остановить их можно выполнив:
 
 ```sh
 docker-compose down
+```
+
+Чтобы обновить утилиту в большинству случаев достаточно в каталоге выполнить:
+
+```sh
+git pull
+```
+
+В редких случаях нужно пересобрать все:
+
+```sh
+docker compose up -d --build --force-recreate
 ```
 
 Чтобы рассылать отклики с нескольких аккаунтов, нужно переписать `docker-compose.yml`:
@@ -188,11 +200,11 @@ docker-compose down
 services:
   # Не меняем ничего тут
   hh_applicant_tool:
-  # ...
+    # ...
 
   # Добавляем новые строки
 
-  # Просто копипастим, меняя container_name и значение HH_PROFILE_ID
+  # Просто копипастим, меняя имя сервиса, container_name и значение HH_PROFILE_ID
   hh_second:
     extends: hh_applicant_tool
     container_name: hh_second
@@ -215,10 +227,12 @@ services:
 Здесь `HH_PROFILE_ID` — идентификатор профиля (сами придумываете). Далее нужно авторизоваться в каждом профиле:
 
 ```sh
-$ docker-compose exec -u docker -it hh_applicant_tool \
+# Авторизуемся со второго профиля
+docker-compose exec -u docker -it hh_applicant_tool \
   hh-applicant-tool --profile-id second auth -k
 
-$ docker-compose exec -u docker -it hh_applicant_tool \
+# Авторизуемся с третьего профиля
+docker-compose exec -u docker -it hh_applicant_tool \
   hh-applicant-tool --profile-id third auth -k
 
 # И так далее
