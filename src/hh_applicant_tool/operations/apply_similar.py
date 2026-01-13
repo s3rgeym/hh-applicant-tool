@@ -412,7 +412,7 @@ class Operation(BaseOperation):
                             resume["alternate_url"],
                         )
                         print(
-                            "⛔  Пришел отказ от",
+                            "⛔ Пришел отказ от",
                             vacancy["alternate_url"],
                             "на резюме",
                             resume["alternate_url"],

@@ -53,6 +53,6 @@ class Operation(BaseOperation):
         print(
             f"🆔 {result['id']} {full_name or 'Анонимный аккаунт'} "
             f"[ 📄 {counters['resumes_count']} "
-            f"| 👁️  {fmt_plus(counters['new_resume_views'])} "
-            f"| ✉️  {fmt_plus(counters['unread_negotiations'])} ]"
+            f"| 👁️ {fmt_plus(counters['new_resume_views'])} "
+            f"| ✉️ {fmt_plus(counters['unread_negotiations'])} ]"
         )

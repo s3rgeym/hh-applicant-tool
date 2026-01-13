@@ -68,7 +68,7 @@ class Operation(BaseOperation):
                         writer.writerows(cursor.fetchall())
 
                         if tool.args.output:
-                            print(f"✅ Exported to {tool.args.output.name}")
+                            print(f"✅  Exported to {tool.args.output.name}")
                         return
 
                     rows = cursor.fetchmany(MAX_RESULTS + 1)
@@ -93,7 +93,7 @@ class Operation(BaseOperation):
                         print(f"Rows affected: {cursor.rowcount}")
 
             except sqlite3.Error as ex:
-                print(f"❌ SQL Error: {ex}")
+                print(f"❌  SQL Error: {ex}")
                 return 1
 
         if initial_sql := tool.args.sql:
