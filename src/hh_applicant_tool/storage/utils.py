@@ -20,9 +20,9 @@ def init_db(conn: sqlite3.Connection) -> None:
     )
 
     if conn.total_changes > changes_before:
-        logger.info("База данных успешно инициализирована!")
-    else:
-        logger.debug("База данных не изменилась.")
+        logger.info("Применена схема бд")
+    # else:
+    #     logger.debug("База данных не изменилась.")
 
 
 def list_migrations() -> list[str]:
