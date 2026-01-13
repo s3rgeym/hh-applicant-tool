@@ -54,7 +54,6 @@ class BaseNamespace(argparse.Namespace):
     delay: float
     user_agent: str
     proxy_url: str
-    disable_telemetry: bool
 
 
 class HHApplicantTool(MegaTool):
@@ -95,13 +94,12 @@ class HHApplicantTool(MegaTool):
             "--profile-id",
             "--profile",
             help="Используемый профиль — подкаталог в --config-dir",
-            default=DEFAULT_PROFILE_ID,
         )
         parser.add_argument(
             "-d",
+            "--api-delay",
             "--delay",
             type=float,
-            default=0.654,
             help="Задержка между запросами к API HH по умолчанию",
         )
         parser.add_argument(
@@ -175,7 +173,10 @@ class HHApplicantTool(MegaTool):
 
     @property
     def config_path(self) -> Path:
-        return (self.args.config_dir / self.args.profile_id).resolve()
+        return (
+            self.args.config_dir
+            / (self.args.profile_id or getenv("HH_PROFILE_ID", "."))
+        ).resolve()
 
     @cached_property
     def config(self) -> utils.Config:
@@ -209,8 +210,8 @@ class HHApplicantTool(MegaTool):
             access_token=token.get("access_token"),
             refresh_token=token.get("refresh_token"),
             access_expires_at=token.get("access_expires_at"),
-            delay=args.delay,
-            user_agent=config.get("user_agent"),
+            delay=args.api_delay or config.get("api_delay"),
+            user_agent=args.user_agent or config.get("user_agent"),
             session=self.session,
         )
         return api
@@ -273,8 +274,7 @@ class HHApplicantTool(MegaTool):
 
         setup_logger(logger, verbosity_level, self.log_file)
 
-        if sys.platform == "win32":
-            utils.setup_terminal()
+        utils.setup_terminal()
 
         try:
             if self.args.run:
