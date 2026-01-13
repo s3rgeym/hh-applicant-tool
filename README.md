@@ -117,7 +117,7 @@ cd hh-applicant-tool
 Теперь авторизуемся:
 
 ```sh
-docker-compose run --rm -it -e TERM=$TERM hh-applicant-tool \
+docker-compose run --rm -it -e TERM=$TERM hh_applicant_tool \
   hh-applicant-tool -vv -c /app/config auth -k
 ```
 
@@ -135,7 +135,7 @@ docker-compose run --rm -it -e TERM=$TERM hh-applicant-tool \
 Авторизация с заданными логином и паролем выглядит так:
 
 ```sh
-docker-compose run --rm -it -e TERM=$TERM hh-applicant-tool \
+docker-compose run --rm -it -e TERM=$TERM hh_applicant_tool \
   hh-applicant-tool -vv -c /app/config auth -k '<login>' -p '<password>'
 ```
 
@@ -171,13 +171,13 @@ hh_applicant_tool  | ✅ Обновлено Программист
 
 Информацию об ошибках можно посмотреть в файле `config/log.txt`, а контакты работодателей — в `config/data` с помощью `sqlite3`.
 
-Для остановки рассылки откликов... выполните:
+Для остановки рассылки откликов выполните:
 
 ```sh
 docker-compose down
 ```
 
-> docker-compose нужно запускать строго из каталога с утилитой!
+> docker-compose нужно запускать строго из скачанного каталога!
 
 ---
 
@@ -592,7 +592,8 @@ hh-applicant-tool config -p
 
 | Имя атрибута    | Описание                                                                                   |
 | --------------- | ------------------------------------------------------------------------------------------ |
-| `proxy_url`     | Прокси, используемый для всех запросов, например, `socks5h://127.0.0.1:9050`               |
+| `proxy_url`     | Прокси, используемый для всех запросов, например, `socks5h://localhost:1080`               |
+| `api_delay`     | Минимальная между отправкой запросов к API HH                                              |
 | `reply_message` | Сообщение для ответа работодателю при отклике на вакансии, см. формат сообщений            |
 | `user_agent`    | Кастомный юзерагент, передаваемый при каждом запросе. По умолчанию используется от Android |
 | `client_id`     | Идентификатор клиента, используемый для авторизации. По умолчанию используется от Android  |
