@@ -38,9 +38,7 @@ class ErrorReporter:
         error_logs = ""
         if self.log_file.exists():
             with self.log_file.open(encoding="utf-8", errors="ignore") as fp:
-                error_logs = collect_traceback_logs(
-                    fp, last_report, 10000
-                )
+                error_logs = collect_traceback_logs(fp, last_report)
 
         # Эти данные нужны для воспроизведения ошибок. Среди них ваших
         # персональных данных нет
@@ -49,7 +47,7 @@ class ErrorReporter:
             for c in self.storage.vacancy_contacts.find(
                 updated_at__ge=last_report
             )
-        ][-10000:]
+        ]
 
         for c in vacancy_contacts:
             c.pop("id", 0)
@@ -71,7 +69,7 @@ class ErrorReporter:
                 ]
             }
             for emp in self.storage.employers.find(updated_at__ge=last_report)
-        ][-10000:]
+        ]
 
         vacancies = [
             {
@@ -94,7 +92,7 @@ class ErrorReporter:
                 ]
             }
             for vac in self.storage.vacancies.find(updated_at__ge=last_report)
-        ][-10000:]
+        ]
 
         # log.info("num vacncies: %d", len(vacancies))
 
@@ -106,10 +104,10 @@ class ErrorReporter:
         }
 
         return dict(
-            error_logs=error_logs,
-            vacancy_contacts=vacancy_contacts,
-            employers=employers,
-            vacancies=vacancies,
+            error_logs=error_logs[-100000:],
+            vacancy_contacts=vacancy_contacts[-10000:],
+            employers=employers[-10000:],
+            vacancies=vacancies[-10000:],
             package_version=get_package_version(),
             system_info=system_info,
             report_created=datetime.now(timezone.utc),
