@@ -21,9 +21,13 @@ WORKDIR /app
 # Копируем файлы пакета
 COPY src /app/src
 COPY pyproject.toml poetry.lock* README.md /app/
+
 # И ставим его
-RUN pip install --no-cache-dir -e '.[playwright]' && \
-  playwright install chromium --with-deps
+RUN pip install --no-cache-dir -e '.[playwright]'
+
+# Ставим зависимости хромиума и сам хромиум пользователю docker
+RUN playwright install-deps chromium && \
+  su docker -c "playwright install chromium"
 
 # Копируем остальное (эти файлы мешают кешированию последующих слоев)
 COPY config /app/config

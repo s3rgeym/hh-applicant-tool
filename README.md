@@ -123,9 +123,6 @@ docker-compose run -u docker -it hh_applicant_tool \
   hh-applicant-tool -vv auth -k
 ```
 
-> `-u docker` запускает команду от имени пользователя docker, если выполнить
-> ее от root, то скрипт не сможет обновить конфиг в дальнейшем
-
 Пример вывода:
 
 ```
@@ -232,7 +229,12 @@ $ docker-compose exec -u docker -it hh_applicant_tool \
 [Команды](#описание-команд) можно потестировать в запущенном контейнере:
 
 ```sh
-docker compose exec -u docker -it hh_applicant_tool bash
+$ docker-compose exec -u docker -it hh_applicant_tool bash
+docker@1897bdd7c80b:/app$ hh-applicant-tool config -p
+/app/config/config.json
+docker@1897bdd7c80b:/app$ hh-applicant-tool refresh-token
+ℹ Токен не истек, обновление не требуется.
+docker@1897bdd7c80b:/app$
 ```
 
 ---
