@@ -305,7 +305,7 @@ class HHApplicantTool(MegaTool):
                 finally:
                     # Токен мог автоматически обновиться
                     if self.save_token():
-                        logger.info("Токен был обновлен.")
+                        logger.info("Токен был сохранен после обновления.")
             self._parser.print_help(file=sys.stderr)
             return 2
         finally:
