@@ -26,5 +26,8 @@ class Operation(BaseOperation):
         pass
 
     def run(self, tool: HHApplicantTool) -> None:
-        tool.api_client.refresh_access_token()
-        print("✅ Токен обновлен!")
+        if tool.api_client.is_access_expired:
+            tool.api_client.refresh_access_token()
+            print("✅ Токен успешно обновлен!")
+        else:
+            print("ℹ️ Токен еще не истек, обновление не требуется.")

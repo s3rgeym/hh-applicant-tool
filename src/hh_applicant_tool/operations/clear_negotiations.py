@@ -55,7 +55,6 @@ class Operation(BaseOperation):
 
     def clear(self) -> None:
         blacklisted = set(self.tool.get_blacklisted())
-        storage = self.tool.storage
         for negotiation in self.tool.get_negotiations():
             vacancy = negotiation["vacancy"]
 

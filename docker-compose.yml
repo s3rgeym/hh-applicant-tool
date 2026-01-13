@@ -1,6 +1,7 @@
 services:
   hh-applicant-tool:
     container_name: hh_applicant_tool
+    image: hh_applicant_tool:latest
     build:
       context: .
       dockerfile: Dockerfile
