@@ -18,7 +18,6 @@ import requests
 import urllib3
 
 from . import api, utils
-from .api import ApiClient, datatypes
 from .storage import StorageFacade
 from .utils.log import setup_logger
 from .utils.mixins import MegaTool
@@ -170,7 +169,7 @@ class HHApplicantTool(MegaTool):
 
         return session
 
-    @property
+    @cached_property
     def config_path(self) -> Path:
         return (
             (
@@ -202,11 +201,11 @@ class HHApplicantTool(MegaTool):
         return StorageFacade(self.db)
 
     @cached_property
-    def api_client(self) -> ApiClient:
+    def api_client(self) -> api.client.ApiClient:
         args = self.args
         config = self.config
         token = config.get("token", {})
-        api = ApiClient(
+        return api.client.ApiClient(
             client_id=config.get("client_id"),
             client_secret=config.get("client_id"),
             access_token=token.get("access_token"),
@@ -216,12 +215,11 @@ class HHApplicantTool(MegaTool):
             user_agent=args.user_agent or config.get("user_agent"),
             session=self.session,
         )
-        return api
 
-    def get_me(self) -> datatypes.User:
+    def get_me(self) -> api.datatypes.User:
         return self.api_client.get("/me")
 
-    def get_resumes(self) -> list[datatypes.Resume]:
+    def get_resumes(self) -> list[api.datatypes.Resume]:
         return self.api_client.get("/resumes/mine")["items"]
 
     def first_resume_id(self) -> str:
@@ -231,7 +229,7 @@ class HHApplicantTool(MegaTool):
     def get_blacklisted(self) -> list[str]:
         rv = []
         for page in count():
-            r: datatypes.PaginatedItems[datatypes.EmployerShort] = (
+            r: api.datatypes.PaginatedItems[api.datatypes.EmployerShort] = (
                 self.api_client.get("/employers/blacklisted", page=page)
             )
             rv += [item["id"] for item in r["items"]]
@@ -241,7 +239,7 @@ class HHApplicantTool(MegaTool):
 
     def get_negotiations(
         self, status: str = "active"
-    ) -> Iterable[datatypes.Negotiation]:
+    ) -> Iterable[api.datatypes.Negotiation]:
         for page in count():
             r: dict[str, Any] = self.api_client.get(
                 "/negotiations",
