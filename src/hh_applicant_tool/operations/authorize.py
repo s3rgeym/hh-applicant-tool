@@ -201,8 +201,11 @@ class Operation(BaseOperation):
                     await page.fill(self.SELECT_LOGIN_INPUT, username)
                     logger.debug("Логин введен")
 
-                    if args.password:
-                        await self._direct_login(page, args.password)
+                    password = args.password or storage.settings.get_value(
+                        "auth.password"
+                    )
+                    if password:
+                        await self._direct_login(page, password)
                     else:
                         await self._onetime_code_login(page)
 
