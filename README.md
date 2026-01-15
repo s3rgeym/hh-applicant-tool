@@ -267,7 +267,7 @@ docker@1897bdd7c80b:/app$
 /usr/local/bin/python -m hh_applicant_tool apply-similar # укажите аргументы
 ```
 
-В файлах `startup.sh` и `crontab` замените в них `/usr/local/bin/python -m hh_applicant_tool apply-similar` на `/bin/sh /app/apply-similar.sh`.
+В файлах `startup.sh` и `crontab` замените `/usr/local/bin/python -m hh_applicant_tool apply-similar` на `/bin/sh /app/apply-similar.sh`.
 
 ---
 
