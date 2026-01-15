@@ -36,7 +36,7 @@ COPY startup.sh /app/startup.sh
 
 # Настройка крона
 RUN touch /var/log/cron.log && chown docker:docker /var/log/cron.log && \
-  dos2unix /app/startup.sh /app/crontab && \
+  dos2unix /app/crontab && \
   chmod +x /app/startup.sh && \
   chmod 0644 /app/crontab && \
   crontab -u docker /app/crontab
