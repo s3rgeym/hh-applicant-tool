@@ -257,7 +257,17 @@ docker@1897bdd7c80b:/app$ hh-applicant-tool refresh-token
 docker@1897bdd7c80b:/app$
 ```
 
-Обратите внимание, что `docker-compose exec`/`docker-compose run` запускаются с аргументами `-u docker`. Только для пользователя `docker` установлен `chromium`, необходимый для авторизации, а так же это избавляет от проблем с правами, когда созданные файлы для изменения требуют root-права.
+> Обратите внимание, что `docker-compose exec`/`docker-compose run` запускаются с аргументами `-u docker`. Только для пользователя `docker` установлен `chromium`, необходимый для авторизации, а так же это избавляет от проблем с правами, когда созданные файлы для изменения требуют root-права.
+
+Если хотите команду `apply-similar` вызывать с какими-то аргументами, то создайте в корне файл `apply-similar.sh`:
+
+```sh
+#!/bin/bash
+
+/usr/local/bin/python -m hh_applicant_tool apply-similar # укажите аргументы
+```
+
+В файлах `startup.sh` и `crontab` замените в них `/usr/local/bin/python -m hh_applicant_tool apply-similar` на `/bin/sh /app/apply-similar.sh`.
 
 ---
 
