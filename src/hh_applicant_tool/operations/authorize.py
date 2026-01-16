@@ -14,7 +14,7 @@ except ImportError:
     pass
 
 from ..main import BaseOperation
-from ..utils.terminal import print_kitty_image
+from ..utils.terminal import print_kitty_image, print_sixel_mage
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -91,7 +91,14 @@ class Operation(BaseOperation):
             "--use-kitty",
             "--kitty",
             action="store_true",
-            help="Использовать kitty protocol для вывода изображения в терминал. Гуглите поддерживает ли ваш терминал его",
+            help="Использовать kitty protocol для вывода капчи в терминал.",
+        )
+        parser.add_argument(
+            "-s",
+            "--use-sixel",
+            "--sixel",
+            action="store_true",
+            help="Использовать sixel protocol для вывода капчи в терминал.",
         )
 
     def run(self, tool: HHApplicantTool) -> None:
@@ -305,13 +312,10 @@ class Operation(BaseOperation):
             logger.debug("Капчи нет, продолжаем как обычно.")
             return
 
-        if not self._args.use_kitty:
+        if not (self._args.use_kitty or self._args.use_sixel):
             raise RuntimeError(
-                "Используйте флаг --use-kitty/-k для вывода капчи в терминал."
-                "Работает не во всех терминалах!",
+                "Требуется ввод капчи!",
             )
-
-        logger.info("Обнаружена капча!")
 
         # box = await captcha_element.bounding_box()
 
@@ -322,10 +326,15 @@ class Operation(BaseOperation):
 
         print(
             "Если вы не видите картинку ниже, то ваш терминал не поддерживает"
-            " kitty protocol."
+            " вывод изображений."
         )
         print()
-        print_kitty_image(img_bytes)
+
+        if self._args.use_kitty:
+            print_kitty_image(img_bytes)
+
+        if self._args.use_sixel:
+            print_sixel_mage(img_bytes)
 
         captcha_text = (await ainput("Введите текст с картинки: ")).strip()
 

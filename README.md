@@ -402,6 +402,9 @@ hh-applicant-tool authorize --use-kitty
 
 <img width="843" height="602" alt="Untitled" src="https://github.com/user-attachments/assets/8f5dec0c-c3d4-4c5c-bd8b-3aeffa623d87" />
 
+Так же поддерживается sixel
+protocol: `--use-sixel/--sixel/-s`.
+
 Ручная авторизация с запуском встроенного браузера:
 
 ```sh
