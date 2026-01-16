@@ -13,12 +13,15 @@ MISSING = object()
 
 
 def mapped(
+    *,
+    skip_src: bool = False,
     path: str | None = None,
     transform: Callable[[Any], Any] | None = None,
     store_json: bool = False,
     **kwargs: Any,
 ):
     metadata = kwargs.get("metadata", {})
+    metadata.setdefault("skip_src", skip_src)
     metadata.setdefault("path", path)
     metadata.setdefault("transform", transform)
     metadata.setdefault("store_json", store_json)
@@ -89,6 +92,8 @@ class BaseModel:
         kwargs = {}
         for f in fields(cls):
             if from_source:
+                if f.metadata.get("skip_src") and f.name in data:
+                    continue
                 if path := f.metadata.get("path"):
                     found = True
                     v = data

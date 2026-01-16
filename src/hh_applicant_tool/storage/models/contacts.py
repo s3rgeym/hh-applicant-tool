@@ -1,9 +1,10 @@
-from .base import BaseModel, mapped, field
+from .base import BaseModel, mapped
 
 
 # Из вакансии извлекается
 class VacancyContactsModel(BaseModel):
-    id: str | None = None
+    # При вызове from_api на вакансии нужно игнорировать ее id
+    id: str = mapped(skip_src=True, default=None)
     vacancy_id: int = mapped(path="id")
 
     vacancy_name: str = mapped(path="name")
