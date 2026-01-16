@@ -9,20 +9,25 @@ from .base import AIError
 logger = logging.getLogger(__package__)
 
 
+DEFAULT_COMPLETION_ENDPOINT =  "https://api.openai.com/v1/chat/completions"
+
+
 class OpenAIError(AIError):
     pass
 
 
 @dataclass
 class ChatOpenAI:
-    chat_endpoint: ClassVar[str] = "https://api.openai.com/v1/chat/completions"
-
     token: str
     model: str
     system_prompt: str | None = None
     temperature: float = 0.7
     max_completion_tokens: int = 1000
+    completion_endpoint: str = None
     session: requests.Session = field(default_factory=requests.Session)
+
+    def __post_init__(self) -> None:
+        self.completion_endpoint = self.completion_endpoint or DEFAULT_COMPLETION_ENDPOINT
 
     def _default_headers(self) -> dict[str, str]:
         return {
@@ -42,7 +47,7 @@ class ChatOpenAI:
 
         try:
             response = self.session.post(
-                self.chat_endpoint,
+                self.completion_endpoint,
                 json=payload,
                 headers=self._default_headers(),
                 timeout=30,
