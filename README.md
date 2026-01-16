@@ -286,6 +286,9 @@ $ pipx install 'hh-applicant-tool[playwright]'
 # Если хочется использовать самую последнюю версию, то можно установить ее через git
 $ pipx install "git+https://github.com/s3rgeym/hh-applicant-tool[playwright]"
 
+# Чтобы выводить капчу через sixel нужен pillow
+$ pipx install 'hh-applicant-tool[playwright,pillow]'
+
 # Для обновления до новой версии
 $ pipx upgrade hh-applicant-tool
 ```
