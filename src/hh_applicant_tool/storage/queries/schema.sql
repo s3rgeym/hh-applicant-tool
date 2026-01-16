@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS employers (
 );
 /* ===================== contacts ===================== */
 CREATE TABLE IF NOT EXISTS vacancy_contacts (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))) NOT NULL,
     vacancy_id INTEGER NOT NULL,
     -- Все это избыточные поля
     vacancy_alternate_url TEXT,
