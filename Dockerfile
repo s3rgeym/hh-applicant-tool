@@ -23,7 +23,7 @@ COPY src /app/src
 COPY pyproject.toml poetry.lock* README.md /app/
 
 # И ставим его
-RUN pip install --no-cache-dir -e '.[playwright]'
+RUN pip install --no-cache-dir -e '.[playwright,pillow]'
 
 # Ставим зависимости хромиума и сам хромиум пользователю docker
 RUN playwright install-deps chromium && \

@@ -141,13 +141,20 @@ zcnbvm@proton.me
 🔓 Авторизация прошла успешно!
 ```
 
-Капча отобразится только в терминале с поддержкой протокола **kitty**, например, в **Kitty** или **Konsole**.
-
 Авторизация с заданными логином и паролем выглядит так:
 
 ```sh
 docker-compose run -u docker -it hh_applicant_tool \
   hh-applicant-tool -vv auth -k '<login>' -p '<password>'
+```
+
+Капча отобразится только в терминале с поддержкой протокола **kitty**, например, в **Kitty**, **Ghostty** или **Konsole**.
+
+Если ваш терминал не поддерживает kitty protocol, то иожно попробовать использовать sixel protocol:
+
+```sh
+docker-compose run -u docker -it hh_applicant_tool \
+  hh-applicant-tool -vv auth -s
 ```
 
 Подробно про авторизацию можно почитать [здесь](#авторизация).
