@@ -1,10 +1,15 @@
+import secrets
+
 from .base import BaseModel, mapped
 
 
 # Из вакансии извлекается
 class VacancyContactsModel(BaseModel):
     # При вызове from_api на вакансии нужно игнорировать ее id
-    id: str = mapped(skip_src=True, default=None)
+    id: str = mapped(
+        skip_src=True,
+        default_factory=lambda: secrets.token_hex(16),
+    )
     vacancy_id: int = mapped(path="id")
 
     vacancy_name: str = mapped(path="name")
