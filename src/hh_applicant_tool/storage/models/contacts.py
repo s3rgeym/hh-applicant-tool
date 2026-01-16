@@ -1,9 +1,9 @@
-from .base import BaseModel, mapped
+from .base import BaseModel, mapped, field
 
 
 # Из вакансии извлекается
 class VacancyContactsModel(BaseModel):
-    id: int
+    id: str | None = None
     vacancy_id: int = mapped(path="id")
 
     vacancy_name: str = mapped(path="name")
