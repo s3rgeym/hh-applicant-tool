@@ -204,6 +204,7 @@ class ChatOpenAISupport:
             token=token,
             model=c.get("model", "gpt-5.1"),
             system_prompt=system_prompt,
+            completion_endpoint=c.get("completion_endpoint"),
             session=self.session,
         )
 
