@@ -12,7 +12,13 @@ from ..api.datatypes import PaginatedItems, SearchVacancy
 from ..api.errors import ApiError, LimitExceeded
 from ..main import BaseNamespace, BaseOperation
 from ..storage.repositories.errors import RepositoryError
-from ..utils import bool2str, list2str, rand_text, shorten
+from ..utils.string import (
+    bool2str,
+    list2str,
+    rand_text,
+    shorten,
+    unescape_string,
+)
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -77,7 +83,7 @@ class Operation(BaseOperation):
             "-L",
             "--message-list-path",
             "--message-list",
-            help="Путь до файла, где хранятся сообщения для отклика на вакансии. Каждое сообщение — с новой строки.",  # noqa: E501
+            help="Путь до файла, где хранятся сообщения для отклика на вакансии. Каждое сообщение — с новой строки. Символы типа \\n будут заменены на переносы.",  # noqa: E501
             type=Path,
         )
         parser.add_argument(
@@ -440,7 +446,7 @@ class Operation(BaseOperation):
                         logger.debug("prompt: %s", msg)
                         msg = self.openai_chat.send_message(msg)
                     else:
-                        msg = (
+                        msg = unescape_string(
                             rand_text(random.choice(self.application_messages))
                             % message_placeholders
                         )

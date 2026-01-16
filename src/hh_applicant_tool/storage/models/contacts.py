@@ -32,3 +32,11 @@ class VacancyContactsModel(BaseModel):
         ),
         default=None,
     )
+
+    def __post_init__(self):
+        self.vacancy_salary_from = (
+            self.vacancy_salary_from or self.vacancy_salary_to or 0
+        )
+        self.vacancy_salary_to = (
+            self.vacancy_salary_to or self.vacancy_salary_from or 0
+        )

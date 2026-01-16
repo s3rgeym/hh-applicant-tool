@@ -17,7 +17,7 @@ from typing import Any, Iterable
 import requests
 import urllib3
 
-from . import api, utils
+from . import ai, api, utils
 from .storage import StorageFacade
 from .utils.log import setup_logger
 from .utils.mixins import MegaTool
@@ -267,6 +267,20 @@ class HHApplicantTool(MegaTool):
             self.config.save(token=self.api_client.get_access_token())
             return True
         return False
+
+    def get_openai_chat(self, system_prompt: str) -> ai.ChatOpenAI:
+        c = self.config.get("openai", {})
+        if not (token := c.get("token")):
+            raise ValueError("Токен для OpenAI не задан")
+        return ai.ChatOpenAI(
+            token=token,
+            model=c.get("model"),
+            temperature=c.get("temperature", 0.7),
+            max_completion_tokens=c.get("max_completion_tokens", 1000),
+            system_prompt=system_prompt,
+            completion_endpoint=c.get("completion_endpoint"),
+            session=self.session,
+        )
 
     def run(self) -> None | int:
         verbosity_level = max(
