@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Literal
 import requests
 from requests.exceptions import RequestException
 
-from ..ai.openai import ChatOpenAI
 from . import binpack
 from .log import collect_traceback_logs
 
@@ -192,24 +191,7 @@ class VersionChecker:
                 )
 
 
-class ChatOpenAISupport:
-    def get_openai_chat(
-        self: HHApplicantTool,
-        system_prompt: str,
-    ) -> ChatOpenAI:
-        c = self.config.get("openai", {})
-        if not (token := c.get("token")):
-            raise ValueError("Токен для OpenAI не задан")
-        return ChatOpenAI(
-            token=token,
-            model=c.get("model", "gpt-5.1"),
-            system_prompt=system_prompt,
-            completion_endpoint=c.get("completion_endpoint"),
-            session=self.session,
-        )
-
-
-class MegaTool(ErrorReporter, VersionChecker, ChatOpenAISupport):
+class MegaTool(ErrorReporter, VersionChecker):
     def _check_system(self: HHApplicantTool):
         if not self.storage.settings.get_value("disable_version_check", False):
             self._check_version()
