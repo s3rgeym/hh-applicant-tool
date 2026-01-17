@@ -29,6 +29,9 @@ RUN pip install --no-cache-dir -e '.[playwright,pillow]'
 RUN playwright install-deps chromium && \
   su docker -c "playwright install chromium"
 
+# Fix: падение, если каталог config не существует
+RUN mkdir -p /app/config
+
 # Копируем остальное (эти файлы мешают кешированию последующих слоев)
 COPY config /app/config
 COPY crontab /app/crontab
