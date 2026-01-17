@@ -223,8 +223,8 @@ class HHApplicantTool(MegaTool):
         return self.api_client.get("/resumes/mine")["items"]
 
     def first_resume_id(self) -> str:
-        resumes = self.get_resumes()
-        return resumes[0]["id"]
+        resume = self.get_resumes()[0]
+        return resume["id"]
 
     def get_blacklisted(self) -> list[str]:
         rv = []
