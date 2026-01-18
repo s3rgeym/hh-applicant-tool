@@ -1,5 +1,6 @@
 # HH Applicant Tool
 
+> [!NOTE]
 > Ищу почасовую или проектную [@feedback_s3rgeym_bot](https://t.me/feedback_s3rgeym_bot) (Python, Vue.js, Devops)
 
 ![Publish to PyPI](https://github.com/s3rgeym/hh-applicant-tool/actions/workflows/publish.yml/badge.svg)
