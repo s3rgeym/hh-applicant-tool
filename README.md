@@ -421,7 +421,7 @@ $ hh-applicant-tool authorize '<ваш телефон или email>'
 
 Если же при вводе правильных данных возникает ошибка авторизации, то, скорее всего, требуется ввод капчи.
 
-Капчу можно ввести через терминал, если тот поддерживает kitty protocol (например, Kitty, Konsole, Ghostty и др):
+Капчу можно ввести через терминал, если тот поддерживает **kitty protocol** (например, **Kitty**, **Konsole**, **Ghostty** и др):
 
 ```sh
 hh-applicant-tool authorize --use-kitty
@@ -429,7 +429,7 @@ hh-applicant-tool authorize --use-kitty
 
 <img width="843" height="602" alt="Untitled" src="https://github.com/user-attachments/assets/8f5dec0c-c3d4-4c5c-bd8b-3aeffa623d87" />
 
-Так же можно использовать sixel protocol: `--use-sixel/--sixel/-s`. Он поддерживается в [Windows Terminal](https://devblogs.microsoft.com/commandline/windows-terminal-preview-1-22-release/#sixel-image-support). 
+Так же для вывода капчи можно использовать **sixel protocol**: `--use-sixel/--sixel/-s`. Он поддерживается в [Windows Terminal](https://devblogs.microsoft.com/commandline/windows-terminal-preview-1-22-release/#sixel-image-support). 
 
 Ручная авторизация с запуском встроенного браузера:
 
