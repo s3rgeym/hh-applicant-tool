@@ -429,7 +429,9 @@ hh-applicant-tool authorize --use-kitty
 
 <img width="843" height="602" alt="Untitled" src="https://github.com/user-attachments/assets/8f5dec0c-c3d4-4c5c-bd8b-3aeffa623d87" />
 
-Так же для вывода капчи можно использовать **sixel protocol**: `--use-sixel/--sixel/-s`. Он поддерживается в Windows Terminal, начиная с версии [1.22](https://devblogs.microsoft.com/commandline/windows-terminal-preview-1-22-release/#sixel-image-support). 
+Так же для вывода капчи можно использовать **sixel protocol**: `--use-sixel/--sixel/-s`. Это старый протокол, реализованный во множестве терминалов в **Linux**/**BSD** (**MacOS**). Он так же поддерживается в Windows Terminal, начиная с версии [1.22](https://devblogs.microsoft.com/commandline/windows-terminal-preview-1-22-release/#sixel-image-support).
+
+Из популярных современных терминалов никакие вывод графики не поддерживает **Alacritty**.
 
 Ручная авторизация с запуском встроенного браузера:
 
