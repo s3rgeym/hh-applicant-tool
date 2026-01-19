@@ -32,7 +32,11 @@ def list2str(items: list[Any] | None) -> str:
 
 
 def unescape_string(text: str) -> str:
-    """Заменяет литералы типа \\n, \\r, \\t на реальные спецсимволы."""
-    if text is None:
+    if not text:
         return ""
-    return text.encode("utf-8").decode("unicode_escape")
+    return (
+        text.replace(r"\n", "\n")
+        .replace(r"\r", "\r")
+        .replace(r"\t", "\t")
+        .replace(r"\\", "\\")
+    )
