@@ -429,8 +429,7 @@ hh-applicant-tool authorize --use-kitty
 
 <img width="843" height="602" alt="Untitled" src="https://github.com/user-attachments/assets/8f5dec0c-c3d4-4c5c-bd8b-3aeffa623d87" />
 
-Так же поддерживается sixel
-protocol: `--use-sixel/--sixel/-s`.
+Так же можно использовать sixel protocol: `--use-sixel/--sixel/-s`. Он поддерживается в [Windows Terminal](https://devblogs.microsoft.com/commandline/windows-terminal-preview-1-22-release/#sixel-image-support). 
 
 Ручная авторизация с запуском встроенного браузера:
 
