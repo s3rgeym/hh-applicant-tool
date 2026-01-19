@@ -270,7 +270,7 @@ $ docker-compose exec -u docker -it hh_applicant_tool bash
 docker@1897bdd7c80b:/app$ hh-applicant-tool config -p
 /app/config/config.json
 docker@1897bdd7c80b:/app$ hh-applicant-tool refresh-token
-ℹ Токен не истек, обновление не требуется.
+ℹ️ Токен не истек, обновление не требуется.
 docker@1897bdd7c80b:/app$
 ```
 
