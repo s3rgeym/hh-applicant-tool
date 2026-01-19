@@ -235,6 +235,7 @@ services:
     environment:
       - HH_PROFILE_ID=third
 
+  # Общий шаблон для новых профилей
   уникальное_имя_сервиса:
     extends: hh_applicant_tool
     # может совпадать с именем сервиса
