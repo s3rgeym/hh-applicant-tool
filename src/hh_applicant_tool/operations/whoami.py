@@ -35,6 +35,14 @@ class Operation(BaseOperation):
     def run(self, tool: HHApplicantTool) -> None:
         api_client = tool.api_client
         result: datatypes.User = api_client.get("me")
+        if result['auth_type'] == "employer":
+            print(
+                "Ты логинишься в профиль РАБОТОДАТЕЛЯ. "
+                "Логинься по номеру телефона "
+                "(если он не указан в профиле работодателя) "
+                "или заводи новый аккаунт чисто как соискатель."
+            )
+            return
         full_name = " ".join(
             filter(
                 None,
