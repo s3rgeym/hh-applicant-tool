@@ -49,10 +49,10 @@ class Operation(BaseOperation):
             s.set_value("user.full_name", full_name)
             s.set_value("user.email", result.get("email"))
             s.set_value("user.phone", result.get("phone"))
-        counters = result["counters"]
+        counters = result.get("counters", {})
         print(
             f"🆔 {result['id']} {full_name or 'Анонимный аккаунт'} "
-            f"[ 📄 {counters['resumes_count']} "
-            f"| 👁️ {fmt_plus(counters['new_resume_views'])} "
-            f"| ✉️ {fmt_plus(counters['unread_negotiations'])} ]"
+            f"[ 📄 {counters.get('resumes_count', 0)} "
+            f"| 👁️ {fmt_plus(counters.get('new_resume_views', 0))} "
+            f"| ✉️ {fmt_plus(counters.get('unread_negotiations', 0))} ]"
         )
