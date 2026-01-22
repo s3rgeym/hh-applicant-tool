@@ -9,7 +9,7 @@ SHELL=/bin/bash
 # Символ процента в кронтабе нужно экранировать
 # sleep с рандомной задержкой от 1 до 5 минут нужен во-первых чтобы токен обновиться успел, а во
 # вторых, чтобы антиспам не сработал
-0 */4 * * * /bin/bash -c 'sleep $((60 + RANDOM \% 241))' && /usr/local/bin/python -m hh_applicant_tool update-resumes >> /var/log/cron.log 2>&1
+0 */5 * * * /bin/bash -c 'sleep $((60 + RANDOM \% 241))' && /usr/local/bin/python -m hh_applicant_tool update-resumes >> /var/log/cron.log 2>&1
 
 # Рассылаем отклики
 0 8-21 * * * /bin/bash -c 'sleep $((60 + RANDOM \% 241))' && /usr/local/bin/python -m hh_applicant_tool apply-similar >> /var/log/cron.log 2>&1
