@@ -36,6 +36,8 @@ class Operation(BaseOperation):
     def run(self, tool: HHApplicantTool) -> None:
         api_client = tool.api_client
         result: datatypes.User = api_client.get("me")
+        if result.get('auth_type') != 'applicant':
+            logger.warning("Вы вошли не как соискатель! Попробуйте авторизоваться вручную!!!")
         full_name = " ".join(
             filter(
                 None,
