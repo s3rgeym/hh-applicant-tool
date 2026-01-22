@@ -27,6 +27,7 @@ def fmt_plus(n: int) -> str:
 class Operation(BaseOperation):
     """Выведет текущего пользователя"""
 
+    # Это алиасы команды
     __aliases__: list[str] = ["id"]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
