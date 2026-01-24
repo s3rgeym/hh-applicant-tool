@@ -343,6 +343,8 @@ class Operation(BaseOperation):
             "resume_title": resume.get("title") or "",
         }
 
+        do_apply = True
+
         for vacancy in self._get_similar_vacancies(resume_id=resume["id"]):
             try:
                 employer = vacancy.get("employer", {})
@@ -360,7 +362,18 @@ class Operation(BaseOperation):
                 except RepositoryError as ex:
                     logger.debug(ex)
 
-                if employer := vacancy.get("employer"):
+                # По факту контакты можно получить только здесь?!
+                if vacancy.get("contacts"):
+                    logger.debug(
+                        f"Найдены контакты в вакансии: {vacancy['alternate_url']}"
+                    )
+
+                    try:
+                        # logger.debug(vacancy)
+                        storage.vacancy_contacts.save(vacancy)
+                    except RepositoryError as ex:
+                        logger.exception(ex)
+
                     employer_id = employer.get("id")
                     if employer_id and employer_id not in seen_employers:
                         employer_profile: datatypes.Employer = (
@@ -372,13 +385,8 @@ class Operation(BaseOperation):
                         except RepositoryError as ex:
                             logger.exception(ex)
 
-                # По факту контакты можно получить только здесь?!
-                if vacancy.get("contacts"):
-                    try:
-                        # logger.debug(vacancy)
-                        storage.vacancy_contacts.save(vacancy)
-                    except RecursionError as ex:
-                        logger.exception(ex)
+                if not do_apply:
+                    continue
 
                 if vacancy.get("has_test"):
                     logger.debug(
@@ -483,7 +491,7 @@ class Operation(BaseOperation):
             except LimitExceeded:
                 logger.info("Достигли лимита на отклики")
                 print("⚠️ Достигли лимита рассылки")
-                break
+                do_apply = False
             except ApiError as ex:
                 logger.warning(ex)
             except (BadResponse, AIError) as ex:
@@ -557,11 +565,17 @@ class Operation(BaseOperation):
 
     def _get_similar_vacancies(self, resume_id: str) -> Iterator[SearchVacancy]:
         for page in range(self.total_pages):
+            logger.debug(
+                f"Загружаем подходящие вакансии со страницы: {page + 1}"
+            )
             params = self._get_search_params(page)
             res: PaginatedItems[SearchVacancy] = self.api_client.get(
                 f"/resumes/{resume_id}/similar_vacancies",
                 params,
             )
+
+            logger.debug(f"Количество подходящих вакансий: {res['found']}")
+
             if not res["items"]:
                 return
 
