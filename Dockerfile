@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   cron \
   dos2unix \
   tzdata \
+  less \
   && rm -rf /var/lib/apt/lists/*
 
 # Настройка пользователя
