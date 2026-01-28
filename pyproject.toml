@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hh-applicant-tool"
-version = "1.5.10"
+version = "1.5.11"
 description = "HH-Applicant-Tool: An automation utility for HeadHunter (hh.ru) designed to streamline the job search process by auto-applying to relevant vacancies and periodically refreshing resumes to stay at the top of recruiter searches."
 homepage = "https://github.com/s3rgeym/hh-applicant-tool"
 repository = "https://github.com/s3rgeym/hh-applicant-tool"

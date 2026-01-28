@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from ..api import ApiError, datatypes
 from ..main import BaseNamespace, BaseOperation
-from ..utils import print_err
 from ..utils.string import shorten
 
 if TYPE_CHECKING:
@@ -32,13 +31,17 @@ class Operation(BaseOperation):
     def run(self, tool: HHApplicantTool) -> None:
         resumes: list[datatypes.Resume] = tool.get_resumes()
         # Там вызов API меняет поля
-        # tool.storage.resumes.save_batch(resumes)
+        tool.storage.resumes.save_batch(resumes)
+
         for resume in resumes:
+            if not resume.get("can_publish_or_update"):
+                logger.warning(f"Не могу обновить: {resume['alternate_url']}")
+                continue
             try:
-                res = tool.api_client.post(
+                r = tool.api_client.post(
                     f"/resumes/{resume['id']}/publish",
                 )
-                assert res == {}
+                assert {} == r
                 print("✅ Обновлено", shorten(resume["title"]))
             except ApiError as ex:
-                print_err("❗", ex)
+                logger.error(f"Ошибка при обновлении резюме: {ex}")

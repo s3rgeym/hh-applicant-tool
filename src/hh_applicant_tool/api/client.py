@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import dataclasses
-import json
 import logging
 import time
 from dataclasses import dataclass
@@ -74,6 +73,7 @@ class BaseClient:
         endpoint: str,
         params: dict[str, Any] | None = None,
         delay: float | None = None,
+        as_json: bool = False,
         **kwargs: Any,
     ) -> T:
         # Не знаю насколько это "правильно"
@@ -91,7 +91,9 @@ class BaseClient:
                 logger.debug("wait %fs before request", delay)
                 time.sleep(delay)
             has_body = method in ["POST", "PUT"]
-            payload = {"data" if has_body else "params": params}
+            payload = {
+                ["data", "json"][as_json] if has_body else "params": params
+            }
             # logger.debug(f"request info: {method = }, {url = }, {headers = }, params = {repr(params)[:255]}")
             response = self.session.request(
                 method,
@@ -109,7 +111,7 @@ class BaseClient:
                 # 'Transfer-Encoding': 'chunked'
                 try:
                     rv = response.json() if response.text else {}
-                except json.decoder.JSONDecodeError as ex:
+                except as_json.decoder.JSONDecodeError as ex:
                     raise errors.BadResponse(
                         f"Can't decode JSON: {method} {url} ({response.status_code})"
                     ) from ex
@@ -244,11 +246,12 @@ class ApiClient(BaseClient):
         endpoint: str,
         params: dict[str, Any] | None = None,
         delay: float | None = None,
+        as_json: bool = False,
         **kwargs: Any,
     ) -> T:
         def do_request():
             return BaseClient.request(
-                self, method, endpoint, params, delay, **kwargs
+                self, method, endpoint, params, delay, as_json, **kwargs
             )
 
         try:
