@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..api import ApiError
 from ..main import BaseNamespace, BaseOperation
+from ..utils import json
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -20,6 +20,7 @@ class Namespace(BaseNamespace):
     method: str
     endpoint: str
     params: list[str]
+    data: Any
 
 
 class Operation(BaseOperation):
@@ -38,16 +39,34 @@ class Operation(BaseOperation):
         parser.add_argument(
             "-m", "--method", "--meth", "-X", default="GET", help="HTTP Метод"
         )
+        # Добавляем аргумент для JSON тела
+        parser.add_argument("-d", "--data", help="JSON строка тела запроса")
 
     def run(self, tool: HHApplicantTool) -> None:
         args = tool.args
         api_client = tool.api_client
-        params = dict(x.split("=", 1) for x in args.param)
+
+        # Парсим JSON, если он передан
+        as_json = False
+        if args.data:
+            try:
+                params = json.loads(args.data)
+                as_json = True
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid JSON in --data: {e}")
+                return 1
+        else:
+            params = dict(x.split("=", 1) for x in args.param)
+
         try:
+            # Передаем json_data как именованный аргумент json
             result = api_client.request(
-                args.method, args.endpoint, params=params
+                args.method,
+                args.endpoint,
+                params=params,
+                as_json=as_json,
             )
-            print(json.dumps(result, ensure_ascii=False))
+            print(json.dumps(result))
         except ApiError as ex:
-            json.dump(ex.data, sys.stderr, ensure_ascii=False)
+            json.dump(ex.data, sys.stderr)
             return 1
