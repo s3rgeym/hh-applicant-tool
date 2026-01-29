@@ -75,5 +75,6 @@ class Operation(BaseOperation):
             )
             print(json.dumps(result))
         except ApiError as ex:
+            logger.debug(ex)
             json.dump(ex.data, sys.stderr)
             return 1

@@ -49,7 +49,15 @@ class ApiError(BadResponse):
         return (
             self._data.get("error_description")
             or self._data.get("description")
-            or str(self._data)
+            or (
+                "An errors has occurred: "
+                + "; ".join(
+                    v["type"] + (f": {v['value']}" if "value" in v else "")
+                    for v in self._data["errors"]
+                )
+            )
+            if "errors" in self._data
+            else str(self._data)
         )
 
     #     def __getattr__(self, name: str) -> Any:
