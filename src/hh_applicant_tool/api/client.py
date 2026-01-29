@@ -116,15 +116,12 @@ class BaseClient:
                         f"Can't decode JSON: {method} {url} ({response.status_code})"
                     ) from ex
             finally:
-                log_url = url
-                if params and not has_body:
-                    encoded_params = urlencode(params)
-                    log_url += ("?", "&")["?" in url] + encoded_params
                 logger.debug(
-                    "%d %s %.1000s",
+                    "%d %s %s %.1000s",
                     response.status_code,
                     method,
-                    log_url,
+                    url,
+                    params,
                 )
                 self._previous_request_time = time.monotonic()
         errors.ApiError.raise_for_status(response, rv)
