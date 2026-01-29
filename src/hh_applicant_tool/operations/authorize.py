@@ -34,7 +34,7 @@ async def ainput(prompt: str) -> str:
 class Operation(BaseOperation):
     """Авторизация через Playwright"""
 
-    __aliases__: list = ["auth", "authen", "authenticate"]
+    __aliases__: list = ["authenticate", "auth", "login"]
 
     # Селекторы
     SELECT_LOGIN_INPUT = 'input[data-qa="login-input-username"]'
