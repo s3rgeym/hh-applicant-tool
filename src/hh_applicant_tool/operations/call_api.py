@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
 from ..api import ApiError
@@ -56,7 +57,13 @@ class Operation(BaseOperation):
                 logger.error(f"Invalid JSON in --data: {e}")
                 return 1
         else:
-            params = dict(x.split("=", 1) for x in args.param)
+            params = defaultdict(list)
+            for param in args.param:
+                key, value = param.split("=", 1)
+                params[key].append(value)
+
+            # Это лишнее, наверное
+            params = dict(params)
 
         try:
             # Передаем json_data как именованный аргумент json
