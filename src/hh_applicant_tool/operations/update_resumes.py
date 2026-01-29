@@ -42,6 +42,11 @@ class Operation(BaseOperation):
                     f"/resumes/{resume['id']}/publish",
                 )
                 assert {} == r
-                print("✅ Обновлено", shorten(resume["title"]))
+                print(
+                    "✅ Обновлено",
+                    resume["alternate_url"],
+                    "-",
+                    shorten(resume["title"]),
+                )
             except ApiError as ex:
                 logger.error(f"Ошибка при обновлении резюме: {ex}")
