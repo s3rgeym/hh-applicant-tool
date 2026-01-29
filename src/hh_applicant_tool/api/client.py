@@ -121,7 +121,7 @@ class BaseClient:
                     response.status_code,
                     method,
                     url,
-                    params,
+                    params or "-",
                 )
                 self._previous_request_time = time.monotonic()
         errors.ApiError.raise_for_status(response, rv)
