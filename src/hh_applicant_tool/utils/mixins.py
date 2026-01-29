@@ -39,8 +39,8 @@ class ErrorReporter:
             with self.log_file.open(encoding="utf-8", errors="ignore") as fp:
                 error_logs = collect_traceback_logs(fp, last_report)
 
-        # Эти данные нужны для воспроизведения ошибок. Среди них ваших
-        # персональных данных нет
+        # Эти данные нужны для воспроизведения ошибок и пополнения базы сеньора овчарки. Среди них ваших
+        # персональных данных нет.
         vacancy_contacts = [
             c.to_dict()
             for c in self.storage.vacancy_contacts.find(
