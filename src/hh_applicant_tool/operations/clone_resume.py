@@ -38,7 +38,7 @@ class Operation(BaseOperation):
         args = tool.args
         api_client = tool.api_client
         resume = (
-            {res["id"] for res in resumes}[args.resume_id]
+            {res["id"]: res for res in resumes}[args.resume_id]
             if args.resume_id
             else resumes[0]
         )
