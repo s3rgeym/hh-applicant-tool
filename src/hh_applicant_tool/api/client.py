@@ -117,7 +117,7 @@ class BaseClient:
                     ) from ex
             finally:
                 logger.debug(
-                    "%d %s %s %.1000s",
+                    "%d %s %s with params: %.1000s",
                     response.status_code,
                     method,
                     url,
