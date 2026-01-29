@@ -23,7 +23,7 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Выход из профиля"""
 
-    __aliases__: list[str] = ["logout", "exit"]
+    __aliases__: list[str] = ["exit"]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
