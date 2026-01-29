@@ -14,7 +14,6 @@ from ..main import BaseNamespace, BaseOperation
 from ..storage.repositories.errors import RepositoryError
 from ..utils.string import (
     bool2str,
-    list2str,
     rand_text,
     shorten,
     unescape_string,
@@ -533,23 +532,23 @@ class Operation(BaseOperation):
         if self.sort_point_lng:
             params["sort_point_lng"] = self.sort_point_lng
         if self.search_field:
-            params["search_field"] = list2str(self.search_field)
+            params["search_field"] = list(self.search_field)
         if self.employment:
-            params["employment"] = list2str(self.employment)
+            params["employment"] = list(self.employment)
         if self.area:
-            params["area"] = list2str(self.area)
+            params["area"] = list(self.area)
         if self.metro:
-            params["metro"] = list2str(self.metro)
+            params["metro"] = list(self.metro)
         if self.professional_role:
-            params["professional_role"] = list2str(self.professional_role)
+            params["professional_role"] = list(self.professional_role)
         if self.industry:
-            params["industry"] = list2str(self.industry)
+            params["industry"] = list(self.industry)
         if self.employer_id:
-            params["employer_id"] = list2str(self.employer_id)
+            params["employer_id"] = list(self.employer_id)
         if self.excluded_employer_id:
-            params["excluded_employer_id"] = list2str(self.excluded_employer_id)
+            params["excluded_employer_id"] = list(self.excluded_employer_id)
         if self.label:
-            params["label"] = list2str(self.label)
+            params["label"] = list(self.label)
         if self.only_with_salary:
             params["only_with_salary"] = bool2str(self.only_with_salary)
         # if self.clusters:

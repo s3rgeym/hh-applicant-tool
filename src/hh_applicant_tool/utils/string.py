@@ -27,6 +27,7 @@ def bool2str(v: bool) -> str:
     return str(v).lower()
 
 
+# К удалению
 def list2str(items: list[Any] | None) -> str:
     return ",".join(f"{v}" for v in items) if items else ""
 
