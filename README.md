@@ -304,11 +304,11 @@ docker@1897bdd7c80b:/app$
 # он почти на 500МБ меньше. Думаем (c) s3rgeym. Подписаться
 $ pipx install 'hh-applicant-tool[playwright]'
 
-# Если хочется использовать самую последнюю версию, то можно установить ее через git
-$ pipx install "git+https://github.com/s3rgeym/hh-applicant-tool[playwright]"
-
 # Чтобы выводить капчу через sixel нужен pillow
 $ pipx install 'hh-applicant-tool[playwright,pillow]'
+
+# Если хочется использовать самую последнюю версию, то можно установить ее через git
+$ pipx install "git+https://github.com/s3rgeym/hh-applicant-tool"
 
 # Для обновления до новой версии
 $ pipx upgrade hh-applicant-tool
