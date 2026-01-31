@@ -329,7 +329,7 @@ pip install 'hh-applicant-tool[playwright]'
 Отдельно я распишу процесс установки в **Windows** в подробностях:
 
 - Для начала поставьте последнюю версию **Python 3** любым удобным способом.
-- Запустите **Terminal** или **PowerShell** от Администратора и выполните:
+- Запустите **PowerShell** (не `CMD.EXE`, блять, а именно поверщель) от Администратора и выполните:
 
   ```ps
   Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Unrestricted
