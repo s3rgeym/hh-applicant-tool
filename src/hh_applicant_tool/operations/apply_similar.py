@@ -64,6 +64,7 @@ class Namespace(BaseNamespace):
     premium: bool
     per_page: int
     total_pages: int
+    excluded_texts: list[str] | None
 
 
 class Operation(BaseOperation):
@@ -239,6 +240,11 @@ class Operation(BaseOperation):
             nargs="+",
             help="Поля поиска (name, company_name и т.п.)",
         )
+        search_params_group.add_argument(
+            "--excluded-texts",
+            type=str,
+            help="Исключить вакансии, если название или snippet содержит любую из подстрок (через запятую)",
+        )
 
     def run(
         self,
@@ -279,6 +285,7 @@ class Operation(BaseOperation):
         self.schedule = args.schedule
         self.search = args.search
         self.search_field = args.search_field
+        self.excluded_texts = self._parse_excluded_texts(args.excluded_texts)
         self.sort_point_lat = args.sort_point_lat
         self.sort_point_lng = args.sort_point_lng
         self.top_lat = args.top_lat
@@ -578,10 +585,34 @@ class Operation(BaseOperation):
             if not res["items"]:
                 return
 
-            yield from res["items"]
+            for vacancy in res["items"]:
+                if not self._is_excluded(vacancy):
+                    yield vacancy
 
             if page >= res["pages"] - 1:
                 return
+
+    @staticmethod
+    def _parse_excluded_texts(excluded_texts: str | None) -> list[str] | None:
+        if not excluded_texts:
+            return None
+        return [x.strip() for x in excluded_texts.split(",") if x.strip()]
+
+    def _is_excluded(self, vacancy: SearchVacancy) -> bool:
+        if not self.excluded_texts:
+            return False
+        
+        snippet = vacancy.get("snippet") or {}
+        combined = " ".join([
+            vacancy.get("name") or "",
+            snippet.get("requirement") or "",
+            snippet.get("responsibility") or "",
+        ]).lower()
+        
+        return any(
+            excluded_text.lower() in combined
+            for excluded_text in self.excluded_texts
+        )
 
     def _get_application_messages(self, path: Path | None) -> list[str]:
         return (
