@@ -64,7 +64,7 @@ class Namespace(BaseNamespace):
     premium: bool
     per_page: int
     total_pages: int
-    excluded_texts: list[str] | None
+    excluded_terms: list[str]
 
 
 class Operation(BaseOperation):
@@ -235,13 +235,13 @@ class Operation(BaseOperation):
             action=argparse.BooleanOptionalAction,
             help="Только премиум вакансии",
         )
-        search_params_group.add_argument(    
+        search_params_group.add_argument(
             "--search-field",
             nargs="+",
             help="Поля поиска (name, company_name и т.п.)",
         )
         search_params_group.add_argument(
-            "--excluded-texts",
+            "--excluded-terms",
             type=str,
             help="Исключить вакансии, если название или snippet содержит любую из подстрок (через запятую, например, junior, bitrix, дружный коллектив). Это принудительный фильтр для результатов поиска",
         )
@@ -285,7 +285,7 @@ class Operation(BaseOperation):
         self.schedule = args.schedule
         self.search = args.search
         self.search_field = args.search_field
-        self.excluded_texts = self._parse_excluded_texts(args.excluded_texts)
+        self.excluded_terms = self._parse_excluded_terms(args.excluded_terms)
         self.sort_point_lat = args.sort_point_lat
         self.sort_point_lng = args.sort_point_lng
         self.top_lat = args.top_lat
@@ -585,32 +585,30 @@ class Operation(BaseOperation):
             if not res["items"]:
                 return
 
-            yield from map(self._is_excluded, res["items"])
+            yield from filter(self._is_not_excluded, res["items"])
 
             if page >= res["pages"] - 1:
                 return
 
     @staticmethod
-    def _parse_excluded_texts(excluded_texts: str | None) -> list[str] | None:
-        if not excluded_texts:
-            return None
-        return [x.strip() for x in excluded_texts.split(",") if x.strip()]
+    def _parse_excluded_terms(excluded_terms: str | None) -> list[str]:
+        if not excluded_terms:
+            return []
+        return [
+            x.strip() for x in excluded_terms.lower().split(",") if x.strip()
+        ]
 
-    def _is_excluded(self, vacancy: SearchVacancy) -> bool:
-        if not self.excluded_texts:
-            return False
-        
+    def _is_not_excluded(self, vacancy: SearchVacancy) -> bool:
         snippet = vacancy.get("snippet") or {}
-        combined = " ".join([
-            vacancy.get("name") or "",
-            snippet.get("requirement") or "",
-            snippet.get("responsibility") or "",
-        ]).lower()
-        
-        return any(
-            excluded_text.lower() in combined
-            for excluded_text in self.excluded_texts
-        )
+        combined = " ".join(
+            [
+                vacancy.get("name") or "",
+                snippet.get("requirement") or "",
+                snippet.get("responsibility") or "",
+            ]
+        ).lower()
+
+        return not any(v in combined for v in self.excluded_terms)
 
     def _get_application_messages(self, path: Path | None) -> list[str]:
         return (
