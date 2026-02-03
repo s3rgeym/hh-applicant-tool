@@ -235,7 +235,7 @@ class Operation(BaseOperation):
             action=argparse.BooleanOptionalAction,
             help="Только премиум вакансии",
         )
-        search_params_group.add_argument(
+        search_params_group.add_argument(    
             "--search-field",
             nargs="+",
             help="Поля поиска (name, company_name и т.п.)",
@@ -243,7 +243,7 @@ class Operation(BaseOperation):
         search_params_group.add_argument(
             "--excluded-texts",
             type=str,
-            help="Исключить вакансии, если название или snippet содержит любую из подстрок (через запятую)",
+            help="Исключить вакансии, если название или snippet содержит любую из подстрок (через запятую, например, junior, bitrix, дружный коллектив). Это принудительный фильтр для результатов поиска",
         )
 
     def run(
@@ -585,9 +585,7 @@ class Operation(BaseOperation):
             if not res["items"]:
                 return
 
-            for vacancy in res["items"]:
-                if not self._is_excluded(vacancy):
-                    yield vacancy
+            yield from map(self._is_excluded, res["items"])
 
             if page >= res["pages"] - 1:
                 return
