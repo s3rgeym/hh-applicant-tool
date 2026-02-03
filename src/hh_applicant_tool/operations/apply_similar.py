@@ -339,7 +339,8 @@ class Operation(BaseOperation):
         user: datatypes.User,
         seen_employers: set[str],
     ) -> None:
-        logger.info("Начинаю рассылку откликов для резюме: %s", resume["title"])
+        logger.info("Начинаю рассылку откликов для резюме: %s (%s)", resume["alternate_url"], resume["title"])
+        print("🚀 Начинаю рассылку откликов для резюме:", resume["title"])
 
         placeholders = {
             "first_name": user.get("first_name") or "",
@@ -427,16 +428,14 @@ class Operation(BaseOperation):
                     )
                     if "got_rejection" in relations:
                         logger.debug(
-                            "Вы получили отказ от %s на резюме %s",
+                            "Вы получили отказ от %s",
                             vacancy["alternate_url"],
-                            resume["alternate_url"],
                         )
-                        print(
-                            "⛔ Пришел отказ от",
-                            vacancy["alternate_url"],
-                            "на резюме",
-                            resume["alternate_url"],
-                        )
+                        print("⛔ Пришел отказ от", vacancy["alternate_url"])
+                    continue
+
+                if self._is_excluded(vacancy):
+                    logger.warning("Вакансия содержит недопустимые словосочетания: %s",vacancy["alternate_url"])
                     continue
 
                 params = {
@@ -476,11 +475,7 @@ class Operation(BaseOperation):
                             delay=random.uniform(1, 3),
                         )
                         assert res == {}
-                        logger.debug(
-                            "Откликнулись на %s с резюме %s",
-                            vacancy["alternate_url"],
-                            resume["alternate_url"],
-                        )
+                        logger.debug("Откликнулись на %s", vacancy["alternate_url"])
                     print(
                         "📨 Отправили отклик для резюме",
                         resume["alternate_url"],
@@ -495,13 +490,16 @@ class Operation(BaseOperation):
                         f"Игнорирую перенаправление на форму: {vacancy['alternate_url']}"  # noqa: E501
                     )
             except LimitExceeded:
-                logger.info("Достигли лимита на отклики")
-                print("⚠️ Достигли лимита рассылки")
+                logger.info("Достигли лимита на отклики для резюме: %s", resume["alternate_url"])
+                print("⚠️ Достигли лимита рассылки для резюме", resume["alternate_url"])
                 do_apply = False
             except ApiError as ex:
                 logger.warning(ex)
             except (BadResponse, AIError) as ex:
                 logger.error(ex)
+
+        logger.info("Закончили рассылку откликов для резюме: %s (%s)", resume["alternate_url"], resume["title"])
+        print("✅️ Закончили рассылку откликов для резюме:", resume["title"])
 
     def _get_search_params(self, page: int) -> dict:
         params = {
@@ -585,7 +583,7 @@ class Operation(BaseOperation):
             if not res["items"]:
                 return
 
-            yield from filter(self._is_not_excluded, res["items"])
+            yield from res["items"]
 
             if page >= res["pages"] - 1:
                 return
@@ -598,7 +596,7 @@ class Operation(BaseOperation):
             x.strip() for x in excluded_terms.lower().split(",") if x.strip()
         ]
 
-    def _is_not_excluded(self, vacancy: SearchVacancy) -> bool:
+    def _is_excluded(self, vacancy: SearchVacancy) -> bool:
         snippet = vacancy.get("snippet") or {}
         combined = " ".join(
             [
@@ -608,7 +606,7 @@ class Operation(BaseOperation):
             ]
         ).lower()
 
-        return not any(v in combined for v in self.excluded_terms)
+        return any(v in combined for v in self.excluded_terms)
 
     def _get_application_messages(self, path: Path | None) -> list[str]:
         return (
