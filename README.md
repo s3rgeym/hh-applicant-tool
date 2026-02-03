@@ -285,7 +285,10 @@ docker@1897bdd7c80b:/app$
 ```sh
 #!/bin/bash
 
-/usr/local/bin/python -m hh_applicant_tool apply-similar -L messages.txt # укажите любые аргументы
+# Пример с фильтрацией по исключаемым словам
+/usr/local/bin/python -m hh_applicant_tool apply-similar \
+  -L messages.txt \
+  --excluded-texts "fullstack,junior,php" # укажите любые аргументы
 ```
 
 В файлах `startup.sh` и `crontab` замените `/usr/local/bin/python -m hh_applicant_tool apply-similar` на `/bin/sh /app/apply-similar.sh`.
@@ -490,6 +493,9 @@ $ hh-applicant-tool apply-similar
 # С ним отклики не отправляются, а лишь выводятся сообщения
 $ hh-applicant-tool -vv apply-similar --search "Python программист" --per-page 3 --total-pages 1 --dry-run
 
+# Фильтруем вакансии по исключаемым словам (fullstack, junior, php и т.п.)
+$ hh-applicant-tool apply-similar --search "Python backend" --excluded-texts "fullstack,junior,php,java" --dry-run
+
 # Поднимаем резюме
 $ hh-applicant-tool update-resumes
 
@@ -571,7 +577,7 @@ $ hh-applicant-tool settings auth.username 'user@example.com'
 | **list-resumes**, **list**, **ls** | Список резюме                                                                                                                                                                                                              |
 | **update-resumes**, **update**     | Обновить все резюме. Аналогично нажатию кнопки «Обновить дату».                                                                                                                                                            |
 | **clone-resume** | Клонировать резюме |
-| **apply-similar**                  | Откликнуться на все подходящие вакансии СО ВСЕХ РЕЗЮМЕ. Лимит = 200 в день. На HH есть спам-фильтры, так что лучше не рассылайте отклики со ссылками, иначе рискуете попасть в теневой бан.                                |
+| **apply-similar**                  | Откликнуться на все подходящие вакансии СО ВСЕХ РЕЗЮМЕ. Лимит = 200 в день. На HH есть спам-фильтры, так что лучше не рассылайте отклики со ссылками, иначе рискуете попасть в теневой бан. Поддерживает фильтрацию по исключаемым словам через `--excluded-texts`. |
 | **reply-employers**, **reply**     | Ответить во все чаты с работодателями, где нет ответа либо не прочитали ваш предыдущий ответ                                                                                                                               |
 | **clear-negotiations**             | Отмена откликов                                                                                                                                                                                                            |
 | **call-api**, **api**              | Вызов произвольного метода API с выводом результата.                                                                                                                                                                       |
