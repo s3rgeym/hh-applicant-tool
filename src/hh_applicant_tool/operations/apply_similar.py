@@ -64,7 +64,7 @@ class Namespace(BaseNamespace):
     premium: bool
     per_page: int
     total_pages: int
-    excluded_terms: list[str]
+    excluded_terms: str | None
 
 
 class Operation(BaseOperation):
