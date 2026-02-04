@@ -593,7 +593,7 @@ $ hh-applicant-tool settings auth.username 'user@example.com'
 
 
 > [!IMPORTANT]
-> Почитайте про [язык для поисковых запросов](https://hh.ru/article/1175). Он позволяет отсеивать мусор при поиске ваканстй, например, `(Go OR Golang) NOT PHP NOT JavaScript`.
+> Почитайте про [язык для поисковых запросов](https://hh.ru/article/1175). Он позволяет отсеивать мусор при поиске подходящих вакансий, например, `(Go OR Golang) NOT PHP NOT JavaScript`.
 
 Утилита использует систему плагинов. Все они лежат в [operations](https://github.com/s3rgeym/hh-applicant-tool/tree/main/src/hh_applicant_tool/operations). Модули, расположенные там, автоматически добавляются как доступные команды. За основу для своего плагина можно взять [whoami.py](https://github.com/s3rgeym/hh-applicant-tool/tree/main/src/hh_applicant_tool/operations/whoami.py).
 
