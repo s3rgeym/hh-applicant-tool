@@ -625,7 +625,7 @@ hh-applicant-tool call-api [-m {GET|POST|PUT|DELETE}] <endpoint> [<key=value> ..
 hh-applicant-tool -vv api /areas | jq -r '.[] | select(.name == "Беларусь")'
 ```
 
-Документация для работы с API соискателей была удалена с ха-ха.сру и его корпоративного репозитория. Можете не искать, они затерли даже историю репозитория. Но я через веб-архив выкачал документацию. Чтобы ее посмотреть, клонируйте этот репозиторий и откройте файл, например, с помощью [Swagger Viewer](https://marketplace.visualstudio.com/items?itemName=Arjun.swagger-viewer).
+Документация для работы с API соискателей была удалена с ха-ха.сру и его корпоративного репозитория. Можете не искать, они затерли даже историю репозитория. Но я через веб-архив выкачал документацию. Чтобы ее посмотреть, клонируйте этот репозиторий и откройте файл `./docs/hhapi/openapi.yml`, например, с помощью [Swagger Viewer](https://marketplace.visualstudio.com/items?itemName=Arjun.swagger-viewer).
 
 <img width="740" height="768" alt="image" src="https://github.com/user-attachments/assets/597fa31e-8bab-48c8-8601-ab9dfc9075b1" />
 
