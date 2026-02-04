@@ -595,11 +595,12 @@ $ hh-applicant-tool settings auth.username 'user@example.com'
 > [!IMPORTANT]
 > Почитайте про [язык для поисковых запросов](https://hh.ru/article/1175). Он позволяет отсеивать мусор при поиске подходящих вакансий, например, `(Go OR Golang) NOT PHP NOT JavaScript`.
 
+
 Утилита использует систему плагинов. Все они лежат в [operations](https://github.com/s3rgeym/hh-applicant-tool/tree/main/src/hh_applicant_tool/operations). Модули, расположенные там, автоматически добавляются как доступные команды. За основу для своего плагина можно взять [whoami.py](https://github.com/s3rgeym/hh-applicant-tool/tree/main/src/hh_applicant_tool/operations/whoami.py).
 
 Для тестирования запросов к API используйте команду `call-api` совместно с `jq` для обработки JSON.
 
-Примеры поиска работодателей:
+Пример поиска работодателей:
 
 ```bash
 $ hh-applicant-tool call-api /employers text="IT" only_with_vacancies=true | jq -r '.items[].alternate_url'
@@ -616,7 +617,13 @@ hh-applicant-tool call-api [-m {GET|POST|PUT|DELETE}] <endpoint> [<key=value> ..
 
 Если используется метод `GET` или `DELETE` (или ничего не указано), то параметры будут переданы как query string. Во всех остальных случаях парметры передаются как `application/x-www-form-urlencoded` в теле запроса.
 
-Данная возможность полезна для написания Bash-скриптов.
+Для поиска вакансий по региону в `apply-similar` нужно указать параметр `area`. Можно его указывать как для страны (каз - 40, бел - 2238), так и отдельного города (мск - 1).
+
+Список **area id** по стране:
+
+```sh
+hh-applicant-tool -vv api /areas | jq -r '.[] | select(.name == "Беларусь")'
+```
 
 Документация для работы с API соискателей была удалена с ха-ха.сру и его корпоративного репозитория. Можете не искать, они затерли даже историю репозитория. Но я через веб-архив выкачал документацию. Чтобы ее посмотреть, клонируйте этот репозиторий и откройте файл, например, с помощью [Swagger Viewer](https://marketplace.visualstudio.com/items?itemName=Arjun.swagger-viewer).
 
