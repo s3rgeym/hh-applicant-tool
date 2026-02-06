@@ -8,6 +8,7 @@ import sys
 from collections.abc import Sequence
 from functools import cached_property
 from importlib import import_module
+from http.cookiejar import MozillaCookieJar
 from itertools import count
 from os import getenv
 from pathlib import Path
@@ -161,12 +162,16 @@ class HHApplicantTool(MegaTool):
     def session(self) -> requests.Session:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-        session = requests.session()
+        session = requests.Session()
         session.verify = False
 
         if proxies := self._get_proxies():
             logger.info("Use proxies for requests: %r", proxies)
             session.proxies = proxies
+
+        if self.cookies_file.exists():
+            jar = MozillaCookieJar(str(self.cookies_file))
+            session.cookies.update(jar)
 
         return session
 
