@@ -253,6 +253,8 @@ class Operation(BaseOperation):
                 #     "auth.refresh_token", token["expires_in"]
                 # )
 
+                await self._save_cookies(context, tool.cookies_file)
+
             finally:
                 logger.debug("Закрытие браузера")
                 await browser.close()
@@ -340,3 +342,25 @@ class Operation(BaseOperation):
 
         await page.fill(self.SELECT_CAPTCHA_INPUT, captcha_text)
         await page.press(self.SELECT_CAPTCHA_INPUT, "Enter")
+
+    async def _save_cookies(self, context, filename: str):
+        """Сохранение кук из браузерного контекста в файл формата Netscape"""
+        # Извлекаем куки напрямую из объекта context, который передали в метод
+        cookies = await context.cookies()
+        
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write("# Netscape HTTP Cookie File\n")
+            for c in cookies:
+                domain = c['domain']
+                # Netscape формат требует TRUE/FALSE для поддоменов
+                include_subdomains = "TRUE" if domain.startswith(".") else "FALSE"
+                path = c['path']
+                secure = "TRUE" if c['secure'] else "FALSE"
+                expires = int(c.get('expires', 0))
+                name = c['name']
+                value = c['value']
+                
+                line = f"{domain}\t{include_subdomains}\t{path}\t{secure}\t{expires}\t{name}\t{value}\n"
+                f.write(line)
+        
+        logger.info(f"Куки сохранены в {filename}")
