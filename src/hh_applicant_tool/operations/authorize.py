@@ -102,6 +102,7 @@ class Operation(BaseOperation):
         )
 
     def run(self, tool: HHApplicantTool) -> None:
+        # Лучше self._tool = tool
         self._args = tool.args
         try:
             asyncio.run(self._main(tool))
