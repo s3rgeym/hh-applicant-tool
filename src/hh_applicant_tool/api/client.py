@@ -63,8 +63,8 @@ class BaseClient:
 
     def _default_headers(self) -> dict[str, str]:
         return {
-            "user-agent": self.user_agent,
-            "x-hh-app-active": "true",
+            "User-Agent": self.user_agent,
+            "X-HH-App-Active": "true",
         }
 
     def request(
