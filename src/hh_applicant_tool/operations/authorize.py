@@ -357,6 +357,11 @@ class Operation(BaseOperation):
                 path = c['path']
                 secure = "TRUE" if c['secure'] else "FALSE"
                 expires = int(c.get('expires', 0))
+
+                # У браузера время жизни для сессионных кук = -1, requests же когда встречает такое значение, удаляет куки
+                if expires <= 0:
+                    expires = int(datetime.now().timestamp()) + 365 * 24 * 60 * 60
+                
                 name = c['name']
                 value = c['value']
                 
