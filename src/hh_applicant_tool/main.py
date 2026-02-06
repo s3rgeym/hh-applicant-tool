@@ -28,6 +28,7 @@ DEFAULT_CONFIG_DIR = utils.get_config_path() / (__package__ or "").replace(
 DEFAULT_CONFIG_FILENAME = "config.json"
 DEFAULT_LOG_FILENAME = "log.txt"
 DEFAULT_DATABASE_FILENAME = "data"
+DEFAULT_COOKIES_FILENAME = "cookies.txt"
 
 logger = logging.getLogger(__package__)
 
@@ -186,6 +187,10 @@ class HHApplicantTool(MegaTool):
     @cached_property
     def log_file(self) -> Path:
         return self.config_path / DEFAULT_LOG_FILENAME
+
+    @cached_property
+    def cookies_file(self) -> Path:
+        return self.config_path / DEFAULT_COOKIES_FILENAME
 
     @cached_property
     def db_path(self) -> Path:
