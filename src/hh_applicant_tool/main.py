@@ -172,9 +172,10 @@ class HHApplicantTool(MegaTool):
 
         if self.cookies_file.exists():
             jar = MozillaCookieJar(str(self.cookies_file))
-            session.cookies.update(jar)
+            jar.load(ignore_discard=True, ignore_expires=True)
+            session.cookies = jar
 
-        session.headers.update({'User-Agent': DEFAULT_DESKTOP_USER_AGENT})
+        session.headers.update({"User-Agent": DEFAULT_DESKTOP_USER_AGENT})
 
         return session
 
