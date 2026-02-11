@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from hh_applicant_tool.api.errors import ApiError
@@ -30,5 +31,9 @@ class Operation(BaseOperation):
         ...
 
     def run(self, tool: HHApplicantTool) -> None:
-        r = tool.session.get("https://stary-oskol.hh.ru/applicant/settings")
-        print(r.status_code)
+        r = tool.session.get("https://hh.ru")
+
+        if m := re.search(r'login: "([^"]+)', r.text):
+            print("Вы вошли как", m.group(1))
+        else:
+            logger.warning("Вы не авторизованы!")

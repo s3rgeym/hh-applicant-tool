@@ -268,7 +268,7 @@ class Operation(BaseOperation):
                 secure = "TRUE" if c.get("secure") else "FALSE"
 
                 # 0 означает session cookie (как ожидает MozillaCookieJar)
-                expires = int(c["expires"]) if c.get("expires") else 0
+                expires = int(c.get("expires") or 0)
 
                 line = (
                     f"{domain}\t"
