@@ -13,12 +13,11 @@ try:
 except ImportError:
     pass
 
-from ..main import BaseOperation
+from ..main import BaseOperation, DEFAULT_DESKTOP_USER_AGENT
 from ..utils.terminal import print_kitty_image, print_sixel_mage
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
-
 
 HH_ANDROID_SCHEME = "hhandroid"
 
@@ -32,341 +31,255 @@ async def ainput(prompt: str) -> str:
 
 
 class Operation(BaseOperation):
-    """Авторизация через Playwright"""
+    """Авторизация через Playwright (Web -> OAuth)"""
 
     __aliases__: list = ["authenticate", "auth", "login"]
 
     # Селекторы
-    SELECT_LOGIN_INPUT = 'input[data-qa="login-input-username"]'
-    SELECT_EXPAND_PASSWORD = 'button[data-qa="expand-login-by_password"]'
-    SELECT_PASSWORD_INPUT = 'input[data-qa="login-input-password"]'
-    SELECT_CODE_CONTAINER = 'div[data-qa="account-login-code-input"]'
-    SELECT_PIN_CODE_INPUT = 'input[data-qa="magritte-pincode-input-field"]'
-    SELECT_CAPTCHA_IMAGE = 'img[data-qa="account-captcha-picture"]'
-    SELECT_CAPTCHA_INPUT = 'input[data-qa="account-captcha-input"]'
+    SEL_SUBMIT = '[data-qa="submit-button"]'
+    SEL_RADIO_PHONE = '[data-qa="credential-type-PHONE"]'
+    SEL_RADIO_EMAIL = '[data-qa="credential-type-EMAIL"]'
+    SEL_EMAIL_INPUT = '[data-qa="applicant-login-input-email"]'
+    SEL_PHONE_INPUT = '[data-qa="magritte-phone-input-national-number-input"]'
+    SEL_EXPAND_PASSWORD = '[data-qa="expand-login-by-password"]'
+    SEL_PASSWORD_INPUT = '[data-qa="applicant-login-input-password"]'
+    SEL_EXPAND_CODE = '[data-qa="expand-login-by-code-text"]'
+    SEL_PIN_INPUT = '[data-qa="magritte-pincode-input-field"]'
+    SEL_OAUTH_ALLOW = '[data-qa="oauth-grant-allow"]'
+
+    # Селекторы капчи (на случай появления)
+    SEL_CAPTCHA_IMAGE = 'img[data-qa="account-captcha-picture"]'
+    SEL_CAPTCHA_INPUT = 'input[data-qa="account-captcha-input"]'
+
+    LOGIN_URL = (
+        "https://hh.ru/account/login?role=applicant&backurl=%2F&hhtmFrom=main"
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._args = None
+        self._tool: HHApplicantTool | None = None
+
+    @property
+    def args(self):
+        return self._tool.args
 
     @property
     def is_headless(self) -> bool:
-        """Свойство, определяющее режим работы браузера"""
-        return not self._args.no_headless and self.is_automated
+        return not self.args.no_headless and self.is_automated
 
     @property
     def is_automated(self) -> bool:
-        return not self._args.manual
+        return not self.args.manual
 
     @property
     def selector_timeout(self) -> int | None:
-        """Вспомогательное свойство для таймаутов: None если headless, иначе 500мс"""
         return None if self.is_headless else 5000
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("username", nargs="?", help="Email или телефон")
+        parser.add_argument("--password", "-p", help="Пароль для входа")
         parser.add_argument(
-            "username",
-            nargs="?",
-            help="Email или телефон",
+            "--no-headless", action="store_true", help="Показать окно браузера"
         )
         parser.add_argument(
-            "--password",
-            "-p",
-            help="Пароль для входа (если не указать, то вход будет по одноразовому коду)",
-        )
-        parser.add_argument(
-            "--no-headless",
-            "-n",
-            action="store_true",
-            help="Показать окно браузера для отладки (отключает headless режим).",
-        )
-        parser.add_argument(
-            "-m",
-            "--manual",
-            action="store_true",
-            help="Ручной режим ввода кредов, редирект будет перехвачен.",
+            "-m", "--manual", action="store_true", help="Ручной режим"
         )
         parser.add_argument(
             "-k",
             "--use-kitty",
             "--kitty",
             action="store_true",
-            help="Использовать kitty protocol для вывода капчи в терминал.",
+            help="Kitty protocol",
         )
         parser.add_argument(
             "-s",
             "--use-sixel",
             "--sixel",
             action="store_true",
-            help="Использовать sixel protocol для вывода капчи в терминал.",
+            help="Sixel protocol",
         )
 
     def run(self, tool: HHApplicantTool) -> None:
-        # Лучше self._tool = tool
-        self._args = tool.args
+        self._tool = tool
         try:
-            asyncio.run(self._main(tool))
+            asyncio.run(self._main())
         except (KeyboardInterrupt, asyncio.TimeoutError):
-            # _executor.shutdown(wait=False, cancel_futures=True)
-            logger.warning("Что-то пошло не так")
-            # os._exit(1)
+            logger.warning("Операция прервана")
             return 1
 
-    async def _main(self, tool: HHApplicantTool) -> None:
-        args = tool.args
-        api_client = tool.api_client
-        storage = tool.storage
+    async def _main(self) -> None:
+        api_client = self._tool.api_client
+        storage = self._tool.storage
 
         if self.is_automated:
             username = (
-                args.username
+                self.args.username
                 or storage.settings.get_value("auth.username")
                 or (await ainput("👤 Введите email или телефон: "))
             ).strip()
-
             if not username:
                 raise RuntimeError("Empty username")
 
-            logger.debug(f"authenticate with: {username}")
-
-        proxies = api_client.proxies
-        proxy_url = proxies.get("https")
-
-        chromium_args: list[str] = []
-        if proxy_url:
-            chromium_args.append(f"--proxy-server={proxy_url}")
-            logger.debug(f"Используется прокси: {proxy_url}")
-
-        if self.is_headless:
-            logger.debug("Headless режим активен")
-
         async with async_playwright() as pw:
-            logger.debug("Запуск браузера...")
+            browser = await pw.chromium.launch(headless=self.is_headless)
+            context = await browser.new_context(
+                user_agent=DEFAULT_DESKTOP_USER_AGENT
+            )
+            page = await context.new_page()
 
-            browser = await pw.chromium.launch(
-                headless=self.is_headless,
-                args=chromium_args,
+            # 1. Переход на страницу входа
+            logger.debug(f"Переход на {self.LOGIN_URL}")
+            await page.goto(self.LOGIN_URL, wait_until="load")
+
+            # 2. Нажимаем на сабмит
+            await page.click(self.SEL_SUBMIT)
+
+            # 3. Ждем 3 секунды (не полагаемся на селекторы, так как HH может менять дефолтный ввод)
+            await asyncio.sleep(3)
+
+            # 4. Выбор типа логина и ввод
+            if "@" in username:
+                logger.debug(f"Переключение на ввод email и ввод: {username}")
+                await page.check(self.SEL_RADIO_EMAIL, force=True)
+                await page.fill(self.SEL_EMAIL_INPUT, username)
+            else:
+                logger.debug(f"Вводим телефон: {username}")
+                await page.fill(self.SEL_PHONE_INPUT, username)
+
+            # 5. Клик по кнопке пароля
+            await page.click(self.SEL_EXPAND_PASSWORD)
+
+            password = self.args.password or storage.settings.get_value(
+                "auth.password"
             )
 
+            if password:
+                # 6а. Ввод пароля и сабмит
+                await page.wait_for_selector(self.SEL_PASSWORD_INPUT)
+                await page.fill(self.SEL_PASSWORD_INPUT, password)
+                await page.click(self.SEL_SUBMIT)
+            else:
+                # 6б. Вход по коду
+                await page.click(self.SEL_EXPAND_CODE)
+                await page.wait_for_selector(self.SEL_PIN_INPUT)
+                print("📨 Код отправлен. Проверьте почту или SMS.")
+                code = (await ainput("📩 Введите полученный код: ")).strip()
+                await page.fill(self.SEL_PIN_INPUT, code)
+                await page.press(self.SEL_PIN_INPUT, "Enter")
+
+            # 7. Проверка авторизации (редирект на главную)
             try:
-                # https://github.com/microsoft/playwright/blob/main/packages/playwright-core/src/server/deviceDescriptorsSource.json
-                android_device = pw.devices["Galaxy A55"]
-                context = await browser.new_context(**android_device)
-                page = await context.new_page()
-
-                # async def route_handler(route):
-                #      req = route.request
-                #      url = req.url.lower()
-
-                #      # Блокировка сканирования локальных портов
-                #      if any(d in url for d in ["localhost", "127.0.0.1", "::1"]):
-                #           logger.debug(f"🛑  Блокировка запроса на локальный порт: {url}")
-                #           return await route.abort()
-
-                #      # Оптимизация трафика в headless
-                #      if is_headless and req.resource_type in [
-                #           "image",
-                #           "stylesheet",
-                #           "font",
-                #           "media",
-                #      ]:
-                #           return await route.abort()
-
-                #      await route.continue_()
-
-                # почему-то добавление этого обработчика вешает все
-                # await page.route("**/*", route_handler)
-
-                code_future: asyncio.Future[str | None] = asyncio.Future()
-
-                def handle_request(request):
-                    url = request.url
-                    if url.startswith(f"{HH_ANDROID_SCHEME}://"):
-                        logger.info(f"Перехвачен OAuth redirect: {url}")
-                        if not code_future.done():
-                            sp = urlsplit(url)
-                            code = parse_qs(sp.query).get("code", [None])[0]
-                            code_future.set_result(code)
-
-                page.on("request", handle_request)
-
-                logger.debug(
-                    f"Переход на страницу OAuth: {api_client.oauth_client.authorize_url}"
+                await page.wait_for_url(
+                    lambda url: "/account/login" not in url, timeout=3000
                 )
-                await page.goto(
-                    api_client.oauth_client.authorize_url,
-                    timeout=30000,
-                    wait_until="load",
-                )
+                logger.info("Успешная авторизация в веб-интерфейсе")
+            except Exception as ex:
+                raise RuntimeError(
+                    "Авторизация не удалась: редирект на hh.ru не выполнен"
+                ) from ex
 
-                if self.is_automated:
-                    logger.debug(
-                        f"Ожидание поля логина {self.SELECT_LOGIN_INPUT}"
+            await self._save_cookies(context)
+
+            # 8. OAuth этап
+            code_future: asyncio.Future[str | None] = asyncio.Future()
+
+            def handle_request(request):
+                if request.url.startswith(f"{HH_ANDROID_SCHEME}://"):
+                    if not code_future.done():
+                        sp = urlsplit(request.url)
+                        code = parse_qs(sp.query).get("code", [None])[0]
+                        code_future.set_result(code)
+
+            page.on("request", handle_request)
+
+            logger.debug("Переход на страницу OAuth")
+            await page.goto(
+                api_client.oauth_client.authorize_url, wait_until="load"
+            )
+
+            # 9. Нажимаем "Разрешить"
+            await page.wait_for_selector(self.SEL_OAUTH_ALLOW)
+            await page.click(self.SEL_OAUTH_ALLOW)
+
+            # 10. Ждем код
+            auth_code = await asyncio.wait_for(code_future, timeout=30.0)
+
+            # Финализация
+            token = await asyncio.to_thread(
+                api_client.oauth_client.authenticate, auth_code
+            )
+            api_client.handle_access_token(token)
+
+            print("🔓 Авторизация прошла успешно!")
+
+            if self.is_automated:
+                storage.settings.set_value("auth.username", username)
+                if self.args.password:
+                    storage.settings.set_value(
+                        "auth.password", self.args.password
                     )
-                    await page.wait_for_selector(
-                        self.SELECT_LOGIN_INPUT, timeout=self.selector_timeout
-                    )
-                    await page.fill(self.SELECT_LOGIN_INPUT, username)
-                    logger.debug("Логин введен")
-
-                    password = args.password or storage.settings.get_value(
-                        "auth.password"
-                    )
-                    if password:
-                        await self._direct_login(page, password)
-                    else:
-                        await self._onetime_code_login(page)
-
-                logger.debug("Ожидание OAuth-кода...")
-
-                auth_code = await asyncio.wait_for(
-                    code_future, timeout=[None, 30.0][self.is_automated]
-                )
-
-                page.remove_listener("request", handle_request)
-
-                logger.debug("Код получен, пробуем получить токен...")
-                token = await asyncio.to_thread(
-                    api_client.oauth_client.authenticate,
-                    auth_code,
-                )
-                api_client.handle_access_token(token)
-
-                print("🔓 Авторизация прошла успешно!")
-
-                # Сохраняем логин и пароль
-                if self.is_automated:
-                    storage.settings.set_value("auth.username", username)
-                    if args.password:
-                        storage.settings.set_value(
-                            "auth.password", args.password
-                        )
-
                 storage.settings.set_value("auth.last_login", datetime.now())
 
-                # storage.settings.set_value(
-                #     "auth.access_token", token["access_token"]
-                # )
-                # storage.settings.set_value(
-                #     "auth.refresh_token", token["refresh_token"]
-                # )
-                # storage.settings.set_value(
-                #     "auth.refresh_token", token["expires_in"]
-                # )
-
-                await self._save_cookies(context, tool.cookies_file)
-
-            finally:
-                logger.debug("Закрытие браузера")
-                await browser.close()
-
-    async def _direct_login(self, page, password: str) -> None:
-        logger.info("Вход по паролю...")
-
-        logger.debug(
-            f"Клик по кнопке развертывания пароля: {self.SELECT_EXPAND_PASSWORD}"
-        )
-        await page.click(self.SELECT_EXPAND_PASSWORD)
-
-        await self._handle_captcha(page)
-
-        logger.debug(f"Ожидание поля пароля: {self.SELECT_PASSWORD_INPUT}")
-        await page.wait_for_selector(
-            self.SELECT_PASSWORD_INPUT, timeout=self.selector_timeout
-        )
-        await page.fill(self.SELECT_PASSWORD_INPUT, password)
-        await page.press(self.SELECT_PASSWORD_INPUT, "Enter")
-        logger.debug("Форма с паролем отправлена")
-
-    async def _onetime_code_login(self, page) -> None:
-        logger.info("Вход по одноразовому коду...")
-
-        await page.press(self.SELECT_LOGIN_INPUT, "Enter")
-
-        await self._handle_captcha(page)
-
-        logger.debug(
-            f"Ожидание контейнера ввода кода: {self.SELECT_CODE_CONTAINER}"
-        )
-
-        await page.wait_for_selector(
-            self.SELECT_CODE_CONTAINER, timeout=self.selector_timeout
-        )
-
-        print("📨 Код был отправлен. Проверьте почту или SMS.")
-        code = (await ainput("📩 Введите полученный код: ")).strip()
-
-        if not code:
-            raise RuntimeError("Код подтверждения не может быть пустым.")
-
-        logger.debug(f"Ввод кода в {self.SELECT_PIN_CODE_INPUT}")
-        await page.fill(self.SELECT_PIN_CODE_INPUT, code)
-        await page.press(self.SELECT_PIN_CODE_INPUT, "Enter")
-        logger.debug("Форма с кодом отправлена")
+            await browser.close()
 
     async def _handle_captcha(self, page):
         try:
             captcha_element = await page.wait_for_selector(
-                self.SELECT_CAPTCHA_IMAGE,
-                timeout=self.selector_timeout,
-                state="visible",
+                self.SEL_CAPTCHA_IMAGE, timeout=2000, state="visible"
             )
         except Exception:
-            logger.debug("Капчи нет, продолжаем как обычно.")
             return
 
-        if not (self._args.use_kitty or self._args.use_sixel):
+        if not (self.args.use_kitty or self.args.use_sixel):
             raise RuntimeError(
-                "Требуется ввод капчи!",
+                "Требуется ввод капчи! Используйте --kitty или --sixel."
             )
 
-        # box = await captcha_element.bounding_box()
-
-        # width = int(box["width"])
-        # height = int(box["height"])
-
         img_bytes = await captcha_element.screenshot()
-
-        print(
-            "Если вы не видите картинку ниже, то ваш терминал не поддерживает"
-            " вывод изображений."
-        )
-        print()
-
-        if self._args.use_kitty:
+        if self.args.use_kitty:
             print_kitty_image(img_bytes)
-
-        if self._args.use_sixel:
+        elif self.args.use_sixel:
             print_sixel_mage(img_bytes)
 
-        captcha_text = (await ainput("Введите текст с картинки: ")).strip()
+        captcha_text = (await ainput("Введите текст с капчи: ")).strip()
+        await page.fill(self.SEL_CAPTCHA_INPUT, captcha_text)
+        await page.press(self.SEL_CAPTCHA_INPUT, "Enter")
 
-        await page.fill(self.SELECT_CAPTCHA_INPUT, captcha_text)
-        await page.press(self.SELECT_CAPTCHA_INPUT, "Enter")
-
-    async def _save_cookies(self, context, filename: str):
-        """Сохранение кук из браузерного контекста в файл формата Netscape"""
-        # Извлекаем куки напрямую из объекта context, который передали в метод
+    async def _save_cookies(self, context):
+        filename = self._tool.cookies_file
         cookies = await context.cookies()
-        
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write("# Netscape HTTP Cookie File\n")
-            for c in cookies:
-                domain = c['domain']
-                # Netscape формат требует TRUE/FALSE для поддоменов
-                include_subdomains = "TRUE" if domain.startswith(".") else "FALSE"
-                path = c['path']
-                secure = "TRUE" if c['secure'] else "FALSE"
-                expires = int(c.get('expires', 0))
 
-                # У браузера время жизни для сессионных кук = -1, requests же когда встречает такое значение, удаляет куки
-                if expires <= 0:
-                    expires = int(datetime.now().timestamp()) + 365 * 24 * 60 * 60
-                
-                name = c['name']
-                value = c['value']
-                
-                line = f"{domain}\t{include_subdomains}\t{path}\t{secure}\t{expires}\t{name}\t{value}\n"
+        with open(filename, "w", encoding="utf-8") as f:
+            # Обязательный заголовок Netscape-формата
+            f.write("# Netscape HTTP Cookie File\n")
+            f.write("# This is a generated file! Do not edit.\n")
+
+            for c in cookies:
+                domain = c["domain"]
+
+                # HttpOnly поддержка
+                if c.get("httpOnly"):
+                    domain = "#HttpOnly_" + domain
+
+                include_subdomains = (
+                    "TRUE" if c["domain"].startswith(".") else "FALSE"
+                )
+
+                secure = "TRUE" if c.get("secure") else "FALSE"
+
+                # 0 означает session cookie (как ожидает MozillaCookieJar)
+                expires = int(c["expires"]) if c.get("expires") else 0
+
+                line = (
+                    f"{domain}\t"
+                    f"{include_subdomains}\t"
+                    f"{c['path']}\t"
+                    f"{secure}\t"
+                    f"{expires}\t"
+                    f"{c['name']}\t"
+                    f"{c['value']}\n"
+                )
+
                 f.write(line)
-        
+
         logger.info(f"Куки сохранены в {filename}")
