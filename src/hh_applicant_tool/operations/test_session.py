@@ -30,8 +30,5 @@ class Operation(BaseOperation):
         ...
 
     def run(self, tool: HHApplicantTool) -> None:
-        r = tool.session.get("https://hh.ru/")
-        for header, value in r.headers.items():
-            print(f"{header}:\t{value}")
-        print()
-        print(r.text)
+        r = tool.session.get("https://stary-oskol.hh.ru/applicant/settings")
+        print(r.status_code)

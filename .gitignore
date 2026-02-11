@@ -85,5 +85,7 @@ docker/
 # Vim
 .vim/
 
-# Конфиг, который создает докер
-/config
+# Содержимое config кроме .gitkeep игнорируется
+/config/*
+!/config/.gitkeep
+
