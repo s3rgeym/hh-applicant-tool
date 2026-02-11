@@ -6,8 +6,6 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
-from hh_applicant_tool.api.errors import ApiError
-
 from ..main import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:
@@ -33,7 +31,7 @@ class Operation(BaseOperation):
     def run(self, tool: HHApplicantTool) -> None:
         r = tool.session.get("https://hh.ru")
 
-        if m := re.search(r'login: "([^"]+)', r.text):
+        if m := re.search(r'^\s+login: "([^"]+)', r.text, re.MULTILINE):
             print("Вы вошли как", m.group(1))
         else:
             logger.warning("Вы не авторизованы!")
