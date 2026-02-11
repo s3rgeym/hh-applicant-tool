@@ -7,8 +7,8 @@ import sqlite3
 import sys
 from collections.abc import Sequence
 from functools import cached_property
-from importlib import import_module
 from http.cookiejar import MozillaCookieJar
+from importlib import import_module
 from itertools import count
 from os import getenv
 from pathlib import Path
@@ -178,6 +178,14 @@ class HHApplicantTool(MegaTool):
         session.headers.update({"User-Agent": DEFAULT_DESKTOP_USER_AGENT})
 
         return session
+
+    @property
+    def is_logged_in(self) -> bool:
+        """Проверяет авторизован ли пользователь через сайт."""
+        return (
+            self.session.get("https://hh.ru/applicant/settings").status_code
+            == 200
+        )
 
     @cached_property
     def config_path(self) -> Path:
