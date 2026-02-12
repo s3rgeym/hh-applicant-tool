@@ -462,6 +462,8 @@ class Operation(BaseOperation):
 
                     logger.debug(response_letter)
 
+                logger.debug("Пробуем откликнуться на вакансию: %s", vacancy['alternate_url'])
+
                 if vacancy.get("has_test"):
                     logger.debug(
                         "Решаем тест: %s",
