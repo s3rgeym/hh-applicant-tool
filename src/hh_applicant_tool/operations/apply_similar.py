@@ -6,6 +6,8 @@ import random
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator
 
+import requests
+
 from ..ai.base import AIError
 from ..api import BadResponse, Redirect, datatypes
 from ..api.datatypes import PaginatedItems, SearchVacancy
@@ -15,7 +17,6 @@ from ..storage.repositories.errors import RepositoryError
 from ..utils.string import (
     bool2str,
     rand_text,
-    shorten,
     unescape_string,
 )
 
@@ -339,7 +340,11 @@ class Operation(BaseOperation):
         user: datatypes.User,
         seen_employers: set[str],
     ) -> None:
-        logger.info("Начинаю рассылку откликов для резюме: %s (%s)", resume["alternate_url"], resume["title"])
+        logger.info(
+            "Начинаю рассылку откликов для резюме: %s (%s)",
+            resume["alternate_url"],
+            resume["title"],
+        )
         print("🚀 Начинаю рассылку откликов для резюме:", resume["title"])
 
         placeholders = {
@@ -395,11 +400,20 @@ class Operation(BaseOperation):
                 if not do_apply:
                     continue
 
-                if vacancy.get("has_test"):
+                vacancy_id = vacancy["id"]
+                relations = vacancy.get("relations", [])
+
+                if relations:
                     logger.debug(
-                        "Пропускаем вакансию с тестом: %s",
+                        "Пропускаем вакансию с откликом: %s",
                         vacancy["alternate_url"],
                     )
+                    if "got_rejection" in relations:
+                        logger.debug(
+                            "Вы получили отказ от %s",
+                            vacancy["alternate_url"],
+                        )
+                        print("⛔ Пришел отказ от", vacancy["alternate_url"])
                     continue
 
                 if vacancy.get("archived"):
@@ -417,32 +431,14 @@ class Operation(BaseOperation):
                     )
                     continue
 
-                vacancy_id = vacancy["id"]
-
-                relations = vacancy.get("relations", [])
-
-                if relations:
-                    logger.debug(
-                        "Пропускаем вакансию с откликом: %s",
+                if self._is_excluded(vacancy):
+                    logger.warning(
+                        "Вакансия содержит недопустимые словосочетания: %s",
                         vacancy["alternate_url"],
                     )
-                    if "got_rejection" in relations:
-                        logger.debug(
-                            "Вы получили отказ от %s",
-                            vacancy["alternate_url"],
-                        )
-                        print("⛔ Пришел отказ от", vacancy["alternate_url"])
                     continue
 
-                if self._is_excluded(vacancy):
-                    logger.warning("Вакансия содержит недопустимые словосочетания: %s",vacancy["alternate_url"])
-                    continue
-
-                params = {
-                    "resume_id": resume["id"],
-                    "vacancy_id": vacancy_id,
-                    "message": "",
-                }
+                response_letter = ""
 
                 if self.force_message or vacancy.get(
                     "response_letter_required"
@@ -457,48 +453,81 @@ class Operation(BaseOperation):
                             "Мое резюме:" + message_placeholders["resume_title"]
                         )
                         logger.debug("prompt: %s", msg)
-                        msg = self.openai_chat.send_message(msg)
+                        response_letter = self.openai_chat.send_message(msg)
                     else:
-                        msg = unescape_string(
+                        response_letter = unescape_string(
                             rand_text(random.choice(self.application_messages))
                             % message_placeholders
                         )
 
-                    logger.debug(msg)
-                    params["message"] = msg
+                    logger.debug(response_letter)
 
-                try:
-                    if not self.dry_run:
-                        res = self.api_client.post(
-                            "/negotiations",
-                            params,
-                            delay=random.uniform(1, 3),
-                        )
-                        assert res == {}
-                        logger.debug("Откликнулись на %s", vacancy["alternate_url"])
-                    print(
-                        "📨 Отправили отклик для резюме",
-                        resume["alternate_url"],
-                        "на вакансию",
+                if vacancy.get("has_test"):
+                    logger.debug(
+                        "Решаем тест: %s",
                         vacancy["alternate_url"],
-                        "(",
-                        shorten(vacancy["name"]),
-                        ")",
                     )
-                except Redirect:
-                    logger.warning(
-                        f"Игнорирую перенаправление на форму: {vacancy['alternate_url']}"  # noqa: E501
-                    )
+
+                    try:
+                        if not self.dry_run:
+                            result = self.tool.solve_vacancy_test(
+                                vacancy_id=vacancy["id"],
+                                resume_hash=resume["id"],
+                                letter=response_letter,
+                            )
+                            if result.get("success") == "true":
+                                print(
+                                    "📨 Отправили отклик на вакансию с тестом",
+                                    vacancy["alternate_url"],
+                                )
+                            else:
+                                err = result.get("error")
+
+                                if err == "negotiations-limit-exceeded":
+                                    do_apply = False
+                                    logger.warning("Достигли лимита на отклики")
+                                else:
+                                    logger.error(
+                                        f"Произошла ошибка при отклике на вакансию с тестом: {vacancy['alternate_url']} - {err}"
+                                    )
+                    except requests.RequestException as ex:
+                        logger.error(f"Во время запроса произошла ошибка: {ex}")
+
+                else:
+                    params = {
+                        "resume_id": resume["id"],
+                        "vacancy_id": vacancy_id,
+                        "message": response_letter,
+                    }
+                    try:
+                        if not self.dry_run:
+                            res = self.api_client.post(
+                                "/negotiations",
+                                params,
+                                delay=random.uniform(1, 3),
+                            )
+                            assert res == {}
+                            print(
+                                "📨 Отправили отклик для на вакансию",
+                                vacancy["alternate_url"],
+                            )
+                    except Redirect:
+                        logger.warning(
+                            f"Игнорирую перенаправление на форму: {vacancy['alternate_url']}"  # noqa: E501
+                        )
             except LimitExceeded:
-                logger.info("Достигли лимита на отклики для резюме: %s", resume["alternate_url"])
-                print("⚠️ Достигли лимита рассылки для резюме", resume["alternate_url"])
                 do_apply = False
+                logger.warning("Достигли лимита на отклики")
             except ApiError as ex:
                 logger.warning(ex)
             except (BadResponse, AIError) as ex:
                 logger.error(ex)
 
-        logger.info("Закончили рассылку откликов для резюме: %s (%s)", resume["alternate_url"], resume["title"])
+        logger.info(
+            "Закончили рассылку откликов для резюме: %s (%s)",
+            resume["alternate_url"],
+            resume["title"],
+        )
         print("✅️ Закончили рассылку откликов для резюме:", resume["title"])
 
     def _get_search_params(self, page: int) -> dict:
