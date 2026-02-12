@@ -15,6 +15,7 @@ from itertools import count
 from os import getenv
 from pathlib import Path
 from pkgutil import iter_modules
+from string import ascii_letters, digits
 from typing import Any, Iterable
 
 import requests
@@ -336,7 +337,10 @@ class HHApplicantTool(MegaTool):
             if solutions:
                 payload[field_name] = random.choice(solutions)["id"]
             else:
-                payload[f"{field_name}_text"] = "q" * random.randint(10, 15)
+                payload[f"{field_name}_text"] = "".join(
+                    random.choice(ascii_letters + digits)
+                    for _ in range(random.randint(5, 15))
+                )
 
         logger.debug(f"{payload = }")
 
