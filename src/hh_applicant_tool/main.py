@@ -308,8 +308,7 @@ class HHApplicantTool(MegaTool):
             tests, xsrf_token = self._get_vacancy_tests(response_url)
             test_data = tests[str(vacancy_id)]
         except IndexError:
-            logger.error("Ошибка парсинга тестов.")
-            return False
+            return {"error": "tests not found"}
 
         logger.debug(f"{test_data = }")
 
