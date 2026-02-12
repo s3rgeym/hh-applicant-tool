@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import random
 import sqlite3
 import sys
+import time
 from collections.abc import Sequence
 from functools import cached_property
 from http.cookiejar import MozillaCookieJar
@@ -18,7 +20,7 @@ from typing import Any, Iterable
 import requests
 import urllib3
 
-from . import ai, api, utils
+from . import ai, api, datatypes, utils
 from .storage import StorageFacade
 from .utils.log import setup_logger
 from .utils.mixins import MegaTool
@@ -280,6 +282,94 @@ class HHApplicantTool(MegaTool):
             if page + 1 >= r.get("pages", 0):
                 break
 
+    def _get_vacancy_tests(
+        self, response_url: str
+    ) -> tuple[datatypes.VacancyTestsData, str]:
+        r = self.session.get(response_url)
+        content = r.text
+        tests = utils.json.loads(
+            content.split(',"vacancyTests":')[1].split(',"counters":')[0],
+            strict=False,
+        )
+        xsrf_token = content.split('"xsrfToken":"')[1].split('"')[0]
+        return tests, xsrf_token
+
+    def solve_vacancy_test(
+        self,
+        vacancy_id: str | int,
+        resume_hash: str,
+        letter: str = "",
+    ) -> bool:
+        """Загружает тест, ждет паузу и отправляет отклик."""
+        response_url = f"https://hh.ru/applicant/vacancy_response?vacancyId={vacancy_id}&startedWithQuestion=false&hhtmFrom=vacancy"
+
+        try:
+            # Загружаем данные теста и токен
+            tests, xsrf_token = self._get_vacancy_tests(response_url)
+            test_data = tests[str(vacancy_id)]
+        except IndexError:
+            logger.error("Ошибка парсинга тестов.")
+            return False
+
+        logger.debug(f"{test_data = }")
+
+        payload: dict[str, Any] = {
+            "_xsrf": xsrf_token,
+            "uidPk": test_data["uidPk"],
+            "guid": test_data["guid"],
+            "startTime": test_data["startTime"],
+            "testRequired": test_data["required"],
+            "vacancy_id": vacancy_id,
+            "resume_hash": resume_hash,
+            "ignore_postponed": "true",
+            "incomplete": "false",
+            "mark_applicant_visible_in_vacancy_country": "false",
+            "country_ids": "[]",
+            "lux": "true",
+            "withoutTest": "no",
+            "letter": letter,
+        }
+
+        for task in test_data["tasks"]:
+            field_name = f"task_{task['id']}"
+            solutions = task.get("candidateSolutions", [])
+
+            if solutions:
+                payload[field_name] = random.choice(solutions)["id"]
+            else:
+                payload[f"{field_name}_text"] = "q" * random.randint(10, 15)
+
+        logger.debug(f"{payload = }")
+
+        # Ожидание перед отправкой (float)
+        time.sleep(random.uniform(2.0, 3.0))
+
+        response = self.session.post(
+            "https://hh.ru/applicant/vacancy_response/popup",
+            data=payload,
+            headers={
+                "Referer": response_url,
+                # x-gib-fgsscgib-w-hh и x-gib-gsscgib-w-hh вроде в куках
+                # передаются и не нужны
+                "X-Hhtmfrom": "vacancy",
+                "X-Hhtmsource": "vacancy_response",
+                "X-Requested-With": "XMLHttpRequest",
+                "X-Xsrftoken": xsrf_token,
+            },
+        )
+
+        logger.debug(
+            "%s %s %d",
+            response.request.method,
+            response.url,
+            response.status_code,
+        )
+
+        data = response.json()
+        # logger.debug(data)
+
+        return data
+
     # TODO: добавить еще методов или те удалить?
 
     def save_token(self) -> bool:
@@ -289,6 +379,19 @@ class HHApplicantTool(MegaTool):
             self.config.save(token=self.api_client.get_access_token())
             return True
         return False
+
+    def save_cookies(self) -> None:
+        """Сохраняет текущие куки сессии в файл."""
+        if not self.session.cookies:
+            return
+
+        if isinstance(self.session.cookies, MozillaCookieJar):
+            self.session.cookies.save(ignore_discard=True, ignore_expires=True)
+            logger.debug("Cookies saved to %s", self.cookies_file)
+        else:
+            logger.warning(
+                f"Сессионные куки имеют неправильный тип: {type(self.session.cookies)}"
+            )
 
     def get_openai_chat(self, system_prompt: str) -> ai.ChatOpenAI:
         c = self.config.get("openai", {})
@@ -346,6 +449,11 @@ class HHApplicantTool(MegaTool):
                     # Токен мог автоматически обновиться
                     if self.save_token():
                         logger.info("Токен был сохранен после обновления.")
+
+                    try:
+                        self.save_cookies()
+                    except Exception as ex:
+                        logger.error(f"Не удалось сохранить cookies: {ex}")
                 return 1
             self._parser.print_help(file=sys.stderr)
             return 2
