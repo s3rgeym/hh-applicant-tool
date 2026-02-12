@@ -1,3 +1,4 @@
+# Дополнительные тайпхинты
 from typing import TypedDict
 
 

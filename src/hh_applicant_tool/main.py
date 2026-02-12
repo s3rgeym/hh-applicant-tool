@@ -3,11 +3,8 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-import random
 import sqlite3
-import string
 import sys
-import time
 from collections.abc import Sequence
 from functools import cached_property
 from http.cookiejar import MozillaCookieJar
@@ -21,7 +18,7 @@ from typing import Any, Iterable
 import requests
 import urllib3
 
-from . import ai, api, datatypes, utils
+from . import ai, api, utils
 from .storage import StorageFacade
 from .utils.log import setup_logger
 from .utils.mixins import MegaTool
@@ -282,100 +279,6 @@ class HHApplicantTool(MegaTool):
 
             if page + 1 >= r.get("pages", 0):
                 break
-
-    def _get_vacancy_tests(
-        self, response_url: str
-    ) -> tuple[datatypes.VacancyTestsData, str]:
-        r = self.session.get(response_url)
-        content = r.text
-        tests = utils.json.loads(
-            content.split(',"vacancyTests":')[1].split(',"counters":')[0],
-            strict=False,
-        )
-        xsrf_token = content.split('"xsrfToken":"')[1].split('"')[0]
-        return tests, xsrf_token
-
-    def solve_vacancy_test(
-        self,
-        vacancy_id: str | int,
-        resume_hash: str,
-        letter: str = "",
-    ) -> dict[str, Any]:
-        """Загружает тест, ждет паузу и отправляет отклик."""
-        response_url = f"https://hh.ru/applicant/vacancy_response?vacancyId={vacancy_id}&startedWithQuestion=false&hhtmFrom=vacancy"
-
-        try:
-            # Загружаем данные теста и токен
-            tests, xsrf_token = self._get_vacancy_tests(response_url)
-            test_data = tests[str(vacancy_id)]
-        except IndexError:
-            return {"error": "tests not found"}
-
-        logger.debug(f"{test_data = }")
-
-        payload: dict[str, Any] = {
-            "_xsrf": xsrf_token,
-            "uidPk": test_data["uidPk"],
-            "guid": test_data["guid"],
-            "startTime": test_data["startTime"],
-            "testRequired": test_data["required"],
-            "vacancy_id": vacancy_id,
-            "resume_hash": resume_hash,
-            "ignore_postponed": "true",
-            "incomplete": "false",
-            "mark_applicant_visible_in_vacancy_country": "false",
-            "country_ids": "[]",
-            "lux": "true",
-            "withoutTest": "no",
-            "letter": letter,
-        }
-
-        for task in test_data["tasks"]:
-            field_name = f"task_{task['id']}"
-            solutions = task.get("candidateSolutions", [])
-
-            if solutions:
-                payload[field_name] = random.choice(solutions)["id"]
-            else:
-                # Рандомные эмоджи
-                # payload[f"{field_name}_text"] = "".join(
-                #     chr(random.randint(0x1F300, 0x1F64F))
-                #     for _ in range(random.randint(3, 15))
-                # )
-                payload[f"{field_name}_text"] = random.choice(
-                    string.ascii_lowercase + string.digits
-                ) * random.randint(5, 35)
-
-        logger.debug(f"{payload = }")
-
-        # Ожидание перед отправкой (float)
-        time.sleep(random.uniform(2.0, 3.0))
-
-        response = self.session.post(
-            "https://hh.ru/applicant/vacancy_response/popup",
-            data=payload,
-            headers={
-                "Referer": response_url,
-                # x-gib-fgsscgib-w-hh и x-gib-gsscgib-w-hh вроде в куках
-                # передаются и не нужны
-                "X-Hhtmfrom": "vacancy",
-                "X-Hhtmsource": "vacancy_response",
-                "X-Requested-With": "XMLHttpRequest",
-                "X-Xsrftoken": xsrf_token,
-            },
-        )
-
-        logger.debug(
-            "%s %s %d",
-            response.request.method,
-            response.url,
-            response.status_code,
-        )
-
-        data = response.json()
-        # logger.debug(data)
-
-        return data
 
     # TODO: добавить еще методов или те удалить?
 
