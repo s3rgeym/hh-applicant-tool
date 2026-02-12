@@ -299,7 +299,7 @@ class HHApplicantTool(MegaTool):
         vacancy_id: str | int,
         resume_hash: str,
         letter: str = "",
-    ) -> bool:
+    ) -> dict[str, Any]:
         """Загружает тест, ждет паузу и отправляет отклик."""
         response_url = f"https://hh.ru/applicant/vacancy_response?vacancyId={vacancy_id}&startedWithQuestion=false&hhtmFrom=vacancy"
 
