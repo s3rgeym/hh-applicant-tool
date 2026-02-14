@@ -541,21 +541,31 @@ class Operation(BaseOperation):
     def _get_vacancy_tests(
         self, response_url: str
     ) -> tuple[VacancyTestsData, str]:
-        """Парсит данные тестов и XSRF токен через сплиты с обработкой исключений 🤖"""
+        """Парсит тесты и xsrf-токен."""
         r = self.tool.session.get(response_url)
 
+        tests_prefix = ',"vacancyTests":'
+        xsrf_token_prefix = '"xsrfToken":"'
+
+        start_tests = r.text.find(tests_prefix)
+        end_tests = r.text.find(',"counters":', start_tests)
+
+        start_token = r.text.find(xsrf_token_prefix)
+        end_token = r.text.find('"', start_token + len(xsrf_token_prefix))
+
+        if -1 in (start_tests, end_tests, start_token, end_token):
+            raise ValueError("Не удалось найти тесты или xsrf-токен.")
+
         try:
-            # Парсим тесты и токен через сплиты
-            tests = utils.json.loads(
-                r.text.split(',"vacancyTests":')[1].split(',"counters":')[0],
-                strict=False,
+            return (
+                utils.json.loads(
+                    r.text[start_tests + len(tests_prefix) : end_tests],
+                    strict=False,
+                ),
+                r.text[start_token + len(xsrf_token_prefix) : end_token],
             )
-            xsrf_token = r.text.split('"xsrfToken":"')[1].split('"')[0]
-
-            return tests, xsrf_token
-
-        except (IndexError, json.JSONDecodeError):
-            raise ValueError("Не удалось извлечь данные теста из ответа HH")
+        except json.JSONDecodeError as ex:
+            raise ValueError("Не могу распарсить vacancyTests.") from ex
 
     def _solve_vacancy_test(
         self,
@@ -567,14 +577,12 @@ class Operation(BaseOperation):
         response_url = f"https://hh.ru/applicant/vacancy_response?vacancyId={vacancy_id}&startedWithQuestion=false&hhtmFrom=vacancy"
 
         # Загружаем данные теста и токен
-        tests, xsrf_token = self._get_vacancy_tests(response_url)
+        tests_data, xsrf_token = self._get_vacancy_tests(response_url)
 
         try:
-            test_data = tests[str(vacancy_id)]
-        except KeyError:
-            raise ValueError(
-                "Отсутствуют данные теста для непосредственно вакансии."
-            )
+            test_data = tests_data[str(vacancy_id)]
+        except KeyError as ex:
+            raise ValueError("Отсутствуют данные теста для вакансии.") from ex
 
         logger.debug(f"{test_data = }")
 
