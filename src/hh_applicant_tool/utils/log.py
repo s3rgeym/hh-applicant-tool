@@ -94,7 +94,8 @@ def setup_logger(
     file_handler = RotatingFileHandler(
         log_file,
         maxBytes=MAX_LOG_SIZE,
-        # backupCount=1,
+        # Без ротации файл будет бесконечно расти, а размер не будет ограничваться
+        backupCount=1,
         encoding="utf-8",
     )
     file_handler.setFormatter(
