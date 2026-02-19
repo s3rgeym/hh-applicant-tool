@@ -317,6 +317,21 @@ class HHApplicantTool(MegaTool):
             session=self.session,
         )
 
+    def extract_xsrf_token(self, content: str) -> str:
+        xsrf_token_marker = ',"xsrfToken":"'
+        s1 = content.find(xsrf_token_marker)
+        if s1 == -1:
+            raise ValueError("xsrf token not found")
+        s1 += len(xsrf_token_marker)
+        s2 = content.find('"', s1)
+        if s2 == -1:
+            raise ValueError("malformed xsrf token")
+        return content[s1:s2]
+
+    def get_xsrf_token(self, url) -> str:
+        r = self.session.get(url)
+        return self.extract_xsrf_token(r.text)
+
     def run(self) -> None | int:
         verbosity_level = max(
             logging.DEBUG,

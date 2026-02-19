@@ -543,28 +543,25 @@ class Operation(BaseOperation):
         """Парсит тесты и xsrf-токен."""
         r = self.tool.session.get(response_url)
 
-        tests_prefix = ',"vacancyTests":'
-        xsrf_token_prefix = ',"xsrfToken":"'
-
-        start_tests = r.text.find(tests_prefix)
+        tests_marker = ',"vacancyTests":'
+        start_tests = r.text.find(tests_marker)
         end_tests = r.text.find(',"counters":', start_tests)
 
-        start_token = r.text.find(xsrf_token_prefix)
-        end_token = r.text.find('"', start_token + len(xsrf_token_prefix))
+        if -1 in (start_tests, end_tests):
+            raise ValueError("tests not found.")
 
-        if -1 in (start_tests, end_tests, start_token, end_token):
-            raise ValueError("Не удалось найти тесты или xsrf-токен.")
+        tests_data = r.text[start_tests + len(tests_marker), end_tests]
+        xsrf_token = self.tool.extract_xsrf_token(r.text)
 
         try:
-            return (
-                utils.json.loads(
-                    r.text[start_tests + len(tests_prefix) : end_tests],
-                    strict=False,
-                ),
-                r.text[start_token + len(xsrf_token_prefix) : end_token],
+            tests_data: dict[str, Any] = utils.json.loads(
+                tests_data,
+                strict=False,
             )
         except json.JSONDecodeError as ex:
             raise ValueError("Не могу распарсить vacancyTests.") from ex
+
+        return tests_data, xsrf_token
 
     def _solve_vacancy_test(
         self,

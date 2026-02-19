@@ -5,6 +5,8 @@ import datetime as dt
 import logging
 from typing import TYPE_CHECKING
 
+import requests
+
 from ..api.errors import ApiError
 from ..main import BaseNamespace, BaseOperation
 from ..utils.date import parse_api_datetime
@@ -20,10 +22,11 @@ class Namespace(BaseNamespace):
     blacklist_discard: bool
     older_than: int
     dry_run: bool
+    delete_chat: bool
 
 
 class Operation(BaseOperation):
-    """Удаляет отказы либо старые отклики."""
+    """Удалить отказы и/или старые отклики. Опционально так же удаляет чаты и блокирует работодателей. Из-за особенностей API эту команду иногда нужно вызывать больше одного раза."""
 
     __aliases__ = ["clear-negotiations", "delete-negotiations"]
 
@@ -39,7 +42,13 @@ class Operation(BaseOperation):
             "-o",
             "--older-than",
             type=int,
-            help="С флагом --clean удаляет любые отклики старше N дней",
+            help="Удаляет любые отклики старше N дней",
+        )
+        parser.add_argument(
+            "-d",
+            "--delete-chat",
+            action=argparse.BooleanOptionalAction,
+            help="Удалить так же чат",
         )
         parser.add_argument(
             "-n",
@@ -50,8 +59,38 @@ class Operation(BaseOperation):
 
     def run(self, tool: HHApplicantTool) -> None:
         self.tool = tool
-        self.args: Namespace = tool.args
+        self.args = tool.args
         self.clear()
+
+    def delete_chat(self, topic: int | str) -> bool:
+        """Чат можно удалить только через веб-версию"""
+        xsrf = self.tool.get_xsrf_token("https://hh.ru/applicant/negotiations")
+
+        headers = {
+            "X-Hhtmfrom": "main",
+            "X-Hhtmsource": "negotiation_list",
+            "X-Requested-With": "XMLHttpRequest",
+            "X-Xsrftoken": xsrf,
+            "Refrerer": "https://hh.ru/applicant/negotiations?hhtmFrom=main&hhtmFromLabel=header",
+        }
+
+        payload = {
+            "topic": topic,
+            "query": "?hhtmFrom=main&hhtmFromLabel=header",
+            "substate": "HIDE",
+        }
+
+        try:
+            r = self.tool.session.post(
+                "https://hh.ru/applicant/negotiations/trash",
+                payload,
+                headers=headers,
+            )
+            r.raise_for_status()
+            return True
+        except requests.RequestException as ex:
+            logger.error(ex)
+            return False
 
     def clear(self) -> None:
         blacklisted = set(self.tool.get_blacklisted())
@@ -78,17 +117,30 @@ class Operation(BaseOperation):
             elif negotiation["state"]["id"] != "discard":
                 continue
             try:
+                logger.debug(
+                    "Пробуем отменить отклик на %s", vacancy["alternate_url"]
+                )
+
                 if not self.args.dry_run:
+                    # logger.debug(negotiation)
+
+                    # raise RuntimeError("test")
+
                     self.tool.api_client.delete(
                         f"/negotiations/active/{negotiation['id']}",
-                        with_decline_message=True,
+                        with_decline_message=negotiation["state"]["id"]
+                        != "discard",
                     )
 
-                print(
-                    "🗑️ Отменили отклик на вакансию:",
-                    vacancy["alternate_url"],
-                    vacancy["name"],
-                )
+                    print(
+                        "❌ Отменили отклик на вакансию:",
+                        vacancy["alternate_url"],
+                        vacancy["name"],
+                    )
+
+                    if self.args.delete_chat:
+                        if self.delete_chat(negotiation["id"]):
+                            print(f"❌ Удалили чат #{negotiation['id']}")
 
                 employer = vacancy.get("employer", {})
                 employer_id = employer.get("id")
@@ -106,9 +158,9 @@ class Operation(BaseOperation):
                         blacklisted.add(employer_id)
 
                     print(
-                        "🚫 Работодатель заблокирован:",
-                        employer["name"],
+                        "💀 Работодатель заблокирован:",
                         employer["alternate_url"],
+                        employer["name"],
                     )
             except ApiError as err:
                 logger.error(err)
