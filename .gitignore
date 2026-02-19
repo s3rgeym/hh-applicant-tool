@@ -89,3 +89,4 @@ docker/
 /config/*
 !/config/.gitkeep
 
+Session.vim

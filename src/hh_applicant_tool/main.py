@@ -242,7 +242,7 @@ class HHApplicantTool(MegaTool):
         return self.api_client.get("/me")
 
     def get_resumes(self) -> list[api.datatypes.Resume]:
-        return self.api_client.get("/resumes/mine")["items"]
+        return self.api_client.get("/resumes/mine").get("items", [])
 
     def first_resume_id(self) -> str:
         resume = self.get_resumes()[0]

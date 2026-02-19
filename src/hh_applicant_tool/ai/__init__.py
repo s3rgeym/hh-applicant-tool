@@ -1,1 +1,4 @@
-from .openai import ChatOpenAI, OpenAIError
+from .openai import (
+    ChatOpenAI,
+    OpenAIError,
+)
