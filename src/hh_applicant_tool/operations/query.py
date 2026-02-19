@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import logging
+import pathlib
 import sqlite3
 import sys
 from typing import TYPE_CHECKING
@@ -44,7 +45,7 @@ class Operation(BaseOperation):
         parser.add_argument(
             "-o",
             "--output",
-            type=argparse.FileType("w", encoding="utf-8"),
+            type=pathlib.Path,
             help="Файл для сохранения",
         )
 
@@ -62,13 +63,17 @@ class Operation(BaseOperation):
 
                     if tool.args.csv or tool.args.output:
                         # Если -o не задан, используем sys.stdout
-                        output = tool.args.output or sys.stdout
+                        output = (
+                            tool.args.output.open("w", charset="utf-8")
+                            if tool.args.output
+                            else sys.stdout
+                        )
                         writer = csv.writer(output)
                         writer.writerow(columns)
                         writer.writerows(cursor.fetchall())
 
-                        if tool.args.output:
-                            print(f"✅  Exported to {tool.args.output.name}")
+                        if output is not sys.stdout:
+                            print(f"✅  Exported to {output.name}")
                         return
 
                     rows = cursor.fetchmany(MAX_RESULTS + 1)
@@ -82,6 +87,7 @@ class Operation(BaseOperation):
                         table.add_row(row)
 
                     print(table)
+
                     if len(rows) > MAX_RESULTS:
                         print(
                             f"⚠️  Warning: Showing only first {MAX_RESULTS} results."

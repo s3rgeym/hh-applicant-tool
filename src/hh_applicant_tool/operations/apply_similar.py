@@ -4,7 +4,6 @@ import argparse
 import json
 import logging
 import random
-import string
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator
@@ -545,7 +544,7 @@ class Operation(BaseOperation):
         r = self.tool.session.get(response_url)
 
         tests_prefix = ',"vacancyTests":'
-        xsrf_token_prefix = '"xsrfToken":"'
+        xsrf_token_prefix = ',"xsrfToken":"'
 
         start_tests = r.text.find(tests_prefix)
         end_tests = r.text.find(',"counters":', start_tests)
@@ -615,9 +614,19 @@ class Operation(BaseOperation):
                 #     chr(random.randint(0x1F300, 0x1F64F))
                 #     for _ in range(random.randint(3, 15))
                 # )
-                payload[f"{field_name}_text"] = random.choice(
-                    string.ascii_lowercase + string.digits
-                ) * random.randint(5, 35)
+                question = task["description"].strip()
+
+                if "://" in question:
+                    answer = rand_text(
+                        "{Простите|Извините}, но я не перехожу по {внешним|сторонним} ссылкам, так как {опасаюсь взлома|не хочу {быть взломанным|подхватить вирус}}."
+                    )
+                else:
+                    answer = rand_text(
+                        self.tool.config.get("vacancy_test_answer")
+                        or "{Да|Наверное|Не знаю|Может быть|{Спросите у|Задайте этот вопрос} Chat{| }GPT|{Я не хочу отвечать на|Мне {не нравится|неинтересно отвечать на}} {этот вопрос|такие вопросы}|В моем резюме написаны ответы на {все|любые} вопросы}"
+                    )
+
+                payload[f"{field_name}_text"] = answer
 
         logger.debug(f"{payload = }")
 
