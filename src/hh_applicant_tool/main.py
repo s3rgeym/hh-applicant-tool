@@ -179,14 +179,6 @@ class HHApplicantTool(MegaTool):
 
         return session
 
-    @property
-    def is_logged_in(self) -> bool:
-        """Проверяет авторизован ли пользователь через сайт."""
-        return (
-            self.session.get("https://hh.ru/applicant/settings").status_code
-            == 200
-        )
-
     @cached_property
     def config_path(self) -> Path:
         return (
@@ -329,13 +321,19 @@ class HHApplicantTool(MegaTool):
             raise ValueError("malformed xsrf token")
         return content[s1:s2]
 
-    def _get_xsrf_token(self, url) -> str:
-        r = self.session.get(url)
+    def _get_xsrf_token(self, url: str | None = None) -> str:
+        """Возвращает XSRF-токен, который выдается на сессию"""
+        r = self.session.get(url or "https://hh.ru/")
         return self._extract_xsrf_token(r.text)
 
     @cached_property
     def xsrf_token(self) -> str:
-        return self._get_xsrf_token("https://hh.ru/")
+        return self._get_xsrf_token()
+
+    @property
+    def is_logged_in(self) -> bool:
+        """Проверяет авторизован ли пользователь через сайт."""
+        return self.session.get("https://hh.ru/settings").status_code == 200
 
     def run(self) -> None | int:
         verbosity_level = max(
