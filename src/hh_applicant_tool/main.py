@@ -317,7 +317,8 @@ class HHApplicantTool(MegaTool):
             session=self.session,
         )
 
-    def extract_xsrf_token(self, content: str) -> str:
+    # TODO: вынести в миксин какой
+    def _extract_xsrf_token(self, content: str) -> str:
         xsrf_token_marker = ',"xsrfToken":"'
         s1 = content.find(xsrf_token_marker)
         if s1 == -1:
@@ -328,9 +329,13 @@ class HHApplicantTool(MegaTool):
             raise ValueError("malformed xsrf token")
         return content[s1:s2]
 
-    def get_xsrf_token(self, url) -> str:
+    def _get_xsrf_token(self, url) -> str:
         r = self.session.get(url)
-        return self.extract_xsrf_token(r.text)
+        return self._extract_xsrf_token(r.text)
+
+    @cached_property
+    def xsrf_token(self) -> str:
+        return self._get_xsrf_token("https://hh.ru/")
 
     def run(self) -> None | int:
         verbosity_level = max(
