@@ -149,17 +149,23 @@ class Operation(BaseOperation):
                     and employer_id
                     and employer_id not in blacklisted
                 ):
+                    logger.debug(
+                        "Пробуем заблокировать %s (%s)", 
+                        employer["alternate_url"],
+                        employer["name"],
+                    )
+                    
                     if not self.args.dry_run:
                         self.tool.api_client.put(
                             f"/employers/blacklisted/{employer_id}"
                         )
                         blacklisted.add(employer_id)
 
-                    print(
-                        "💀 Работодатель заблокирован:",
-                        employer["alternate_url"],
-                        employer["name"],
-                    )
+                        print(
+                            "💀 Работодатель заблокирован:",
+                            employer["alternate_url"],
+                            employer["name"],
+                        )
             except ApiError as err:
                 logger.error(err)
 
