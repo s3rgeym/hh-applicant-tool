@@ -64,13 +64,11 @@ class Operation(BaseOperation):
 
     def delete_chat(self, topic: int | str) -> bool:
         """Чат можно удалить только через веб-версию"""
-        xsrf = self.tool.get_xsrf_token("https://hh.ru/applicant/negotiations")
-
         headers = {
             "X-Hhtmfrom": "main",
             "X-Hhtmsource": "negotiation_list",
             "X-Requested-With": "XMLHttpRequest",
-            "X-Xsrftoken": xsrf,
+            "X-Xsrftoken": self.tool.xsrf_token,
             "Refrerer": "https://hh.ru/applicant/negotiations?hhtmFrom=main&hhtmFromLabel=header",
         }
 

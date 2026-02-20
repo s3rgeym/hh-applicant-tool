@@ -537,10 +537,8 @@ class Operation(BaseOperation):
         )
         print("✅️ Закончили рассылку откликов для резюме:", resume["title"])
 
-    def _get_vacancy_tests(
-        self, response_url: str
-    ) -> tuple[VacancyTestsData, str]:
-        """Парсит тесты и xsrf-токен."""
+    def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData:
+        """Парсит тесты"""
         r = self.tool.session.get(response_url)
 
         tests_marker = ',"vacancyTests":'
@@ -550,18 +548,13 @@ class Operation(BaseOperation):
         if -1 in (start_tests, end_tests):
             raise ValueError("tests not found.")
 
-        tests_data = r.text[start_tests + len(tests_marker), end_tests]
-        xsrf_token = self.tool.extract_xsrf_token(r.text)
-
         try:
-            tests_data: dict[str, Any] = utils.json.loads(
-                tests_data,
+            return utils.json.loads(
+                r.text[start_tests + len(tests_marker), end_tests],
                 strict=False,
             )
         except json.JSONDecodeError as ex:
             raise ValueError("Не могу распарсить vacancyTests.") from ex
-
-        return tests_data, xsrf_token
 
     def _solve_vacancy_test(
         self,
@@ -573,7 +566,7 @@ class Operation(BaseOperation):
         response_url = f"https://hh.ru/applicant/vacancy_response?vacancyId={vacancy_id}&startedWithQuestion=false&hhtmFrom=vacancy"
 
         # Загружаем данные теста и токен
-        tests_data, xsrf_token = self._get_vacancy_tests(response_url)
+        tests_data = self._get_vacancy_tests(response_url)
 
         try:
             test_data = tests_data[str(vacancy_id)]
@@ -583,7 +576,7 @@ class Operation(BaseOperation):
         logger.debug(f"{test_data = }")
 
         payload: dict[str, Any] = {
-            "_xsrf": xsrf_token,
+            "_xsrf": self.tool.xsrf_token,
             "uidPk": test_data["uidPk"],
             "guid": test_data["guid"],
             "startTime": test_data["startTime"],
