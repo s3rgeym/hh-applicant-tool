@@ -550,7 +550,7 @@ class Operation(BaseOperation):
 
         try:
             return utils.json.loads(
-                r.text[start_tests + len(tests_marker), end_tests],
+                r.text[start_tests + len(tests_marker) : end_tests],
                 strict=False,
             )
         except json.JSONDecodeError as ex:
@@ -633,7 +633,7 @@ class Operation(BaseOperation):
                 "X-Hhtmfrom": "vacancy",
                 "X-Hhtmsource": "vacancy_response",
                 "X-Requested-With": "XMLHttpRequest",
-                "X-Xsrftoken": xsrf_token,
+                "X-Xsrftoken": self.tool.xsrf_token,
             },
         )
 
