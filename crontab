@@ -12,7 +12,7 @@ SHELL=/bin/bash
 0 */5 * * * /bin/bash -c 'sleep $((60 + RANDOM \% 241))' && /usr/local/bin/python -m hh_applicant_tool update-resumes >> /var/log/cron.log 2>&1
 
 # Рассылаем отклики
-0 8-21 * * * /bin/bash -c 'sleep $((60 + RANDOM \% 241))' && /usr/local/bin/python -m hh_applicant_tool apply-similar >> /var/log/cron.log 2>&1
+0 8-21 * * * /bin/bash -c 'sleep $((60 + RANDOM \% 241))' && /usr/local/bin/python -m hh_applicant_tool apply-similar -L /app/apply_messages.txt -f >> /var/log/cron.log 2>&1
 
 # Тест: каждые 5 минут (задержка до 1 минуты, чтобы не накладывались)
 #*/5 * * * * /bin/bash -c 'sleep $((1 + RANDOM \% 59))' && /usr/local/bin/python -m hh_applicant_tool apply-similar >> /var/log/cron.log 2>&1
