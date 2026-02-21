@@ -248,7 +248,7 @@ class Operation(BaseOperation):
         search_params_group.add_argument(
             "--excluded-filter",
             type=str,
-            help=r"Исключить вакансии, если название или описание не соответствует шаблону. Например, `--excluded-filter 'bitrix|дружн\\w+ коллектив|полиграф|open\\s*space|опенспейс|хакатон|конкурс'`",
+            help=r"Исключить вакансии, если название или описание не соответствует шаблону. Например, `--excluded-filter 'bitrix|дружн\w+ коллектив|полиграф|open\s*space|опенспейс|хакатон|конкурс'`",
         )
 
     def run(
