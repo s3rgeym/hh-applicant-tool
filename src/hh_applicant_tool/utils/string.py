@@ -41,3 +41,9 @@ def unescape_string(text: str) -> str:
         .replace(r"\t", "\t")
         .replace(r"\\", "\\")
     )
+
+
+def strip_tags(content: str) -> str:
+    content = re.sub(r"<[^>]+>", " ", content)
+    content = re.sub(r"\s+", " ", content)
+    return content.strip()

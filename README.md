@@ -294,7 +294,7 @@ docker@1897bdd7c80b:/app$
 # Пример с фильтрацией по исключаемым словам
 /usr/local/bin/python -m hh_applicant_tool apply-similar \
   -L messages.txt \
-  --excluded-terms "fullstack,junior,php" # укажите любые аргументы
+  --excluded-filter "fullstack,junior,php" # укажите любые аргументы
 ```
 
 В файлах `startup.sh` и `crontab` замените `/usr/local/bin/python -m hh_applicant_tool apply-similar` на `/bin/sh /app/apply-similar.sh`.
@@ -500,7 +500,7 @@ $ hh-applicant-tool apply-similar
 $ hh-applicant-tool -vv apply-similar --search "Python программист" --per-page 3 --total-pages 1 --dry-run
 
 # Фильтруем вакансии по исключаемым словам (fullstack, junior, php и т.п.)
-$ hh-applicant-tool apply-similar --search "Python backend" --excluded-terms "fullstack,junior,php,java" --dry-run
+$ hh-applicant-tool apply-similar --search "Python backend" --excluded-filter "fullstack,junior,php,java" --dry-run
 
 # Поднимаем резюме
 $ hh-applicant-tool update-resumes
