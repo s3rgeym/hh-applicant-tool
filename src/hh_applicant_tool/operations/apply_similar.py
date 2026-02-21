@@ -258,6 +258,7 @@ class Operation(BaseOperation):
         self.tool = tool
         self.api_client = tool.api_client
         args: Namespace = tool.args
+        logger.debug(args)
         self.application_messages = self._get_application_messages(
             args.message_list_path
         )
@@ -435,7 +436,7 @@ class Operation(BaseOperation):
                     )
                     continue
 
-                if self._is_excluded(vacancy):
+                if self.excluded_filter and self._is_excluded(vacancy):
                     logger.warning(
                         "Вакансия исключена фильтром: %s",
                         vacancy["alternate_url"],
@@ -739,6 +740,9 @@ class Operation(BaseOperation):
                 return
 
     def _is_excluded(self, vacancy: SearchVacancy) -> bool:
+        if not self.excluded_filter:
+            return False
+
         pat: re.Pattern = re.compile(self.excluded_filter, re.IGNORECASE)
         logger.debug(pat.pattern)
         snippet = vacancy.get("snippet") or {}
