@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import random
+import re
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator
@@ -19,6 +20,7 @@ from ..utils.datatypes import VacancyTestsData
 from ..utils.string import (
     bool2str,
     rand_text,
+    strip_tags,
     unescape_string,
 )
 
@@ -67,7 +69,7 @@ class Namespace(BaseNamespace):
     premium: bool
     per_page: int
     total_pages: int
-    excluded_terms: str | None
+    excluded_filter: str | None
 
 
 class Operation(BaseOperation):
@@ -244,9 +246,9 @@ class Operation(BaseOperation):
             help="Поля поиска (name, company_name и т.п.)",
         )
         search_params_group.add_argument(
-            "--excluded-terms",
+            "--excluded-filter",
             type=str,
-            help="Исключить вакансии, если название или snippet содержит любую из подстрок (через запятую, например, junior, bitrix, дружный коллектив). Это принудительный фильтр для результатов поиска",
+            help=r"Исключить вакансии, если название или описание не соответствует шаблону. Например, `--excluded-filter 'bitrix|дружн\\w+ коллектив|полиграф|open\\s*space|опенспейс|хакатон|конкурс'`",
         )
 
     def run(
@@ -288,7 +290,7 @@ class Operation(BaseOperation):
         self.schedule = args.schedule
         self.search = args.search
         self.search_field = args.search_field
-        self.excluded_terms = self._parse_excluded_terms(args.excluded_terms)
+        self.excluded_filter = args.excluded_filter
         self.sort_point_lat = args.sort_point_lat
         self.sort_point_lng = args.sort_point_lng
         self.top_lat = args.top_lat
@@ -435,7 +437,7 @@ class Operation(BaseOperation):
 
                 if self._is_excluded(vacancy):
                     logger.warning(
-                        "Вакансия содержит недопустимые словосочетания: %s",
+                        "Вакансия исключена фильтром: %s",
                         vacancy["alternate_url"],
                     )
                     continue
@@ -736,15 +738,9 @@ class Operation(BaseOperation):
             if page >= res["pages"] - 1:
                 return
 
-    @staticmethod
-    def _parse_excluded_terms(excluded_terms: str | None) -> list[str]:
-        if not excluded_terms:
-            return []
-        return [
-            x.strip() for x in excluded_terms.lower().split(",") if x.strip()
-        ]
-
     def _is_excluded(self, vacancy: SearchVacancy) -> bool:
+        pat: re.Pattern = re.compile(self.excluded_filter, re.IGNORECASE)
+        logger.debug(pat.pattern)
         snippet = vacancy.get("snippet") or {}
         combined = " ".join(
             [
@@ -752,9 +748,24 @@ class Operation(BaseOperation):
                 snippet.get("requirement") or "",
                 snippet.get("responsibility") or "",
             ]
-        ).lower()
+        )
 
-        return any(v in combined for v in self.excluded_terms)
+        if not pat.search(combined):
+            r = self.tool.session.get("https://hh.ru/vacancy/" + vacancy["id"])
+            if m := re.search(
+                'data-qa="vacancy-description">(.+?)<div class="vacancy-',
+                r.text,
+            ):
+                content = strip_tags(m.group(1))
+                logger.debug("description: %.512s", content)
+                return bool(pat.search(content))
+            else:
+                logger.warning(
+                    f"Описание вакансии не найдено: {r.request.url} ({r.status_code})"
+                )
+                return False
+
+        return True
 
     def _get_application_messages(self, path: Path | None) -> list[str]:
         return (
