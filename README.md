@@ -636,6 +636,14 @@ hh-applicant-tool -vv api /areas | jq -r '.[] | select(.name == "Беларус�
 Так же существуют cli-утилиты:
 
 ```sh
+sudo pacman -S openapi-tui
+
+openapi-tui --input docs/hhapi/openapi.yml
+```
+
+Для тех кто любит просматривать документацию в браузере:
+
+```sh
 npx @redocly/cli preview -d docs/hhapi
 ```
 
