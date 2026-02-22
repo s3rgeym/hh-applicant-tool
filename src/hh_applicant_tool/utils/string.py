@@ -45,5 +45,5 @@ def unescape_string(text: str) -> str:
 
 def strip_tags(content: str) -> str:
     content = re.sub(r"<[^>]+>", " ", content)
-    content = re.sub(r"\s+", " ", content)
+    # content = re.sub(r"\s+", " ", content)
     return content.strip()

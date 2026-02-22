@@ -248,7 +248,7 @@ class Operation(BaseOperation):
         search_params_group.add_argument(
             "--excluded-filter",
             type=str,
-            help=r"Исключить вакансии, если название или описание не соответствует шаблону. Например, `--excluded-filter 'bitrix|дружн\w+ коллектив|полиграф|open\s*space|опенспейс|хакатон|конкурс'`",
+            help=r"Исключить вакансии, если название или описание не соответствует шаблону. Например, `--excluded-filter 'junior|стажир|bitrix|дружн\w+ коллектив|полиграф|open\s*space|опенспейс|хакатон|конкурс|тестов\w+ задан'`",
         )
 
     def run(
@@ -437,8 +437,16 @@ class Operation(BaseOperation):
                     continue
 
                 if self.excluded_filter and self._is_excluded(vacancy):
-                    logger.warning(
-                        "Вакансия исключена фильтром: %s",
+                    logger.info(
+                        "Вакансия попала под фильтр: %s",
+                        vacancy["alternate_url"],
+                    )
+
+                    self.api_client.put(
+                        f"/vacancies/blacklisted/{vacancy['id']}"
+                    )
+                    logger.info(
+                        "Вакансия добавлена в черный список: %s",
                         vacancy["alternate_url"],
                     )
                     continue
