@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import logging
 import random
 import re
 import time
+from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator
+from urllib.parse import urlparse
+
+import requests
 
 from .. import utils
 from ..ai.base import AIError
@@ -361,6 +366,7 @@ class Operation(BaseOperation):
         }
 
         do_apply = True
+        storage = self.tool.storage
 
         for vacancy in self._get_similar_vacancies(resume_id=resume["id"]):
             try:
@@ -371,8 +377,6 @@ class Operation(BaseOperation):
                     "employer_name": employer.get("name", ""),
                     **placeholders,
                 }
-
-                storage = self.tool.storage
 
                 try:
                     storage.vacancies.save(vacancy)
@@ -390,17 +394,6 @@ class Operation(BaseOperation):
                         storage.vacancy_contacts.save(vacancy)
                     except RepositoryError as ex:
                         logger.exception(ex)
-
-                    employer_id = employer.get("id")
-                    if employer_id and employer_id not in seen_employers:
-                        employer_profile: datatypes.Employer = (
-                            self.api_client.get(f"/employers/{employer_id}")
-                        )
-
-                        try:
-                            storage.employers.save(employer_profile)
-                        except RepositoryError as ex:
-                            logger.exception(ex)
 
                 if not do_apply:
                     continue
@@ -450,6 +443,56 @@ class Operation(BaseOperation):
                         vacancy["alternate_url"],
                     )
                     continue
+
+                # Перед откликом выгружаем профиль компании
+                employer_id = employer.get("id")
+                if employer_id and employer_id not in seen_employers:
+                    employer_profile: datatypes.Employer = self.api_client.get(
+                        f"/employers/{employer_id}"
+                    )
+
+                    try:
+                        storage.employers.save(employer_profile)
+                    except RepositoryError as ex:
+                        logger.exception(ex)
+
+                    # Если есть сайт, то ищем на нем емейлы
+                    if site_url := (
+                        employer_profile.get("site_url") or ""
+                    ).strip():
+                        site_url = (
+                            site_url
+                            if "://" in site_url
+                            else "https://" + site_url
+                        )
+                        logger.debug("visit site: %s", site_url)
+
+                        try:
+                            site_info = self._parse_site(site_url)
+                        except requests.RequestException as ex:
+                            site_info = None
+                            logger.error(ex)
+
+                        if site_info:
+                            logger.debug("site info: %r", site_info)
+
+                            # try:
+                            #     subdomains = self._get_subdomains(site_url)
+                            # except requests.RequestException as ex:
+                            #     subdomains = []
+                            #     logger.error(ex)
+
+                            try:
+                                storage.employer_sites.save(
+                                    {
+                                        "site_url": site_url,
+                                        "employer_id": employer_id,
+                                        "subdomains": [],
+                                        **site_info,
+                                    }
+                                )
+                            except RepositoryError as ex:
+                                logger.exception(ex)
 
                 response_letter = ""
 
@@ -659,6 +702,61 @@ class Operation(BaseOperation):
         # logger.debug(data)
 
         return data
+
+    def _parse_site(self, url: str) -> dict[str, Any]:
+        with self.tool.session.get(url, timeout=10) as r:
+            val = lambda m: html.unescape(m.group(1)) if m else ""
+
+            title = val(re.search(r"<title>(.*?)</title>", r.text, re.I | re.S))
+            description = val(
+                re.search(
+                    r'<meta name="description" content="(.*?)"', r.text, re.I
+                )
+            )
+            generator = val(
+                re.search(
+                    r'<meta name="generator" content="(.*?)"', r.text, re.I
+                )
+            )
+
+            # Поиск email
+            emails = set(
+                re.findall(
+                    r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", r.text
+                )
+            )
+
+            return {
+                "title": title,
+                "description": description,
+                "generator": generator,
+                "emails": list(emails),
+                "server_name": r.headers.get("Server"),
+                "powered_by": r.headers.get("X-Powered-By"),
+                # Не работает, если отключена проверка сертификата
+                "ip_address": r.raw._connection.sock.getpeername()[0]
+                if r.raw._connection
+                else None,
+            }
+
+    # Слишком тормознутая... Толи российские айпи заблокированы
+    def _get_subdomains(self, url: str) -> set[str]:
+        domain = urlparse(url).netloc
+        r = self.tool.session.get(
+            "https://crt.sh",
+            params={"q": domain, "output": "json"},
+            timeout=30,
+        )
+
+        r.raise_for_status()
+
+        return set(
+            item
+            for item in chain.from_iterable(
+                item["name_value"].split() for item in r.json()
+            )
+            if not item.startswith("*.")
+        )
 
     def _get_search_params(self, page: int) -> dict:
         params = {

@@ -129,4 +129,34 @@ UPDATE negotiations
 SET updated_at = CURRENT_TIMESTAMP
 WHERE id = OLD.id;
 END;
+/* ===================== employer_sites ===================== */
+CREATE TABLE IF NOT EXISTS employer_sites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employer_id INTEGER NOT NULL,
+    site_url TEXT NOT NULL,
+    ip_address TEXT,
+    title TEXT,
+    description TEXT,
+    generator TEXT,
+    server_name TEXT,
+    powered_by TEXT,
+    emails TEXT,
+    subdomains TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Уникальность пары: один работодатель — один конкретный сайт
+    UNIQUE (employer_id, site_url)
+);
+
+/* ===================== ИНДЕКСЫ ===================== */
+CREATE INDEX IF NOT EXISTS idx_emp_site_upd ON employer_sites(updated_at);
+
+/* ===================== ТРИГГЕРЫ ===================== */
+CREATE TRIGGER IF NOT EXISTS trg_employer_sites_updated
+AFTER UPDATE ON employer_sites
+BEGIN
+    UPDATE employer_sites
+    SET updated_at = CURRENT_TIMESTAMP
+    WHERE id = OLD.id;
+END;
 COMMIT;

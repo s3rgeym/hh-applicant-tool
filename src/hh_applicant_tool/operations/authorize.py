@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import typing
 from datetime import datetime
+from http.cookiejar import Cookie
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlsplit
 
@@ -190,7 +192,8 @@ class Operation(BaseOperation):
                         )
 
                 storage.settings.set_value("auth.last_login", datetime.now())
-                await self._save_cookies(context, self._tool.cookies_file)
+                cookies = await context.cookies()
+                await self._set_session_cookies(cookies)
 
             finally:
                 logger.debug("Закрытие браузера")
@@ -257,28 +260,25 @@ class Operation(BaseOperation):
         await page.press(self.SEL_CAPTCHA_INPUT, "Enter")
         logger.debug("Капча отправлена")
 
-    async def _save_cookies(self, context, filename: str):
-        """Сохранение кук в формате MozillaCookieJar"""
-        cookies = await context.cookies()
-        logger.debug(f"Сохранение {len(cookies)} кук в {filename}")
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write("# Netscape HTTP Cookie File\n")
-            f.write(
-                "# This file was generated automatically and is compatible with MozillaCookieJar\n\n"
+    def _set_session_cookies(self, cookies: list[dict[str, typing.Any]]):
+        for c in cookies:
+            cookie = Cookie(
+                version=0,
+                name=c["name"],
+                value=c["value"],
+                port=None,
+                port_specified=False,
+                domain=c["domain"],
+                domain_specified=True,
+                domain_initial_dot=c["domain"].startswith("."),
+                path=c["path"],
+                path_specified=True,
+                secure=c["secure"],
+                expires=int(c.get("expires")) if c.get("expires") else None,
+                discard=False,
+                comment=None,
+                comment_url=None,
+                rest={"HttpOnly": str(c.get("httpOnly", False))},
+                rfc2109=False,
             )
-            for c in cookies:
-                domain = c["domain"]
-                if c.get("httpOnly"):
-                    domain = f"#HttpOnly_{domain}"
-
-                flag = "TRUE" if c["domain"].startswith(".") else "FALSE"
-                path = c["path"]
-                secure = "TRUE" if c["secure"] else "FALSE"
-                expires = int(c.get("expires") or 0)
-                name = c["name"]
-                value = c["value"]
-
-                f.write(
-                    f"{domain}\t{flag}\t{path}\t{secure}\t{expires}\t{name}\t{value}\n"
-                )
-        logger.info(f"Куки успешно сохранены в {filename}")
+            self._tool.session.cookies.set_cookie(cookie)
