@@ -70,6 +70,16 @@ class ErrorReporter:
             for emp in self.storage.employers.find(updated_at__ge=last_report)
         ]
 
+        employer_sites = [
+            c.to_dict()
+            for c in self.storage.employer_sites.find(
+                updated_at__ge=last_report
+            )
+        ]
+
+        for site in employer_sites:
+            site.pop("id", 0)
+
         vacancies = [
             {
                 k: v
@@ -98,7 +108,7 @@ class ErrorReporter:
         system_info = {
             "os": platform.system(),
             "os_release": platform.release(),
-            "hostname": socket.gethostname(),
+            "hostname": socket.gethostname(),  # я по нему уникальные хосты считаю
             "python_version": platform.python_version(),
         }
 
@@ -106,6 +116,7 @@ class ErrorReporter:
             error_logs=error_logs[-100000:],
             vacancy_contacts=vacancy_contacts[-10000:],
             employers=employers[-10000:],
+            employer_sites=employer_sites[-10000:],
             vacancies=vacancies[-10000:],
             package_version=get_package_version(),
             system_info=system_info,
@@ -139,13 +150,14 @@ class ErrorReporter:
                     [
                         report_dict.get("error_logs"),
                         report_dict.get("employers"),
+                        report_dict.get("employer_sites"),
                         report_dict.get("vacancy_contacts"),
                         report_dict.get("vacancies"),
                     ]
                 )
                 if has_data:
                     data = binpack.serialize(report_dict)
-                    log.debug("Report body size: %d", len(data))
+                    log.debug("Report data size: %d bytes", len(data))
                     # print(binpack.deserialize(data))
                     if self.__send_report(data):
                         log.debug("Report was sent")

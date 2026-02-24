@@ -20,6 +20,7 @@ import urllib3
 
 from . import ai, api, utils
 from .storage import StorageFacade
+from .utils.cookiejar import HHOnlyCookieJar
 from .utils.log import setup_logger
 from .utils.mixins import MegaTool
 
@@ -170,10 +171,9 @@ class HHApplicantTool(MegaTool):
             logger.info("Use proxies for requests: %r", proxies)
             session.proxies = proxies
 
+        session.cookies = HHOnlyCookieJar(str(self.cookies_file))
         if self.cookies_file.exists():
-            jar = MozillaCookieJar(str(self.cookies_file))
-            jar.load(ignore_discard=True, ignore_expires=True)
-            session.cookies = jar
+            session.cookies.load(ignore_discard=True, ignore_expires=True)
 
         session.headers.update({"User-Agent": DEFAULT_DESKTOP_USER_AGENT})
 
@@ -284,9 +284,6 @@ class HHApplicantTool(MegaTool):
 
     def save_cookies(self) -> None:
         """Сохраняет текущие куки сессии в файл."""
-        if not self.session.cookies:
-            return
-
         if isinstance(self.session.cookies, MozillaCookieJar):
             self.session.cookies.save(ignore_discard=True, ignore_expires=True)
             logger.debug("Cookies saved to %s", self.cookies_file)
