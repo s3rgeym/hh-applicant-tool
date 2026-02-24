@@ -274,7 +274,7 @@ class Operation(BaseOperation):
                 path=c["path"],
                 path_specified=True,
                 secure=c["secure"],
-                expires=int(c.get("expires")) if c.get("expires") else None,
+                expires=int(c.get("expires") or 0),
                 discard=False,
                 comment=None,
                 comment_url=None,
