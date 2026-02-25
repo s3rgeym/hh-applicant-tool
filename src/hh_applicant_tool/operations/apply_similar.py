@@ -303,6 +303,7 @@ class Operation(BaseOperation):
         self.schedule = args.schedule
         self.search = args.search
         self.search_field = args.search_field
+        self.send_email = args.send_email
         self.excluded_filter = args.excluded_filter
         self.sort_point_lat = args.sort_point_lat
         self.sort_point_lng = args.sort_point_lng
@@ -589,7 +590,7 @@ class Operation(BaseOperation):
                         )
 
                 # Отправка письма на email
-                if self.args.send_email:
+                if self.send_email:
                     mail_to: str | list[str] | None = vacancy.get(
                         "contacts", {}
                     ).get("email") or site_emails.get(employer_id)

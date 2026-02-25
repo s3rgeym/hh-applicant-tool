@@ -27,7 +27,9 @@ COPY pyproject.toml poetry.lock* README.md /app/
 RUN pip install --no-cache-dir -e '.[playwright,pillow]'
 
 # Ставим зависимости хромиума и сам хромиум пользователю docker
-RUN playwright install-deps chromium && \
+RUN apt-get update && \
+  playwright install-deps chromium && \
+  rm -rf /var/lib/apt/lists/* && \
   su docker -c "playwright install chromium"
 
 # Fix: падение, если каталог config не существует
