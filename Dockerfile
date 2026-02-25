@@ -8,8 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   cron \
   dos2unix \
   tzdata \
-  less \
-  && rm -rf /var/lib/apt/lists/*
+  less
 
 # Настройка пользователя
 ARG UID=1000
@@ -29,6 +28,9 @@ RUN pip install --no-cache-dir -e '.[playwright,pillow]'
 # Ставим зависимости хромиума и сам хромиум пользователю docker
 RUN playwright install-deps chromium && \
   su docker -c "playwright install chromium"
+
+# Очистка кеша пакетов для уменьшения веса контейнера
+RUN rm -rf /var/lib/apt/lists/*
 
 # Fix: падение, если каталог config не существует
 #RUN mkdir -p /app/config
