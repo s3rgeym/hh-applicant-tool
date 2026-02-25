@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import smtplib
 import sqlite3
 import sys
 from collections.abc import Sequence
@@ -331,6 +332,29 @@ class HHApplicantTool(MegaTool):
     def is_logged_in(self) -> bool:
         """Проверяет авторизован ли пользователь через сайт."""
         return self.session.get("https://hh.ru/settings").status_code == 200
+
+    @cached_property
+    def smtp(self) -> smtplib.SMTP | smtplib.SMTP_SSL:
+        conf = self.config.get("smtp", {})
+        host = conf.get("host")
+        port = conf.get("port")
+        user = conf.get("user")
+        password = conf.get("password")
+        use_ssl = conf.get("ssl", False)
+
+        if not host or not port:
+            raise ValueError("SMTP host or port not configured")
+
+        client_cls = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
+        server = client_cls(host, port)
+
+        if not use_ssl and conf.get("starttls", True):
+            server.starttls()
+
+        if user and password:
+            server.login(user, password)
+
+        return server
 
     def run(self) -> None | int:
         verbosity_level = max(

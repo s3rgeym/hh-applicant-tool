@@ -135,13 +135,28 @@ class NegotiationVacancy(VacancyShort):
     show_logo_in_search: Optional[bool]
 
 
+class Phone(TypedDict):
+    country: str
+    city: str
+    number: str
+    formatted: str
+    comment: Optional[str]
+
+
+class ContactData(TypedDict):
+    name: Optional[str]
+    email: Optional[str]
+    phones: List[Phone]
+    call_tracking_enabled: bool
+
+
 class SearchVacancy(VacancyShort):
     employer: SearchEmployer
     relations: List[Any]
     experimental_modes: List[str]
     manager_activity: Optional[ManagerActivity]
     snippet: Snippet
-    contacts: Optional[dict]
+    contacts: ContactData
     schedule: IdName
     working_days: List[Any]
     working_time_intervals: List[Any]
@@ -163,21 +178,6 @@ class SearchVacancy(VacancyShort):
     is_adv_vacancy: bool
     adv_context: Optional[dict]
     allow_chat_with_manager: bool
-
-
-class Phone(TypedDict):
-    country: str
-    city: str
-    number: str
-    formatted: str
-    comment: Optional[str]
-
-
-class ContactData(TypedDict):
-    name: Optional[str]
-    email: Optional[str]
-    phones: List[Phone]
-    call_tracking_enabled: bool
 
 
 class ResumeShort(TypedDict):

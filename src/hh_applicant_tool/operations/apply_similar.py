@@ -7,6 +7,7 @@ import logging
 import random
 import re
 import time
+from email.message import EmailMessage
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator
@@ -75,6 +76,7 @@ class Namespace(BaseNamespace):
     per_page: int
     total_pages: int
     excluded_filter: str | None
+    send_email: bool
 
 
 class Operation(BaseOperation):
@@ -131,6 +133,11 @@ class Operation(BaseOperation):
             help="Сколько должно быть результатов на странице",  # noqa: E501
             default=100,
             type=int,
+        )
+        parser.add_argument(
+            "--send-email",
+            help="Отправлять письмо на email компании или рекрутера с просьбой рассмотреть резюме",
+            action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
             "--dry-run",
@@ -362,11 +369,14 @@ class Operation(BaseOperation):
             "last_name": user.get("last_name") or "",
             "email": user.get("email") or "",
             "phone": user.get("phone") or "",
+            "resume_hash": resume.get("id") or "",
             "resume_title": resume.get("title") or "",
+            "resume_url": resume.get("alternate_url") or "",
         }
 
         do_apply = True
         storage = self.tool.storage
+        site_emails = {}
 
         for vacancy in self._get_similar_vacancies(resume_id=resume["id"]):
             try:
@@ -469,6 +479,7 @@ class Operation(BaseOperation):
 
                         try:
                             site_info = self._parse_site(site_url)
+                            site_emails[employer_id] = site_info["emails"]
                         except requests.RequestException as ex:
                             site_info = None
                             logger.error(ex)
@@ -576,6 +587,31 @@ class Operation(BaseOperation):
                         logger.warning(
                             f"Игнорирую перенаправление на форму: {vacancy['alternate_url']}"  # noqa: E501
                         )
+
+                # Отправка письма на email
+                if self.args.send_email:
+                    mail_to: str | list[str] | None = vacancy.get(
+                        "contacts", {}
+                    ).get("email") or site_emails.get(employer_id)
+                    if mail_to:
+                        mail_to = (
+                            ", ".join(mail_to)
+                            if isinstance(mail_to, list)
+                            else mail_to
+                        )
+                        mail_subject = rand_text(
+                            self.tool.config.get("apply_mail_subject")
+                            or "{По работе|По поводу вакансии|С HH}"
+                        )
+                        mail_body = rand_text(
+                            self.tool.config.get("apply_mail_body")
+                            or "{Здравствуйте|Добрый день}, {прошу рассмотреть|пожалуйста рассмотрите} мое резюме %(resume_url)s на вакансию %(vacancy_name)s."
+                            % message_placeholders
+                        )
+                        try:
+                            self._send_email(mail_to, mail_subject, mail_body)
+                        except Exception as ex:
+                            logger.error(f"Ошибка отправки письма: {ex}")
             except LimitExceeded:
                 do_apply = False
                 logger.warning("Достигли лимита на отклики")
@@ -590,6 +626,15 @@ class Operation(BaseOperation):
             resume["title"],
         )
         print("✅️ Закончили рассылку откликов для резюме:", resume["title"])
+
+    def _send_email(self, to: str, subject: str, body: str) -> None:
+        cfg = self.config.get("smtp", {})
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = cfg.get("from") or cfg.get("user")
+        msg["To"] = to
+        msg.set_content(body)
+        self.tool.smtp.send_message(msg)
 
     def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData:
         """Парсит тесты"""
