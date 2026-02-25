@@ -269,8 +269,9 @@ class Operation(BaseOperation):
     ) -> None:
         self.tool = tool
         self.api_client = tool.api_client
+        # TODO: args сделать отдельным аргументом, тк легче тайпхинты задавать
         args: Namespace = tool.args
-        logger.debug(args)
+        self.args = args
         self.application_messages = self._get_application_messages(
             args.message_list_path
         )
@@ -564,6 +565,7 @@ class Operation(BaseOperation):
                                     )
                     except Exception as ex:
                         logger.error(f"Произошла непредвиденная ошибка: {ex}")
+                        continue
 
                 else:
                     params = {
@@ -587,6 +589,7 @@ class Operation(BaseOperation):
                         logger.warning(
                             f"Игнорирую перенаправление на форму: {vacancy['alternate_url']}"  # noqa: E501
                         )
+                        continue
 
                 # Отправка письма на email
                 if self.args.send_email:
@@ -612,7 +615,10 @@ class Operation(BaseOperation):
                         )
                         try:
                             self._send_email(mail_to, mail_subject, mail_body)
-                            print("📧 Отправлено письмо на email по поводу вакансии", vacancy["alternate_url"])
+                            print(
+                                "📧 Отправлено письмо на email по поводу вакансии",
+                                vacancy["alternate_url"],
+                            )
                         except Exception as ex:
                             logger.error(f"Ошибка отправки письма: {ex}")
             except LimitExceeded:
