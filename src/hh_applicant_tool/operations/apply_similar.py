@@ -610,6 +610,7 @@ class Operation(BaseOperation):
                         )
                         try:
                             self._send_email(mail_to, mail_subject, mail_body)
+                            print("📧 Отправлено письмо на email по поводу вакансии", vacancy["alternate_url"])
                         except Exception as ex:
                             logger.error(f"Ошибка отправки письма: {ex}")
             except LimitExceeded:
