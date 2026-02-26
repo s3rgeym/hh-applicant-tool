@@ -18,7 +18,7 @@ class Namespace(BaseNamespace):
 
 
 class Operation(BaseOperation):
-    """Получает новые access_token и refresh_token."""
+    """Обновляет access_token и refresh_token."""
 
     __aliases__ = ["refresh"]
 
