@@ -18,7 +18,7 @@ class Namespace(BaseNamespace):
 
 
 class Operation(BaseOperation):
-    """Получает новый access_token."""
+    """Обновляет access_token и refresh_token в случае необходимости."""
 
     __aliases__ = ["refresh"]
 
@@ -35,3 +35,4 @@ class Operation(BaseOperation):
         else:
             # logger.debug("Токен валиден, игнорируем обновление.")
             print("ℹ️ Токен не истек, обновление не требуется.")
+            return 2
