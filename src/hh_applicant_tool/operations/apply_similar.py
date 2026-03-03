@@ -702,27 +702,51 @@ class Operation(BaseOperation):
 
         for task in test_data["tasks"]:
             field_name = f"task_{task['id']}"
-            solutions = task.get("candidateSolutions", [])
+            solutions = task.get("candidateSolutions") or []
+            question = (task.get("description") or "").strip()
 
             if solutions:
-                payload[field_name] = random.choice(solutions)["id"]
+                if self.openai_chat:
+                    options = "\n".join(
+                        [
+                            f"{s['id']}: {strip_tags(s['text'])}"
+                            for s in solutions
+                        ]
+                    )
+                    prompt = (
+                        f"Вопрос: {question}\n"
+                        f"Варианты:\n{options}\n"
+                        f"Выбери ID правильного ответа. Пришли только ID."
+                    )
+                    ai_answer = self.openai_chat.send_message(prompt).strip()
+                    # Ищем ID в ответе AI на случай лишнего текста
+                    match = re.search(r"\d+", ai_answer)
+                    selected_id = (
+                        match.group(0) if match else solutions[0]["id"]
+                    )
+                    payload[field_name] = selected_id
+                else:
+                    payload[field_name] = random.choice(solutions)["id"]
             else:
                 # Рандомные эмоджи
                 # payload[f"{field_name}_text"] = "".join(
                 #     chr(random.randint(0x1F300, 0x1F64F))
                 #     for _ in range(random.randint(3, 15))
                 # )
-                question = task["description"].strip()
 
                 if "://" in question:
                     answer = rand_text(
                         "{{Простите|Извините}, но я не перехожу по {внешним|сторонним} ссылкам, так как {опасаюсь взлома|не хочу {быть взломанным|подхватить вирус|чтобы у меня {со|с банковского} счета украли деньги}}.|У меня нет времени на заполнение анкет и гуглодоков}"
                     )
                 else:
-                    answer = rand_text(
-                        self.tool.config.get("vacancy_test_answer")
-                        or "{{{Поищите|Найдите} ответы|Ответы {есть|присутствуют|находятся}} в{ моем|} резюме|{Прочитайте|Посмотрите} мое резюме|{Спросите у|Обратитесь с этим вопросом к} {Chat{| }GPT|DeepSeek|Qwen|Grok|Claude|AI|ИИ}|Мне неинтересно {отвечать|тратить время} на {подобное|{такие|подобные} вопросы}|Это был{ очень|} интересный вопрос|Тоже так думаю|Спасибо|Хорошо|OK|Ответ: 42}"
-                    )
+                    if self.openai_chat:
+                        prompt = f"Дай краткий и профессиональный ответ на вопрос: {question}"
+                        answer = self.openai_chat.send_message(prompt)
+                    else:
+                        answer = rand_text(
+                            self.tool.config.get("vacancy_test_answer")
+                            or "{{{Поищите|Найдите} ответы|Ответы {есть|присутствуют|находятся}} в{ моем|} резюме|{Прочитайте|Посмотрите} мое резюме|{Спросите у|Обратитесь с этим вопросом к} {Chat{| }GPT|DeepSeek|Qwen|Grok|Claude|AI|ИИ}|Мне неинтересно {отвечать|тратить время} на {подобное|{такие|подобные} вопросы}|Это был{ очень|} интересный вопрос|Тоже так думаю|Спасибо|Хорошо|OK|Ответ: 42}"
+                        )
 
                 payload[f"{field_name}_text"] = answer
 
