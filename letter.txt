@@ -1,0 +1,18 @@
+{Здравствуйте|Приветствую}! {Прошу рассмотреть мой отклик|Направляю свою кандидатуру} на вакансию %(vacancy_name)s.
+
+Мой опыт в разработке — более 15 лет. {Свободно владею|Экспертно использую} Python, Go и JavaScript, {умею доводить сложные проекты до продакшена|фокусируюсь на надежной архитектуре и качестве кода}.
+
+✅ Являюсь продвинутым пользователем Linux. На персональных компьютерах использую Arch Linux, винды нет даже в дуалбуте. {Профессионально настраиваю|Имею огромный опыт настройки} серверов и CI/CD: Docker, Kubernetes, Terraform, Ansible, Nginx, GitLab CI, GitHub Actions.
+✅ {Мастерски владею|Глубоко знаю} экосистемой Vue.js: Vue 2/3, Pinia, Vuex, Vue Router, Nuxt.js, Vite, Webpack
+✅ UI & Styles: Vuetify, Element Plus, Tailwind CSS, Ant Design Vue
+✅ Backend: Python (Django, FastAPI, Asyncio), Go (Gin, Echo, Gorm)
+✅ Frontend Core: JavaScript, TypeScript, HTML5, CSS3/SCSS
+✅ DB & Tools: PostgreSQL, Redis, MongoDB, RabbitMQ, Kafka
+
+💰 УСЛОВИЯ СОТРУДНИЧЕСТВА
+Рассматриваю {разовые задачи|проектную работу} с почасовой оплатой от 1500 рублей.
+
+💬 КОНТАКТЫ
+{Для связи пишите в|Мой контакт в} {телеграм|tg}: feedback_s3rgeym_bot
+
+{Буду рад обсудить задачи!|Жду обратной связи!}

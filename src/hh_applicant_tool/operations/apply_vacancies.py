@@ -39,7 +39,7 @@ logger = logging.getLogger(__package__)
 
 class Namespace(BaseNamespace):
     resume_id: str | None
-    message_list_path: Path
+    letter_file: Path | None
     ignore_employers: Path | None
     force_message: bool
     use_ai: bool
@@ -82,20 +82,20 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Откликнуться на все подходящие вакансии."""
 
-    __aliases__ = ("apply",)
+    __aliases__ = ("apply", "apply-similar")
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
         parser.add_argument(
             "--search",
-            help="Строка поиска для фильтрации вакансий, например, 'москва бухгалтер 100500'",  # noqa: E501
+            help="Строка поиска для фильтрации вакансий. Если указана, то поиск будет производиться по вакансиям. В остальных случаях отклики будут производиться по списку рекомендованных вакансий.",  # noqa: E501
             type=str,
         )
         parser.add_argument(
             "-L",
-            "--message-list-path",
-            "--message-list",
-            help="Путь до файла, где хранятся сообщения для отклика на вакансии. Каждое сообщение — с новой строки. Символы \\n будут заменены на переносы.",  # noqa: E501
+            "--letter-file",
+            "--letter",
+            help="Путь до файла с текстом сопроводительного письма.",
             type=Path,
         )
         parser.add_argument(
@@ -263,17 +263,26 @@ class Operation(BaseOperation):
             help=r"Исключить вакансии, если название или описание не соответствует шаблону. Например, `--excluded-filter 'junior|стажир|bitrix|дружн\w+ коллектив|полиграф|open\s*space|опенспейс|хакатон|конкурс|тестов\w+ задан'`",
         )
 
+    cover_letter: str = "{Здравствуйте|Добрый день}, меня зовут %(first_name)s. {Прошу|Предлагаю} рассмотреть {мою кандидатуру|мое резюме «%(resume_title)s»} на вакансию «%(vacancy_name)s». С уважением, %(first_name)s."
+
+    @property
+    def api_client(self):
+        return self.tool.api_client
+
+    @property
+    def args(self) -> Namespace:
+        return self.tool.args
+
     def run(
         self,
         tool: HHApplicantTool,
     ) -> None:
         self.tool = tool
-        self.api_client = tool.api_client
-        # TODO: args сделать отдельным аргументом, тк легче тайпхинты задавать
-        args: Namespace = tool.args
-        self.args = args
-        self.application_messages = self._get_application_messages(
-            args.message_list_path
+        args = self.args
+        self.cover_letter = (
+            args.letter_file.read_text(encoding="utf-8", errors="ignore")
+            if args.letter_file
+            else self.cover_letter
         )
         self.area = args.area
         self.bottom_lat = args.bottom_lat
@@ -312,9 +321,9 @@ class Operation(BaseOperation):
         self.openai_chat = (
             tool.get_openai_chat(args.first_prompt) if args.use_ai else None
         )
-        self._apply_similar()
+        self._apply_vacancies()
 
-    def _apply_similar(self) -> None:
+    def _apply_vacancies(self) -> None:
         resumes: list[datatypes.Resume] = self.tool.get_resumes()
         try:
             self.tool.storage.resumes.save_batch(resumes)
@@ -379,7 +388,7 @@ class Operation(BaseOperation):
         storage = self.tool.storage
         site_emails = {}
 
-        for vacancy in self._get_similar_vacancies(resume_id=resume["id"]):
+        for vacancy in self._get_vacancies(resume_id=resume["id"]):
             try:
                 employer = vacancy.get("employer", {})
 
@@ -506,7 +515,7 @@ class Operation(BaseOperation):
                             except RepositoryError as ex:
                                 logger.exception(ex)
 
-                response_letter = ""
+                letter = ""
 
                 if self.force_message or vacancy.get(
                     "response_letter_required"
@@ -521,14 +530,13 @@ class Operation(BaseOperation):
                             "Мое резюме:" + message_placeholders["resume_title"]
                         )
                         logger.debug("prompt: %s", msg)
-                        response_letter = self.openai_chat.send_message(msg)
+                        letter = self.openai_chat.send_message(msg)
                     else:
-                        response_letter = unescape_string(
-                            rand_text(random.choice(self.application_messages))
-                            % message_placeholders
+                        letter = (
+                            rand_text(self.cover_letter) % message_placeholders
                         )
 
-                    logger.debug(response_letter)
+                    logger.debug(letter)
 
                 logger.debug(
                     "Пробуем откликнуться на вакансию: %s",
@@ -546,7 +554,7 @@ class Operation(BaseOperation):
                             result = self._solve_vacancy_test(
                                 vacancy_id=vacancy["id"],
                                 resume_hash=resume["id"],
-                                letter=response_letter,
+                                letter=letter,
                             )
                             if result.get("success") == "true":
                                 print(
@@ -571,7 +579,7 @@ class Operation(BaseOperation):
                     params = {
                         "resume_id": resume["id"],
                         "vacancy_id": vacancy_id,
-                        "message": response_letter,
+                        "message": letter,
                     }
                     try:
                         if not self.dry_run:
@@ -604,7 +612,7 @@ class Operation(BaseOperation):
                         )
                         mail_subject = rand_text(
                             self.tool.config.get("apply_mail_subject")
-                            or "{По работе|По поводу вакансии|С HH}"
+                            or "{Отклик|Резюме} на вакансию %(vacancy_name)s"
                         )
                         mail_body = unescape_string(
                             rand_text(
@@ -637,7 +645,7 @@ class Operation(BaseOperation):
         print("✅️ Закончили рассылку откликов для резюме:", resume["title"])
 
     def _send_email(self, to: str, subject: str, body: str) -> None:
-        cfg = self.config.get("smtp", {})
+        cfg = self.tool.config.get("smtp", {})
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = cfg.get("from") or cfg.get("user")
@@ -726,7 +734,9 @@ class Operation(BaseOperation):
                     )
                     payload[field_name] = selected_id
                 else:
-                    payload[field_name] = random.choice(solutions)["id"]
+                    # По статистике правильный ответ в большинстве случаев
+                    # находится посередине
+                    payload[field_name] = solutions[len(solutions) // 2]["id"]
             else:
                 # Рандомные эмоджи
                 # payload[f"{field_name}_text"] = "".join(
@@ -742,13 +752,8 @@ class Operation(BaseOperation):
                     prompt = f"Дай краткий и профессиональный ответ на вопрос: {question}"
                     answer = self.openai_chat.send_message(prompt)
                 # Тупоеблые любят вопросы с ответами да/нет, где ответ да является правильным в большинстве случаев.
-                elif "?" in question:
-                    answer = "Да"
                 else:
-                    answer = rand_text(
-                        self.tool.config.get("vacancy_test_answer")
-                        or "{{{Поищите|Найдите} ответы|Ответы {есть|присутствуют|находятся}} в{ моем|} резюме|{Прочитайте|Посмотрите} мое резюме|{Спросите у|Обратитесь с этим вопросом к} {Chat{| }GPT|DeepSeek|Qwen|Grok|Claude|AI|ИИ}|Мне неинтересно {отвечать|тратить время} на {подобное|{такие|подобные} вопросы}|Это был{ очень|} интересный вопрос|Тоже так думаю|Спасибо|Хорошо|OK|Ответ: 42}"
-                    )
+                    answer = "Да"
 
                 payload[f"{field_name}_text"] = answer
 
@@ -904,18 +909,25 @@ class Operation(BaseOperation):
 
         return params
 
-    def _get_similar_vacancies(self, resume_id: str) -> Iterator[SearchVacancy]:
+    def _get_vacancies(
+        self, resume_id: str | None = None
+    ) -> Iterator[SearchVacancy]:
         for page in range(self.total_pages):
-            logger.debug(
-                f"Загружаем подходящие вакансии со страницы: {page + 1}"
-            )
+            logger.debug(f"Загружаем вакансии со страницы: {page + 1}")
             params = self._get_search_params(page)
-            res: PaginatedItems[SearchVacancy] = self.api_client.get(
-                f"/resumes/{resume_id}/similar_vacancies",
-                params,
-            )
 
-            logger.debug(f"Количество подходящих вакансий: {res['found']}")
+            if self.search:
+                res: PaginatedItems[SearchVacancy] = self.api_client.get(
+                    "/vacancies",
+                    params,
+                )
+            else:
+                res: PaginatedItems[SearchVacancy] = self.api_client.get(
+                    f"/resumes/{resume_id}/similar_vacancies",
+                    params,
+                )
+
+            logger.debug(f"Количество вакансий: {res['found']}")
 
             if not res["items"]:
                 return
@@ -956,21 +968,3 @@ class Operation(BaseOperation):
                 return False
 
         return True
-
-    def _get_application_messages(self, path: Path | None) -> list[str]:
-        return (
-            list(
-                filter(
-                    None,
-                    map(
-                        str.strip,
-                        path.open(encoding="utf-8", errors="replace"),
-                    ),
-                )
-            )
-            if path
-            else [
-                "Здравствуйте, меня зовут %(first_name)s. {Меня заинтересовала|Мне понравилась} ваша вакансия «%(vacancy_name)s». Хотелось бы {пообщаться|задать вопросы} о ней.",
-                "{Прошу|Предлагаю} рассмотреть {мою кандидатуру|мое резюме «%(resume_title)s»} на вакансию «%(vacancy_name)s». С уважением, %(first_name)s.",  # noqa: E501
-            ]
-        )
