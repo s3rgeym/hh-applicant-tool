@@ -22,7 +22,7 @@
       "module": "applicant_tool",
       "args": [
         "-vv",
-        "apply-similar"
+        "apply-vacancies"
       ],
       "justMyCode": true
     },

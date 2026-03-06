@@ -204,7 +204,7 @@ hh_applicant_tool  | ✅ Обновлено Программист
 
 Информацию об ошибках можно посмотреть в файле `config/log.txt`, а контакты работодателей — в `config/data` с помощью `sqlite3`. В `config/config.json` хранятся токены, дающие доступ к аккаунту.
 
-Так же советую отредактировать файл `apply_messages.txt`.
+Так же советую отредактировать файл `letter.txt`.
 
 Запущенные сервисы докер стартуют автоматически после перезагрузки. Остановить их можно выполнив:
 
@@ -289,18 +289,18 @@ docker@1897bdd7c80b:/app$
 > [!IMPORTANT]
 > Обратите внимание, что `docker-compose exec`/`docker-compose run` запускаются с аргументами `-u docker`. Только для пользователя `docker` установлен `chromium`, необходимый для авторизации, а так же это избавляет от проблем с правами, когда созданные файлы для изменения требуют root-права.
 
-Если хотите команду `apply-similar` вызывать с какими-то аргументами, то создайте в корне файл `apply-similar.sh`:
+Если хотите команду `apply-vacancies` вызывать с какими-то аргументами, то создайте в корне файл `apply-vacancies.sh`:
 
 ```sh
 #!/bin/bash
 
 # Пример с фильтрацией по исключаемым словам
-/usr/local/bin/python -m hh_applicant_tool apply-similar \
-  -L messages.txt \
+/usr/local/bin/python -m hh_applicant_tool apply-vacancies \
+  -l letter.txt \
   --excluded-filter "fullstack,junior,php" # укажите любые аргументы
 ```
 
-В файлах `startup.sh` и `crontab` замените `/usr/local/bin/python -m hh_applicant_tool apply-similar` на `/bin/sh /app/apply-similar.sh`.
+В файлах `startup.sh` и `crontab` замените `/usr/local/bin/python -m hh_applicant_tool apply-vacancies` на `/bin/sh /app/apply-vacancies.sh`.
 
 ---
 
@@ -496,14 +496,14 @@ $ hh-applicant-tool authorize
 $ hh-applicant-tool --profile profile123 authorize
 
 # Рассылаем заявки
-$ hh-applicant-tool apply-similar
+$ hh-applicant-tool apply-vacancies
 
 # Для тестирования поисковой строки и других параметров, используйте --dry-run.
 # С ним отклики не отправляются, а лишь выводятся сообщения
-$ hh-applicant-tool -vv apply-similar --search "Python программист" --per-page 3 --total-pages 1 --dry-run
+$ hh-applicant-tool -vv apply-vacancies --search "Python программист" --per-page 3 --total-pages 1 --dry-run
 
 # Фильтруем вакансии по исключаемым словам (fullstack, junior, php и т.п.)
-$ hh-applicant-tool apply-similar --search "Python backend" --excluded-filter "fullstack,junior,php,java" --dry-run
+$ hh-applicant-tool apply-vacancies --search "Python backend" --excluded-filter "fullstack,junior,php,java" --dry-run
 
 # Поднимаем резюме
 $ hh-applicant-tool update-resumes
@@ -586,7 +586,7 @@ $ hh-applicant-tool settings auth.username 'user@example.com'
 | **list-resumes**, **list**, **ls** | Список резюме                                                                                                                                                                                                              |
 | **update-resumes**, **update**     | Обновить все резюме. Аналогично нажатию кнопки «Обновить дату».                                                                                                                                                            |
 | **clone-resume**                   | Клонировать резюме                                                                                                                                                                                                         |
-| **apply-similar**                  | Откликнуться на все подходящие вакансии СО ВСЕХ РЕЗЮМЕ. Лимит = 200 в день. На HH есть спам-фильтры, так что лучше не рассылайте отклики со ссылками, иначе рискуете попасть в теневой бан.                                |
+| **apply-vacancies**, **apply**     | Откликнуться на подходящие вакансии. Если указана строка для поиска (`--search`), то поиск будет произведен по вакансиям, иначе по списку рекомендованных вакансий. Лимит = 200 в день. На HH есть спам-фильтры, так что лучше не рассылайте отклики со ссылками, иначе рискуете попасть в теневой бан. |
 | **reply-employers**, **reply**     | Ответить во все чаты с работодателями, где нет ответа либо не прочитали ваш предыдущий ответ                                                                                                                               |
 | **clear-negotiations**             | Отмена откликов                                                                                                                                                                                                            |
 | **call-api**, **api**              | Вызов произвольного метода API с выводом результата.                                                                                                                                                                       |
@@ -624,7 +624,7 @@ hh-applicant-tool call-api [-m {GET|POST|PUT|DELETE}] <endpoint> [<key=value> ..
 
 Если используется метод `GET` или `DELETE` (или ничего не указано), то параметры будут переданы как query string. Во всех остальных случаях парметры передаются как `application/x-www-form-urlencoded` в теле запроса.
 
-Для поиска вакансий по региону в `apply-similar` нужно указать параметр `area`. Можно его указывать как для страны (каз - 40, бел - 2238), так и отдельного города (мск - 1).
+Для поиска вакансий по региону в `apply-vacancies` нужно указать параметр `area`. Можно его указывать как для страны (каз - 40, бел - 2238), так и отдельного города (мск - 1).
 
 Список **area id** по стране:
 
@@ -665,7 +665,7 @@ npx @redocly/cli preview -d docs/hhapi
 Пример рассылки откликов с генерированным письмом:
 
 ```sh
-hh-applicant-tool apply-similar -f --ai
+hh-applicant-tool apply-vacancies -f --ai
 ```
 
 Генерацию сопроводительных писем в откликах я считаю лишним, так как их никто не читает. Экономнее воспользоваться [шаблонами сообщений](#шаблоны-сообщений).
@@ -701,7 +701,7 @@ hh-applicant-tool config -e
 
 ## Шаблоны сообщений
 
-Команды `apply-similar` и `reply-employers` поддерживают специальный формат сообщений.
+Команды `apply-vacancies` и `reply-employers` поддерживают специальный формат сообщений.
 
 Так же в сообщении можно использовать плейсхолдеры:
 
