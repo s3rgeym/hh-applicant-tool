@@ -297,7 +297,7 @@ docker@1897bdd7c80b:/app$
 # Пример с фильтрацией по исключаемым словам
 /usr/local/bin/python -m hh_applicant_tool apply-vacancies \
   -l letter.txt \
-  --excluded-filter "fullstack,junior,php" # укажите любые аргументы
+  --excluded-filter "fullstack|junior|php" # укажите любые аргументы
 ```
 
 В файлах `startup.sh` и `crontab` замените `/usr/local/bin/python -m hh_applicant_tool apply-vacancies` на `/bin/sh /app/apply-vacancies.sh`.
