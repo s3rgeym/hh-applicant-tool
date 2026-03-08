@@ -11,7 +11,7 @@ from typing import Any
 
 
 # Костыль чтобы в key-value хранить даты
-class DateAwareJSONEncoder(json.JSONEncoder):
+class JSONEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, dt.datetime):
             return int(o.timestamp())
@@ -29,19 +29,24 @@ class DateAwareJSONEncoder(json.JSONEncoder):
 #     return dct
 
 
-# class DateAwareJSONDecoder(json.JSONDecoder):
+# class JSONDecoder(json.JSONDecoder):
 #     def __init__(self, *args, **kwargs):
 #         super().__init__(*args, object_hook=date_parser_hook, **kwargs)
 
 
+# TODO: добавить в хелперы
+class JSONDecoder(json.JSONDecoder):
+    pass
+
+
 def dumps(obj, *args: Any, **kwargs: Any) -> str:
-    kwargs.setdefault("cls", DateAwareJSONEncoder)
+    kwargs.setdefault("cls", JSONEncoder)
     kwargs.setdefault("ensure_ascii", False)
     return json.dumps(obj, *args, **kwargs)
 
 
 def dump(fp, obj, *args: Any, **kwargs: Any) -> None:
-    kwargs.setdefault("cls", DateAwareJSONEncoder)
+    kwargs.setdefault("cls", JSONEncoder)
     kwargs.setdefault("ensure_ascii", False)
     json.dump(fp, obj, *args, **kwargs)
 

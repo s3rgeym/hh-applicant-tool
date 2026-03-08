@@ -23,6 +23,7 @@ from ..api.errors import ApiError, LimitExceeded
 from ..main import BaseNamespace, BaseOperation
 from ..storage.repositories.errors import RepositoryError
 from ..utils.datatypes import VacancyTestsData
+from ..utils.json import JSONDecoder
 from ..utils.string import (
     bool2str,
     rand_text,
@@ -76,6 +77,7 @@ class Namespace(BaseNamespace):
     per_page: int
     total_pages: int
     excluded_filter: str | None
+    max_responses: int
     send_email: bool
 
 
@@ -140,6 +142,16 @@ class Operation(BaseOperation):
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
+            "--excluded-filter",
+            type=str,
+            help=r"Исключить вакансии, если название или описание не соответствует шаблону. Например, `--excluded-filter 'junior|стажир|bitrix|дружн\w+ коллектив|полиграф|open\s*space|опенспейс|хакатон|конкурс|тестов\w+ задан'`",
+        )
+        parser.add_argument(
+            "--max-responses",
+            type=int,
+            help="Пропускать отклик на вакансии с более чем N откликов",
+        )
+        parser.add_argument(
             "--dry-run",
             help="Не отправлять отклики, а только выводить информацию",
             action=argparse.BooleanOptionalAction,
@@ -147,12 +159,12 @@ class Operation(BaseOperation):
 
         # Дальше идут параметры в точности соответствующие параметрам запроса
         # при поиске подходящих вакансий
-        search_params_group = parser.add_argument_group(
-            "Параметры поиска вакансий",
+        api_search_filters = parser.add_argument_group(
+            "Фильтры для поиска вакансий",
             "Эти параметры напрямую соответствуют фильтрам поиска HeadHunter API",
         )
 
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--order-by",
             help="Сортировка вакансий",
             choices=[
@@ -164,103 +176,98 @@ class Operation(BaseOperation):
             ],
             # default="relevance",
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--experience",
             help="Уровень опыта работы (noExperience, between1And3, between3And6, moreThan6)",
             type=str,
             default=None,
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--schedule",
             help="Тип графика (fullDay, shift, flexible, remote, flyInFlyOut)",
             type=str,
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--employment", nargs="+", help="Тип занятости"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--area", nargs="+", help="Регион (area id)"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--metro", nargs="+", help="Станции метро (metro id)"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--professional-role", nargs="+", help="Проф. роль (id)"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--industry", nargs="+", help="Индустрия (industry id)"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--employer-id", nargs="+", help="ID работодателей"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--excluded-employer-id", nargs="+", help="Исключить работодателей"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--currency", help="Код валюты (RUR, USD, EUR)"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--salary", type=int, help="Минимальная зарплата"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--only-with-salary",
             default=False,
             action=argparse.BooleanOptionalAction,
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--label", nargs="+", help="Метки вакансий (label)"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--period", type=int, help="Искать вакансии за N дней"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--date-from", help="Дата публикации с (YYYY-MM-DD)"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--date-to", help="Дата публикации по (YYYY-MM-DD)"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--top-lat", type=float, help="Гео: верхняя широта"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--bottom-lat", type=float, help="Гео: нижняя широта"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--left-lng", type=float, help="Гео: левая долгота"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--right-lng", type=float, help="Гео: правая долгота"
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--sort-point-lat",
             type=float,
             help="Координата lat для сортировки по расстоянию",
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--sort-point-lng",
             type=float,
             help="Координата lng для сортировки по расстоянию",
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--no-magic",
             action="store_true",
             help="Отключить авторазбор текста запроса",
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--premium",
             default=False,
             action=argparse.BooleanOptionalAction,
             help="Только премиум вакансии",
         )
-        search_params_group.add_argument(
+        api_search_filters.add_argument(
             "--search-field",
             nargs="+",
             help="Поля поиска (name, company_name и т.п.)",
-        )
-        search_params_group.add_argument(
-            "--excluded-filter",
-            type=str,
-            help=r"Исключить вакансии, если название или описание не соответствует шаблону. Например, `--excluded-filter 'junior|стажир|bitrix|дружн\w+ коллектив|полиграф|open\s*space|опенспейс|хакатон|конкурс|тестов\w+ задан'`",
         )
 
     cover_letter: str = "{Здравствуйте|Добрый день}, меня зовут %(first_name)s. {Прошу|Предлагаю} рассмотреть {мою кандидатуру|мое резюме «%(resume_title)s»} на вакансию «%(vacancy_name)s». С уважением, %(first_name)s."
@@ -293,11 +300,13 @@ class Operation(BaseOperation):
         self.employer_id = args.employer_id
         self.employment = args.employment
         self.excluded_employer_id = args.excluded_employer_id
+        self.excluded_filter = args.excluded_filter
         self.experience = args.experience
         self.force_message = args.force_message
         self.industry = args.industry
         self.label = args.label
         self.left_lng = args.left_lng
+        self.max_responses = args.max_responses
         self.metro = args.metro
         self.no_magic = args.no_magic
         self.only_with_salary = args.only_with_salary
@@ -313,7 +322,6 @@ class Operation(BaseOperation):
         self.schedule = args.schedule
         self.search = args.search
         self.search_field = args.search_field
-        self.excluded_filter = args.excluded_filter
         self.sort_point_lat = args.sort_point_lat
         self.sort_point_lng = args.sort_point_lng
         self.top_lat = args.top_lat
@@ -449,7 +457,10 @@ class Operation(BaseOperation):
                     )
                     continue
 
-                if self.excluded_filter and self._is_excluded(vacancy):
+                if (
+                    self.excluded_filter
+                    or (self.max_responses and self.max_responses > 0)
+                ) and self._is_filtered(vacancy):
                     logger.info(
                         "Вакансия попала под фильтр: %s",
                         vacancy["alternate_url"],
@@ -652,6 +663,8 @@ class Operation(BaseOperation):
         msg["To"] = to
         msg.set_content(body)
         self.tool.smtp.send_message(msg)
+
+    json_decoder = JSONDecoder()
 
     def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData:
         """Парсит тесты"""
@@ -937,34 +950,37 @@ class Operation(BaseOperation):
             if page >= res["pages"] - 1:
                 return
 
-    def _is_excluded(self, vacancy: SearchVacancy) -> bool:
-        if not self.excluded_filter:
+    def _is_filtered(self, vacancy: SearchVacancy) -> bool:
+        r = self.tool.session.get("https://hh.ru/vacancy/" + vacancy["id"])
+        r.raise_for_status()
+        # print(r.text)
+
+        # TODO: количество откликов можно узнать только на странице поиска в
+        # веб-версии
+        if self.max_responses:
+            # responses_count, _ = self.json_decoder.raw_decode(
+            #     re.search(r'"totalResponsesCount":(\d+)', r.text).group(1)
+            # )
+            # responses_count = int(responses_count)
+            # logger.debug(
+            #     "%s (%s): %d отклик (-а, -ов)",
+            #     vacancy["alternate_url"],
+            #     vacancy["name"],
+            #     responses_count,
+            # )
+            # return responses_count >= self.max_responses
             return False
 
-        pat: re.Pattern = re.compile(self.excluded_filter, re.IGNORECASE)
-        logger.debug(pat.pattern)
-        snippet = vacancy.get("snippet") or {}
-        combined = " ".join(
-            [
-                vacancy.get("name") or "",
-                snippet.get("requirement") or "",
-                snippet.get("responsibility") or "",
-            ]
-        )
+        if self.excluded_filter:
+            description, _ = self.json_decoder.raw_decode(
+                re.search(r'"description": (.*)', r.text).group(1)
+            )
+            description = strip_tags(description)
+            content = vacancy["name"] + "\n" + description
+            logger.debug(content[:2047])
+            excluded_pat: re.Pattern = re.compile(
+                self.excluded_filter, re.IGNORECASE
+            )
+            return bool(excluded_pat.match(content))
 
-        if not pat.search(combined):
-            r = self.tool.session.get("https://hh.ru/vacancy/" + vacancy["id"])
-            if m := re.search(
-                'data-qa="vacancy-description">(.+?)<div class="vacancy-',
-                r.text,
-            ):
-                content = strip_tags(m.group(1))
-                logger.debug("description: %.512s", content)
-                return bool(pat.search(content))
-            else:
-                logger.warning(
-                    f"Описание вакансии не найдено: {r.request.url} ({r.status_code})"
-                )
-                return False
-
-        return True
+        return False
