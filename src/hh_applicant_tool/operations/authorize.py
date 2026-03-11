@@ -193,7 +193,7 @@ class Operation(BaseOperation):
 
                 storage.settings.set_value("auth.last_login", datetime.now())
                 cookies = await context.cookies()
-                await self._set_session_cookies(cookies)
+                self._set_session_cookies(cookies)
 
             finally:
                 logger.debug("Закрытие браузера")

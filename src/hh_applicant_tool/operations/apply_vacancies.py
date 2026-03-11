@@ -457,10 +457,7 @@ class Operation(BaseOperation):
                     )
                     continue
 
-                if (
-                    self.excluded_filter
-                    or (self.max_responses and self.max_responses > 0)
-                ) and self._is_filtered(vacancy):
+                if self._is_excluded(vacancy):
                     logger.info(
                         "Вакансия попала под фильтр: %s",
                         vacancy["alternate_url"],
@@ -950,37 +947,33 @@ class Operation(BaseOperation):
             if page >= res["pages"] - 1:
                 return
 
-    def _is_filtered(self, vacancy: SearchVacancy) -> bool:
-        r = self.tool.session.get("https://hh.ru/vacancy/" + vacancy["id"])
-        r.raise_for_status()
-        # print(r.text)
-
-        # TODO: количество откликов можно узнать только на странице поиска в
-        # веб-версии
-        if self.max_responses:
-            # responses_count, _ = self.json_decoder.raw_decode(
-            #     re.search(r'"totalResponsesCount":(\d+)', r.text).group(1)
-            # )
-            # responses_count = int(responses_count)
-            # logger.debug(
-            #     "%s (%s): %d отклик (-а, -ов)",
-            #     vacancy["alternate_url"],
-            #     vacancy["name"],
-            #     responses_count,
-            # )
-            # return responses_count >= self.max_responses
+    def _is_excluded(self, vacancy: SearchVacancy) -> bool:
+        if not self.excluded_filter:
             return False
 
-        if self.excluded_filter:
-            description, _ = self.json_decoder.raw_decode(
-                re.search(r'"description": (.*)', r.text).group(1)
-            )
-            description = strip_tags(description)
-            content = vacancy["name"] + "\n" + description
-            logger.debug(content[:2047])
-            excluded_pat: re.Pattern = re.compile(
-                self.excluded_filter, re.IGNORECASE
-            )
-            return bool(excluded_pat.match(content))
+        snippet = vacancy.get("snippet", {})
+        vacancy_info = " ".join(
+            [
+                vacancy.get("name") or "",
+                snippet.get("requirement") or "",
+                snippet.get("responsibility") or "",
+            ]
+        )
 
-        return False
+        excluded_pat: re.Pattern = re.compile(
+            self.excluded_filter, re.IGNORECASE
+        )
+
+        if excluded_pat.search(vacancy_info):
+            return True
+
+        # Грузим полный текст вакансии только, если предыдущий фильтр не сработал
+        r = self.tool.session.get("https://hh.ru/vacancy/" + vacancy["id"])
+        r.raise_for_status()
+
+        description, _ = self.json_decoder.raw_decode(
+            re.search(r'"description": (.*)', r.text).group(1)
+        )
+        description = strip_tags(description)
+        logger.debug(description[:2047])
+        return bool(excluded_pat.match(description))
