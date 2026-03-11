@@ -149,7 +149,7 @@ class Operation(BaseOperation):
         parser.add_argument(
             "--max-responses",
             type=int,
-            help="Пропускать отклик на вакансии с более чем N откликов",
+            help="Пропускать отклик на вакансии с более чем N откликов (не реализован)",
         )
         parser.add_argument(
             "--dry-run",
@@ -951,20 +951,23 @@ class Operation(BaseOperation):
         if not self.excluded_filter:
             return False
 
-        snippet = vacancy.get("snippet", {})
-        vacancy_info = " ".join(
-            [
-                vacancy.get("name") or "",
-                snippet.get("requirement") or "",
-                snippet.get("responsibility") or "",
-            ]
+        vacancy_summary = " ".join(
+            filter(
+                None,
+                [
+                    vacancy.get("name"),
+                    snippet.get("snippet", {}).get("requirement"),
+                    snippet.get("snippet", {}).get("responsibility"),
+                ]
+            )
         )
 
-        excluded_pat: re.Pattern = re.compile(
-            self.excluded_filter, re.IGNORECASE
-        )
 
-        if excluded_pat.search(vacancy_info):
+        logger.debug(vacancy_summary)
+        
+        excluded_pat: re.Pattern = re.compile(self.excluded_filter, re.IGNORECASE)
+
+        if excluded_pat.search(vacancy_summary):
             return True
 
         # Грузим полный текст вакансии только, если предыдущий фильтр не сработал
