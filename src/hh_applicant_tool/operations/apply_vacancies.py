@@ -976,4 +976,4 @@ class Operation(BaseOperation):
         )
         description = strip_tags(description)
         logger.debug(description[:2047])
-        return bool(excluded_pat.match(description))
+        return bool(excluded_pat.search(description))
