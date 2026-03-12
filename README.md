@@ -53,7 +53,8 @@
 > Наглядно о раб_отном рынке в ресурсной федерации
 
 <div align="center">
-  <img width="500" alt="image" src="https://github.com/user-attachments/assets/f8b33231-29e3-458b-b130-ab2918048fec" />
+  <img width="400" alt="image" src="https://github.com/user-attachments/assets/3a734716-172d-48c6-9689-aded6a8bc7bd" />
+  <img width="400" alt="image" src="https://github.com/user-attachments/assets/36b8a399-2d8a-4ad6-9d58-fa4465856cd1" />
 </div>
 
 ---
