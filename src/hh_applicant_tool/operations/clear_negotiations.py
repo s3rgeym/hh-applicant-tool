@@ -23,6 +23,7 @@ class Namespace(BaseNamespace):
     older_than: int
     dry_run: bool
     delete_chat: bool
+    block_ats: bool
 
 
 class Operation(BaseOperation):
@@ -47,13 +48,16 @@ class Operation(BaseOperation):
         parser.add_argument(
             "-d",
             "--delete-chat",
-            action=argparse.BooleanOptionalAction,
+            action="store_true",
             help="Удалить так же чат",
+        )
+        parser.add_argument(
+            "--block-ats", action="store_true", help="Блокировать ATS"
         )
         parser.add_argument(
             "-n",
             "--dry-run",
-            action=argparse.BooleanOptionalAction,
+            action="store_true",
             help="Тестовый запуск без реального удаления",
         )
 
@@ -103,6 +107,9 @@ class Operation(BaseOperation):
             # except RepositoryError as e:
             #     logger.exception(e)
 
+            # print(negotiation)
+            # raise RuntimeError()
+
             if self.args.older_than:
                 updated_at = parse_api_datetime(negotiation["updated_at"])
                 # А хз какую временную зону сайт возвращает
@@ -114,16 +121,13 @@ class Operation(BaseOperation):
                     continue
             elif negotiation["state"]["id"] != "discard":
                 continue
+
             try:
                 logger.debug(
                     "Пробуем отменить отклик на %s", vacancy["alternate_url"]
                 )
 
                 if not self.args.dry_run:
-                    # logger.debug(negotiation)
-
-                    # raise RuntimeError("test")
-
                     self.tool.api_client.delete(
                         f"/negotiations/active/{negotiation['id']}",
                         with_decline_message=negotiation["state"]["id"]
@@ -136,25 +140,49 @@ class Operation(BaseOperation):
                         vacancy["name"],
                     )
 
-                    if self.args.delete_chat:
+                if self.args.delete_chat:
+                    logger.debug(
+                        "Пробуем удалить чат с откликом на вакансию %s",
+                        vacancy["alternate_url"],
+                    )
+
+                    if not self.args.dry_run:
                         if self.delete_chat(negotiation["id"]):
                             print(f"❌ Удалили чат #{negotiation['id']}")
+
+                d = parse_api_datetime(
+                    negotiation["updated_at"]
+                ) - parse_api_datetime(negotiation["created_at"])
+
+                logger.debug("Ответ на отклик пришел через %d сек.", d.seconds)
+
+                ats_detected = d.seconds <= 16 * 60
+
+                if ats_detected:
+                    logger.info(
+                        "Признаки использования ATS компанией: %s (%s)",
+                        vacancy["employer"]["name"],
+                        vacancy["employer"]["alternate_url"],
+                    )
 
                 employer = vacancy.get("employer", {})
                 employer_id = employer.get("id")
 
                 if (
-                    self.args.blacklist_discard
+                    (
+                        self.args.blacklist_discard
+                        or (self.args.block_ats and ats_detected)
+                    )
                     and employer
                     and employer_id
                     and employer_id not in blacklisted
                 ):
                     logger.debug(
-                        "Пробуем заблокировать %s (%s)", 
+                        "Пробуем заблокировать работодателя %s %s",
                         employer["alternate_url"],
                         employer["name"],
                     )
-                    
+
                     if not self.args.dry_run:
                         self.tool.api_client.put(
                             f"/employers/blacklisted/{employer_id}"
