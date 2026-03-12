@@ -951,21 +951,23 @@ class Operation(BaseOperation):
         if not self.excluded_filter:
             return False
 
+        snippet = vacancy.get("snippet", {})
         vacancy_summary = " ".join(
             filter(
                 None,
                 [
                     vacancy.get("name"),
-                    snippet.get("snippet", {}).get("requirement"),
-                    snippet.get("snippet", {}).get("responsibility"),
-                ]
+                    snippet.get("requirement"),
+                    snippet.get("responsibility"),
+                ],
             )
         )
 
-
         logger.debug(vacancy_summary)
-        
-        excluded_pat: re.Pattern = re.compile(self.excluded_filter, re.IGNORECASE)
+
+        excluded_pat: re.Pattern = re.compile(
+            self.excluded_filter, re.IGNORECASE
+        )
 
         if excluded_pat.search(vacancy_summary):
             return True
