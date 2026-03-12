@@ -43,7 +43,12 @@ def unescape_string(text: str) -> str:
     )
 
 
+def br2nl(s: str) -> str:
+    return re.sub(r"<br\s*/?>", s, re.I)
+
+
 def strip_tags(content: str) -> str:
+    content = br2nl(content)
     content = re.sub(r"<[^>]+>", "", content)
     # content = re.sub(r"\s+", " ", content)
     return content.strip()
