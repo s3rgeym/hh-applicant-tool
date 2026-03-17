@@ -744,9 +744,18 @@ class Operation(BaseOperation):
                     )
                     payload[field_name] = selected_id
                 else:
-                    # По статистике правильный ответ в большинстве случаев
-                    # находится посередине
-                    payload[field_name] = solutions[len(solutions) // 2]["id"]
+                    yes_solution = next(
+                        filter(lambda x: x["text"].lower() == "да", solutions),
+                        None,
+                    )
+
+                    payload[field_name] = (
+                        yes_solution["id"]
+                        if yes_solution
+                        # По статистике правильный ответ в большинстве случаев
+                        # находится посередине
+                        else solutions[len(solutions) // 2]["id"]
+                    )
             else:
                 # Рандомные эмоджи
                 # payload[f"{field_name}_text"] = "".join(
