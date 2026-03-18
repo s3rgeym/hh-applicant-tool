@@ -1,18 +1,12 @@
 from __future__ import annotations
 
-import platform
-import socket
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from functools import cache
 from importlib.metadata import version
 from logging import getLogger
 from typing import TYPE_CHECKING, Literal
 
 import requests
-from requests.exceptions import RequestException
-
-from . import binpack
-from .log import collect_traceback_logs
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -27,147 +21,6 @@ def parse_version(v: str) -> tuple[int, int, int]:
 @cache
 def get_package_version() -> str | None:
     return version("hh-applicant-tool")
-
-
-class ErrorReporter:
-    def __build_report(
-        self: HHApplicantTool,
-        last_report: datetime,
-    ) -> dict:
-        error_logs = ""
-        if self.log_file.exists():
-            with self.log_file.open(encoding="utf-8", errors="ignore") as fp:
-                error_logs = collect_traceback_logs(fp, last_report)
-
-        # Эти данные нужны для воспроизведения ошибок и пополнения базы сеньора овчарки. Среди них ваших
-        # персональных данных нет.
-        vacancy_contacts = [
-            c.to_dict()
-            for c in self.storage.vacancy_contacts.find(
-                updated_at__ge=last_report
-            )
-        ]
-
-        for c in vacancy_contacts:
-            c.pop("id", 0)
-
-        employers = [
-            {
-                k: v
-                for k, v in emp.to_dict().items()
-                if k
-                in [
-                    "id",
-                    "type",
-                    "alternate_url",
-                    "area_id",
-                    "area_name",
-                    "name",
-                    "site_url",
-                    "created_at",
-                ]
-            }
-            for emp in self.storage.employers.find(updated_at__ge=last_report)
-        ]
-
-        employer_sites = [
-            c.to_dict()
-            for c in self.storage.employer_sites.find(
-                updated_at__ge=last_report
-            )
-        ]
-
-        for site in employer_sites:
-            site.pop("id", 0)
-
-        vacancies = [
-            {
-                k: v
-                for k, v in vac.to_dict().items()
-                if k
-                in [
-                    "id",
-                    "alternate_url",
-                    "area_id",
-                    "area_name",
-                    "salary_from",
-                    "salary_to",
-                    "currency",
-                    "name",
-                    "professional_roles",
-                    "experience",
-                    "remote",
-                    "created_at",
-                ]
-            }
-            for vac in self.storage.vacancies.find(updated_at__ge=last_report)
-        ]
-
-        # log.info("num vacncies: %d", len(vacancies))
-
-        system_info = {
-            "os": platform.system(),
-            "os_release": platform.release(),
-            "hostname": socket.gethostname(),  # я по нему уникальные хосты считаю
-            "python_version": platform.python_version(),
-        }
-
-        return dict(
-            error_logs=error_logs[-100000:],
-            vacancy_contacts=vacancy_contacts[-10000:],
-            employers=employers[-10000:],
-            employer_sites=employer_sites[-10000:],
-            vacancies=vacancies[-10000:],
-            package_version=get_package_version(),
-            system_info=system_info,
-            report_created=datetime.now(timezone.utc),
-        )
-
-    def __send_report(self: HHApplicantTool, data: bytes) -> int:
-        try:
-            r = self.session.post(
-                # "http://localhost:8000/report",
-                "https://hh-applicant-tool.mooo.com:54157/report",
-                data=data,
-                timeout=15.0,
-            )
-            r.raise_for_status()
-            return r.status_code == 200
-        except RequestException:
-            # log.error("Network error: %s", e)
-            return False
-
-    def _process_reporting(self):
-        # Получаем timestamp последнего репорта
-        last_report = datetime.fromtimestamp(
-            self.storage.settings.get_value("_last_report", 0)
-        )
-
-        if datetime.now() >= last_report + timedelta(hours=72):
-            try:
-                report_dict = self.__build_report(last_report)
-                has_data = any(
-                    [
-                        report_dict.get("error_logs"),
-                        report_dict.get("employers"),
-                        report_dict.get("employer_sites"),
-                        report_dict.get("vacancy_contacts"),
-                        report_dict.get("vacancies"),
-                    ]
-                )
-                if has_data:
-                    data = binpack.serialize(report_dict)
-                    log.debug("Report data size: %d bytes", len(data))
-                    # print(binpack.deserialize(data))
-                    if self.__send_report(data):
-                        log.debug("Report was sent")
-                    else:
-                        log.debug("Report failed")
-                else:
-                    log.debug("Nothing to report")
-            finally:
-                # Сохраняем время последней попытки/удачного репорта
-                self.storage.settings.set_value("_last_report", datetime.now())
 
 
 class VersionChecker:
@@ -203,12 +56,7 @@ class VersionChecker:
                 )
 
 
-class MegaTool(ErrorReporter, VersionChecker):
+class MegaTool(VersionChecker):
     def _check_system(self: HHApplicantTool):
         if not self.storage.settings.get_value("disable_version_check", False):
             self._check_version()
-
-        if self.storage.settings.get_value("send_error_reports", True):
-            self._process_reporting()
-        else:
-            log.warning("ОТКЛЮЧЕНА ОТПРАВКА СООБЩЕНИЙ ОБ ОШИБКАХ!")
