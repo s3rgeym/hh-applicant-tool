@@ -861,29 +861,18 @@ tool.save_token()
 
 ## Дополнительные настройки
 
-<details>
-<summary>Если вы обычный пользователь, то ничего лучше не трогайте.</summary>
-
 Отключение проверки версии с выводом предупреждения:
 
 ```sh
 hh-applicant-tool settings disable_version_check true
 ```
 
-Утилита ищет в логах информацию о Python-ошибках. Они отправляются на сервер разработчика с целью их оперативного исправления, однако, вы можете отключить отправку отчетов:
-
-```sh
-hh-applicant-tool settings send_error_reports false
-```
-
-</details>
-
 ---
 
 ## Связанные проекты
 
-* [Приложение под Android](https://github.com/s3rgeym/hh-resume-automate)
-* [Простенький отклик только рассылающий отклики](https://github.com/s3rgeym/hh-auto-apply)
+- [Приложение под Android](https://github.com/s3rgeym/hh-resume-automate)
+- [Простенький отклик только рассылающий отклики](https://github.com/s3rgeym/hh-auto-apply)
 
 ---
 
