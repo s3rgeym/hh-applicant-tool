@@ -44,6 +44,9 @@ class Namespace(BaseNamespace):
     ignore_employers: Path | None
     force_message: bool
     use_ai: bool
+    ai_filter: bool
+    ai_rate_limit: int
+    ai_prompt: str
     first_prompt: str
     prompt: str
     order_by: str
@@ -112,6 +115,22 @@ class Operation(BaseOperation):
             "--ai",
             help="Использовать AI для генерации сообщений",
             action=argparse.BooleanOptionalAction,
+        )
+        parser.add_argument(
+            "--ai-filter",
+            help="Использовать AI для фильтрации вакансий перед откликом",
+            action=argparse.BooleanOptionalAction,
+        )
+        parser.add_argument(
+            "--ai-rate-limit",
+            help="Лимит запросов к AI в минуту для фильтрации",
+            type=int,
+            default=40,
+        )
+        parser.add_argument(
+            "--ai-prompt",
+            help="Промпт для AI фильтрации вакансий",
+            default="Определи, подходит ли вакансия для резюме соискателя. Ответь только 'да' или 'нет'.",
         )
         parser.add_argument(
             "--first-prompt",
@@ -330,7 +349,152 @@ class Operation(BaseOperation):
         self.openai_chat = (
             tool.get_openai_chat(args.first_prompt) if args.use_ai else None
         )
+        
+        # Инициализация AI фильтра вакансий
+        self.ai_filter = args.ai_filter
+        self.ai_prompt = args.ai_prompt
+        self.ai_filter_chat = None
+        self._resume_analysis: str | None = None
+        
+        if self.ai_filter:
+            if self.resume_id:
+                resume_data = self._get_full_resume(self.resume_id)
+            else:
+                resumes_list = self.tool.get_resumes()
+                resume_data = resumes_list[0] if resumes_list else {}
+
+            resume_analysis = self._analyze_resume(resume_data)
+            filter_system_prompt = self._build_filter_system_prompt(resume_analysis)
+            self.ai_filter_chat = tool.get_openai_chat(filter_system_prompt)
+            
+            #logger.debug(filter_system_prompt)
+            
+            if args.ai_rate_limit:
+                self.ai_filter_chat.rate_limit = args.ai_rate_limit
         self._apply_vacancies()
+
+    def _get_full_resume(self, resume_id: str) -> dict:
+        return self.api_client.get(f"/resumes/{resume_id}")
+
+    def _analyze_resume(self, resume: dict, resume_full: dict | None = None) -> str:
+        if self._resume_analysis:
+            return self._resume_analysis
+
+        resume_id = resume.get("id")
+        if resume_id:
+            try:
+                full_resume = self.api_client.get(f"/resumes/{resume_id}")
+                
+                parts = []
+
+                title = full_resume.get("title", "")
+                if title:
+                    parts.append(f"Должность: {title}")
+
+                if "skills" in full_resume:
+                    parts.append(f"\n---------- О СЕБЕ ----------")
+                    parts.append(full_resume.get("skills", ""))
+                
+                if "skill_set" in full_resume and full_resume["skill_set"]:
+                    parts.append(f"\n---------- НАВЫКИ ----------")
+                    skills_row = ", ".join(full_resume["skill_set"])
+                    parts.append(skills_row)
+
+                if "experience" in full_resume:
+                    parts.append(f"\n---------- ОПЫТ РАБОТЫ ----------")
+                    for exp in full_resume.get("experience", []):
+                        company = exp.get("company", "Не указано")
+                        position = exp.get("position", "Не указано")
+                        start = exp.get("start", "")
+                        end = exp.get("end") or "по настоящее время"
+
+                        parts.append(f"\n- {company}")
+                        parts.append(f" Должность: {position}")
+                        parts.append(f" Период: {start} - {end}")
+
+                        description = exp.get("description")
+                        if description:
+                            parts.append(f" Описание:")
+                            parts.append(f" {description}")
+                            
+                self._resume_analysis = "\n".join(parts)
+                return self._resume_analysis
+
+            except Exception as e:
+                logger.warning(f"Не удалось получить полное резюме: {e}")
+
+        return self._resume_analysis
+    
+    # КТО ЭТО ПРОЧИТАЛ ТОТ ПИД@РАС
+    def _is_vacancy_suitable(self, vacancy: dict, resume_analysis: str) -> bool:
+        if not self.ai_filter_chat:
+            return True
+        
+        vacancy_name = vacancy.get("name", "")
+        employer = vacancy.get("employer", {})
+        employer_name = employer.get("name", "")
+        
+        snippet = vacancy.get("snippet", {})
+        requirements = snippet.get("requirement", "")
+        responsibility = snippet.get("responsibility", "")
+        
+        vacancy_info = f"\nВакансия: {vacancy_name}"
+        vacancy_info += f"\nРаботодатель: {employer_name}"
+        
+        if requirements:
+            vacancy_info += f"\nТребования: {requirements}"
+        if responsibility:
+            vacancy_info += f"\nОбязанности: {responsibility}"
+        
+
+        prompt = f"{self.ai_prompt} {vacancy_info}"
+
+        # Вывод промпта в дебаге
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"AI промпт: {prompt}") 
+
+        # повторные попытки при ошибке 429 (Too Many Requests)
+        max_retries = 12
+        retry_delay = 10
+
+        for attempt in range(max_retries):
+            try:
+                response = self.ai_filter_chat.send_message(prompt).strip().lower()
+                
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(f"AI ответ: {response}")
+
+                if response.startswith("да") or response.startswith("yes"):
+                    return True
+                elif response.startswith("нет") or response.startswith("no"):
+                    logger.info(f"Вакансия {vacancy_name} отклонена AI")
+                    return False
+                return True
+            except Exception as e:
+                error_str = str(e)
+
+                if "429" in error_str and attempt < max_retries - 1:
+                    logger.warning(
+                        f"Получена ошибка 429 (Too Many Requests). "
+                        f"Повторная попытка через {retry_delay} сек... "
+                        f"(попытка {attempt + 1}/{max_retries})"
+                    )
+                    time.sleep(retry_delay)
+                    continue
+                logger.error(f"Ошибка AI: {e}")
+                return True  # при любой другой ошибке пропускаем вакансию
+
+    def _build_filter_system_prompt(self, resume_analysis: str) -> str:
+        return f"""Ты - эксперт по подбору персонала с многолетним опытом работы в HR.
+Твоя задача - анализировать резюме кандидатов и сравнивать их с вакансиями работодателей.
+Ты должен внимательно изучить ВСЮ информацию о резюме кандидата и вакансии, затем принять решение о соответствии.
+
+ВОТ ИНФОРМАЦИЯ О КАНДИДАТЕ:
+                
+{resume_analysis}
+                               
+Отвечай ТОЛЬКО 'да' если вакансия ПОДХОДИТ кандидату, или 'нет' если НЕ ПОДХОДИТ.
+Не добавляй никаких пояснений, только одно слово - 'да' или 'нет'."""
 
     def _apply_vacancies(self) -> None:
         resumes: list[datatypes.Resume] = self.tool.get_resumes()
@@ -472,6 +636,17 @@ class Operation(BaseOperation):
                         vacancy["alternate_url"],
                     )
                     continue
+
+                # AI фильтрация вакансий
+                if self.ai_filter and self.ai_filter_chat:
+                    resume_analysis = self._analyze_resume(resume)
+                    if not self._is_vacancy_suitable(vacancy, resume_analysis):
+                        logger.info(
+                            "Вакансия отклонена AI фильтром: %s",
+                            vacancy["alternate_url"],
+                        )
+                        print("🧠 AI пропустил", vacancy["alternate_url"])
+                        continue
 
                 # Перед откликом выгружаем профиль компании
                 employer_id = employer.get("id")
