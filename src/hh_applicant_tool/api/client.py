@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import logging
 import time
 from dataclasses import dataclass
@@ -111,7 +112,7 @@ class BaseClient:
                 # 'Transfer-Encoding': 'chunked'
                 try:
                     rv = response.json() if response.text else {}
-                except as_json.decoder.JSONDecodeError as ex:
+                except json.JSONDecodeError as ex:
                     raise errors.BadResponse(
                         f"Can't decode JSON: {method} {url} ({response.status_code})"
                     ) from ex

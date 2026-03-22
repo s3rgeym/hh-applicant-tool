@@ -64,7 +64,7 @@ class Operation(BaseOperation):
                     if tool.args.csv or tool.args.output:
                         # Если -o не задан, используем sys.stdout
                         output = (
-                            tool.args.output.open("w", charset="utf-8")
+                            tool.args.output.open("w", encoding="utf-8")
                             if tool.args.output
                             else sys.stdout
                         )
