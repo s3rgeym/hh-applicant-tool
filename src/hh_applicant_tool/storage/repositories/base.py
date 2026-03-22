@@ -50,7 +50,7 @@ class BaseRepository:
         return False
 
     def maybe_commit(self, commit: bool | None = None) -> bool:
-        if commit is not None and commit or self.auto_commit:
+        if commit if commit is not None else self.auto_commit:
             self.commit()
 
     def _row_to_model(self, cursor: sqlite3.Cursor, row: tuple) -> BaseModel:

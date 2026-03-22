@@ -166,7 +166,7 @@ class Operation(BaseOperation):
                 # Пропуск откликов, которые не обновлялись более N дней (при просмотре они обновляются вроде)
                 if (
                     self.period
-                    and (datetime().now(updated_at.tzinfo) - updated_at).days
+                    and (datetime.now(updated_at.tzinfo) - updated_at).days
                     > self.period
                 ):
                     continue
@@ -234,7 +234,7 @@ class Operation(BaseOperation):
 
                     if page + 1 >= messages_res["pages"]:
                         break
-                    page = messages_res["pages"] - 1
+                    page += 1
 
                 if not last_message:
                     continue

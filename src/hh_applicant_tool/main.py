@@ -222,7 +222,7 @@ class HHApplicantTool(MegaTool):
         token = config.get("token", {})
         return api.client.ApiClient(
             client_id=config.get("client_id"),
-            client_secret=config.get("client_id"),
+            client_secret=config.get("client_secret"),
             access_token=token.get("access_token"),
             refresh_token=token.get("refresh_token"),
             access_expires_at=token.get("access_expires_at"),
