@@ -324,16 +324,20 @@ class HHApplicantTool(MegaTool):
 
     def get_openai_chat(self, system_prompt: str) -> ai.ChatOpenAI:
         c = self.config.get("openai", {})
-        if not (token := c.get("token")):
+        # Поддержка как token так и api_key для совместимости
+        api_key = c.get("api_key") or c.get("token")
+        if not api_key:
             raise ValueError("Токен для OpenAI не задан")
         return ai.ChatOpenAI(
-            token=token,
+            api_key=api_key,
             model=c.get("model"),
             temperature=c.get("temperature", 0.7),
             max_completion_tokens=c.get("max_completion_tokens", 1000),
             system_prompt=system_prompt,
+            base_url=c.get("base_url"),
             completion_endpoint=c.get("completion_endpoint"),
-            session=self.openai_session,
+            rate_limit=c.get("rate_limit", 40),
+            session=self.session,
         )
 
     # TODO: вынести в миксин какой
