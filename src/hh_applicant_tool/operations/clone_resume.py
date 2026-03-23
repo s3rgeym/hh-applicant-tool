@@ -9,6 +9,7 @@ from hh_applicant_tool.api.errors import ApiError
 
 from ..api import datatypes
 from ..main import BaseNamespace, BaseOperation
+from ..utils.ui import err, info, ok
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -25,6 +26,7 @@ class Operation(BaseOperation):
     """Клонировать резюме"""
 
     __aliases__ = []
+    __category__: str = "Резюме"
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
@@ -95,19 +97,17 @@ class Operation(BaseOperation):
         # if "relocation" in resume:
         #     payload["profile"]["relocation"] = resume["relocation"]
 
+        info(f"Клонирую резюме: [bold]{resume.get('title') or resume['id']}[/bold]")
         try:
             true = True
             payload = {
                 "additional_properties": {"any_job": true},
                 "clone_resume_id": resume["id"],
-                # "entry_point": "vacancy_response",
-                # "lat": 123,
-                # "lng": 456,
-                # "update_profile": true,
-                # "vacancy_id": 1,
             }
 
             result = api_client.post("/resume_profile", payload, as_json=True)
             logger.debug(result)
+            new_id = result.get("id") or result.get("resume", {}).get("id") or ""
+            ok(f"Резюме склонировано" + (f": [hh.dim]{new_id}[/]" if new_id else ""))
         except ApiError as ex:
-            logger.error(f"Произошла ошибка при клонировании резюме: {ex}")
+            err(f"Ошибка при клонировании резюме: {ex}")

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from ..api import ApiError
 from ..main import BaseNamespace, BaseOperation
 from ..utils import json
+from ..utils.ui import console, err
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -28,6 +29,7 @@ class Operation(BaseOperation):
     """Вызвать произвольный метод API <https://github.com/hhru/api>."""
 
     __aliases__ = ("api",)
+    __category__: str = "Утилиты"
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("endpoint", help="Путь до эндпоинта API")
@@ -66,15 +68,15 @@ class Operation(BaseOperation):
             params = dict(params)
 
         try:
-            # Передаем json_data как именованный аргумент json
             result = api_client.request(
                 args.method,
                 args.endpoint,
                 params=params,
                 as_json=as_json,
             )
-            print(json.dumps(result))
+            console.print_json(json.dumps(result))
         except ApiError as ex:
             logger.debug(ex)
-            json.dump(ex.data, sys.stderr)
+            err(f"API Error: {ex}")
+            console.print_json(json.dumps(ex.data))
             return 1

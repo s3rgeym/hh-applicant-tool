@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from ..api import datatypes
 from ..main import BaseNamespace, BaseOperation
+from ..utils.ui import console, make_table, section
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -29,6 +30,7 @@ class Operation(BaseOperation):
 
     # Это алиасы команды
     __aliases__: list[str] = ["id"]
+    __category__: str = "Авторизация"
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
@@ -53,9 +55,23 @@ class Operation(BaseOperation):
             s.set_value("user.email", result.get("email"))
             s.set_value("user.phone", result.get("phone"))
         counters = result.get("counters", {})
-        print(
-            f"🆔 {result['id']} {full_name} "
-            f"[ 📄 {counters.get('resumes_count', 0)} "
-            f"| 👁️ {fmt_plus(counters.get('new_resume_views', 0))} "
-            f"| ✉️ {fmt_plus(counters.get('unread_negotiations', 0))} ]"
+        t = make_table("Поле", "Значение", title="Профиль")
+        t.add_row("[hh.muted]ID[/]",        f"[hh.id]{result['id']}[/]")
+        t.add_row("[hh.muted]Имя[/]",       f"[bold]{full_name}[/]")
+        if result.get("email"):
+            t.add_row("[hh.muted]Email[/]", result["email"])
+        if result.get("phone"):
+            t.add_row("[hh.muted]Телефон[/]", result["phone"])
+        t.add_row(
+            "[hh.muted]Резюме[/]",
+            f"[hh.label]{counters.get('resumes_count', 0)}[/]",
         )
+        t.add_row(
+            "[hh.muted]Новые просмотры[/]",
+            f"[hh.ok]{fmt_plus(counters.get('new_resume_views', 0))}[/]",
+        )
+        t.add_row(
+            "[hh.muted]Непрочитанных[/]",
+            f"[hh.warn]{fmt_plus(counters.get('unread_negotiations', 0))}[/]",
+        )
+        console.print(t)

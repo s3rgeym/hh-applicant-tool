@@ -11,6 +11,7 @@ from ..api import ApiError, datatypes
 from ..main import BaseNamespace, BaseOperation
 from ..utils.date import parse_api_datetime
 from ..utils.string import rand_text
+from ..utils.ui import console, info, ok, warn
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -44,6 +45,7 @@ class Operation(BaseOperation):
     """Ответ всем работодателям."""
 
     __aliases__ = ["reply-empls", "reply-chats", "reall"]
+    __category__: str = "Отклики"
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
@@ -184,10 +186,7 @@ class Operation(BaseOperation):
                 salary = vacancy.get("salary") or {}
 
                 if employer.get("id") in blacklist:
-                    print(
-                        "🚫 Пропускаем заблокированного работодателя",
-                        employer.get("alternate_url"),
-                    )
+                    info(f"Пропускаем заблокированного: [hh.dim]{employer.get('alternate_url')}[/]")
                     continue
 
                 placeholders = {
@@ -270,38 +269,34 @@ class Operation(BaseOperation):
                             )
                             continue
                     else:
-                        print("🏢", placeholders["employer_name"])
-                        print("💼", placeholders["vacancy_name"])
+                        from rich.rule import Rule
+                        console.print(Rule(style="hh.border"))
+                        console.print(f"[hh.label]Работодатель:[/] [bold]{placeholders['employer_name']}[/bold]")
+                        console.print(f"[hh.label]Вакансия:[/]     [bold]{placeholders['vacancy_name']}[/bold]")
                         if salary:
-                            print(
-                                "💵 от",
-                                salary.get("from") or salary.get("to") or 0,
-                                "до",
-                                salary.get("to") or salary.get("from") or 0,
-                                salary.get("currency", "RUR"),
-                            )
+                            sal_from = salary.get("from") or salary.get("to") or 0
+                            sal_to = salary.get("to") or salary.get("from") or 0
+                            currency = salary.get("currency", "RUR")
+                            console.print(f"[hh.label]Зарплата:[/]    [hh.accent]{sal_from} – {sal_to} {currency}[/]")
 
-                        print("\nПоследние сообщения чата:")
-                        print()
+                        console.print(f"\n[hh.section]Последние сообщения:[/]")
                         for msg in (
                             message_history[-5:]
                             if len(message_history) > 5
                             else message_history
                         ):
-                            print(msg)
+                            console.print(f"  [hh.muted]{msg}[/]")
 
                         try:
-                            print("-" * 40)
-                            print("Активное резюме:", resume.get("title") or "")
-                            print(
-                                "/ban, /cancel необязательное сообщение для отмены"
-                            )
+                            console.print(Rule(style="#444444"))
+                            console.print(f"[hh.muted]Резюме:[/] [bold]{resume.get('title') or ''}[/bold]")
+                            console.print("[hh.muted]/ban  /cancel [message]  — управление[/]")
                             send_message = input("Ваше сообщение: ").strip()
                         except EOFError:
                             continue
 
                         if not send_message:
-                            print("🚶 Пропускаем чат")
+                            info("Чат пропущен.")
                             continue
 
                         if send_message.startswith("/ban"):
@@ -309,10 +304,7 @@ class Operation(BaseOperation):
                                 f"/employers/blacklisted/{employer['id']}"
                             )
                             blacklist.add(employer["id"])
-                            print(
-                                "🚫 Работодатель заблокирован",
-                                employer.get("alternate_url"),
-                            )
+                            warn(f"Работодатель заблокирован: [hh.dim]{employer.get('alternate_url')}[/]")
                             continue
                         elif send_message.startswith("/cancel"):
                             _, decline_msg = send_message.split("/cancel", 1)
@@ -320,7 +312,7 @@ class Operation(BaseOperation):
                                 f"/negotiations/active/{nid}",
                                 with_decline_message=decline_msg.strip(),
                             )
-                            print("❌ Отмена заявки", vacancy["alternate_url"])
+                            info(f"Отклик отменён: [hh.dim]{vacancy['alternate_url']}[/]")
                             continue
 
                     # Финальная отправка текста
@@ -337,9 +329,9 @@ class Operation(BaseOperation):
                         message=send_message,
                         delay=random.uniform(1, 3),
                     )
-                    print(f"📨 Отправлено для {vacancy['alternate_url']}")
+                    ok(f"Сообщение отправлено: [hh.dim]{vacancy['alternate_url']}[/]")
 
             except ApiError as ex:
                 logger.error(ex)
 
-        print("📝 Сообщения разосланы!")
+        ok("Сообщения разосланы!")

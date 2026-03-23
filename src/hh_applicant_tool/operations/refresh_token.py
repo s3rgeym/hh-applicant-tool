@@ -5,6 +5,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from ..main import BaseNamespace, BaseOperation
+from ..utils.ui import err, info, ok, warn
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -21,6 +22,7 @@ class Operation(BaseOperation):
     """Обновляет access_token и refresh_token в случае необходимости."""
 
     __aliases__ = ["refresh"]
+    __category__: str = "Авторизация"
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
@@ -29,10 +31,9 @@ class Operation(BaseOperation):
         if tool.api_client.is_access_expired:
             tool.api_client.refresh_access_token()
             if not tool.save_token():
-                print("⚠️ Токен не был обновлен!")
+                warn("Токен не был обновлен!")
                 return 1
-            print("✅ Токен успешно обновлен.")
+            ok("Токен успешно обновлен.")
         else:
-            # logger.debug("Токен валиден, игнорируем обновление.")
-            print("ℹ️ Токен не истек, обновление не требуется.")
+            info("Токен не истек, обновление не требуется.")
             return 2

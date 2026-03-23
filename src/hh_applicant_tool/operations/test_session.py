@@ -7,6 +7,7 @@ import re
 from typing import TYPE_CHECKING
 
 from ..main import BaseNamespace, BaseOperation
+from ..utils.ui import ok, warn
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -23,6 +24,7 @@ class Operation(BaseOperation):
     """Проверка браузерной сессии, полученной при авторизации"""
 
     __aliases__: list[str] = []
+    __category__: str = "Авторизация"
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         # parser
@@ -32,6 +34,6 @@ class Operation(BaseOperation):
         r = tool.session.get("https://hh.ru")
 
         if m := re.search(r'^\s+login: "([^"]+)', r.text, re.MULTILINE):
-            print("Вы вошли как", m.group(1))
+            ok(f"Вы вошли как [bold]{m.group(1)}[/bold]")
         else:
-            logger.warning("Вы не авторизованы!")
+            warn("Вы не авторизованы!")

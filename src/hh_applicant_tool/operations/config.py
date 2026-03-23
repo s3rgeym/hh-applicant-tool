@@ -74,6 +74,8 @@ class Operation(BaseOperation):
     По умолчанию выводит содержимое конфига.
     """
 
+    __category__: str = "Конфигурация"
+
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         group = parser.add_mutually_exclusive_group()
         group.add_argument(

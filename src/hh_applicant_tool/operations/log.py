@@ -24,6 +24,8 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Просмотр файла-лога"""
 
+    __category__: str = "Утилиты"
+
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         # Изменено на -F для соответствия стандарту less/tail
         parser.add_argument(

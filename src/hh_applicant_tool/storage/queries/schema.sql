@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS settings (
 /* ===================== resumes ===================== */
 CREATE TABLE IF NOT EXISTS resumes (
     id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
+    title TEXT DEFAULT '',
     url TEXT,
     alternate_url TEXT,
     status_id TEXT,

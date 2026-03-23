@@ -18,6 +18,8 @@ logger = logging.getLogger(__package__)
 class Operation(BaseOperation):
     """Удалит Chromium и другие зависимости"""
 
+    __category__: str = "Утилиты"
+
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 

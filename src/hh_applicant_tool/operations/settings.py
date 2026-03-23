@@ -5,10 +5,9 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from prettytable import PrettyTable
-
 from .. import utils
 from ..main import BaseNamespace, BaseOperation
+from ..utils.ui import console, info, make_table, ok, warn
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -37,6 +36,7 @@ class Operation(BaseOperation):
     """Просмотр и управление настройками"""
 
     __aliases__: list[str] = ["setting"]
+    __category__: str = "Конфигурация"
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
@@ -62,34 +62,29 @@ class Operation(BaseOperation):
 
         if args.delete:
             if args.key is not MISSING:
-                # Delete value
                 settings.delete_value(args.key)
-                print(f"🗑️ Настройка '{args.key}' удалена")
+                ok(f"Настройка [bold]{args.key}[/bold] удалена")
             else:
                 settings.clear()
+                ok("Все настройки очищены")
         elif args.key is not MISSING and args.value is not MISSING:
             settings.set_value(args.key, args.value)
-            print(f"✅ Установлено значение для '{args.key}'")
+            ok(f"Установлено [bold]{args.key}[/bold] = [hh.accent]{args.value}[/]")
         elif args.key is not MISSING:
-            # Get value
             value = settings.get_value(args.key, MISSING)
             if value is not MISSING:
-                # print(type(value).__name__, value)
-                print(value)
+                console.print(value)
             else:
-                print(f"⚠️ Настройка '{args.key}' не найдена")
+                warn(f"Настройка [bold]{args.key}[/bold] не найдена")
         else:
-            # List all settings
-            settings = settings.find()
-            t = PrettyTable(field_names=["Ключ", "Тип", "Значение"], align="l")
-            for setting in settings:
+            all_settings = settings.find()
+            t = make_table("Ключ", "Тип", "Значение", title="Настройки")
+            for setting in all_settings:
                 if setting.key.startswith("_"):
                     continue
                 t.add_row(
-                    [
-                        setting.key,
-                        type(setting.value).__name__,
-                        setting.value,
-                    ]
+                    f"[bold]{setting.key}[/bold]",
+                    f"[hh.muted]{type(setting.value).__name__}[/]",
+                    str(setting.value),
                 )
-            print(t)
+            console.print(t)

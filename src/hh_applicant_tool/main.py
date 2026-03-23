@@ -38,6 +38,9 @@ logger = logging.getLogger(__package__)
 
 
 class BaseOperation:
+    # Категория для группировки в --help (например "Авторизация", "Резюме")
+    __category__: str = "Прочее"
+
     def setup_parser(self, parser: argparse.ArgumentParser) -> None: ...
 
     def run(
@@ -71,17 +74,104 @@ class HHApplicantTool(MegaTool):
         argparse.ArgumentDefaultsHelpFormatter,
         argparse.RawDescriptionHelpFormatter,
     ):
-        pass
+        """Форматтер: скрывает (default: None), сохраняет форматирование описаний.
+        Также скрывает positional arguments с SUPPRESS-хелпом из вывода."""
+
+        def _get_help_string(self, action: argparse.Action) -> str | None:
+            help_str = action.help or ""
+            # Показываем default только если он задан и не None
+            if (
+                "%(default)" not in help_str
+                and action.default is not None
+                and action.default is not argparse.SUPPRESS
+                and action.option_strings
+            ):
+                help_str += " (по умолчанию: %(default)s)"
+            return help_str
+
+        def _format_action(self, action: argparse.Action) -> str:
+            # Скрываем positional subparser-actions (команды — они в epilog)
+            if not action.option_strings and isinstance(
+                action, argparse._SubParsersAction
+            ):
+                return ""
+            if action.help == argparse.SUPPRESS and not action.option_strings:
+                return ""
+            return super()._format_action(action)
+
+        def _format_actions_usage(self, actions, groups) -> str:
+            # Упрощаем usage — не показываем длинный список команд
+            result = super()._format_actions_usage(actions, groups)
+            # Убираем {cmd1,cmd2,...} из usage, заменяем на <команда>
+            import re
+            result = re.sub(r"\{[^}]{40,}\}", "<команда>", result)
+            return result
+
+    def _build_commands_help(
+        self, ops: list[tuple[str, BaseOperation]]
+    ) -> str:
+        from collections import defaultdict
+
+        groups: dict[str, list[tuple[str, str]]] = defaultdict(list)
+        for name, op in ops:
+            category = getattr(op, "__category__", "Прочее")
+            doc = (op.__doc__ or "").strip().splitlines()[0] if op.__doc__ else ""
+            groups[category].append((name, doc))
+
+        # Порядок групп
+        order = [
+            "Авторизация",
+            "Резюме",
+            "Отклики",
+            "Конфигурация",
+            "Утилиты",
+            "Прочее",
+        ]
+
+        lines = [""]
+        for group in order:
+            if group not in groups:
+                continue
+            lines.append(f"{group}:")
+            for name, doc in sorted(groups[group], key=lambda x: x[0]):
+                lines.append(f"  {name:<22}  {doc}")
+            lines.append("")
+
+        # Группы не из order
+        for group, items in groups.items():
+            if group in order:
+                continue
+            lines.append(f"{group}:")
+            for name, doc in sorted(items, key=lambda x: x[0]):
+                lines.append(f"  {name:<22}  {doc}")
+            lines.append("")
+
+        lines.append("Подробнее: hh-applicant-tool <команда> --help")
+        return "\n".join(lines)
 
     def _create_parser(self) -> argparse.ArgumentParser:
+        ops: list[tuple[str, BaseOperation]] = []
+        package_dir = Path(__file__).resolve().parent / OPERATIONS
+        for _, module_name, _ in iter_modules([str(package_dir)]):
+            if module_name.startswith("_"):
+                continue
+            mod = import_module(f"{__package__}.{OPERATIONS}.{module_name}")
+            op: BaseOperation = mod.Operation()
+            kebab_name = module_name.replace("_", "-")
+            ops.append((kebab_name, op))
+
+        commands_help = self._build_commands_help(ops)
+
         parser = argparse.ArgumentParser(
             description=self.__doc__,
             formatter_class=self.ArgumentFormatter,
+            epilog=commands_help,
+            add_help=True,
         )
         parser.add_argument(
             "-v",
             "--verbosity",
-            help="При использовании от одного и более раз увеличивает количество отладочной информации в выводе",  # noqa: E501
+            help="Увеличивает детализацию вывода (можно повторять: -vvv)",
             action="count",
             default=0,
         )
@@ -91,46 +181,62 @@ class HHApplicantTool(MegaTool):
             "--config",
             help="Путь до директории с конфигом",
             type=Path,
-            default=None,
+            dest="config_dir",
         )
         parser.add_argument(
             "--profile-id",
             "--profile",
-            help="Используемый профиль — подкаталог в --config-dir. Так же можно передать через переменную окружения HH_PROFILE_ID.",
+            help="Профиль — подкаталог в config-dir (или env HH_PROFILE_ID)",
+            dest="profile_id",
         )
         parser.add_argument(
             "-d",
             "--api-delay",
             "--delay",
             type=float,
-            help="Задержка между запросами к API HH по умолчанию",
+            help="Задержка (сек) между запросами к API HH",
+            dest="api_delay",
         )
         parser.add_argument(
             "--user-agent",
-            help="User-Agent для каждого запроса",
+            help="User-Agent заголовок для запросов",
         )
         parser.add_argument(
             "--proxy-url",
-            help="Прокси, используемый для запросов и авторизации",
+            help="Прокси для запросов и авторизации",
         )
-        subparsers = parser.add_subparsers(help="commands")
-        package_dir = Path(__file__).resolve().parent / OPERATIONS
-        for _, module_name, _ in iter_modules([str(package_dir)]):
-            if module_name.startswith("_"):
-                continue
-            mod = import_module(f"{__package__}.{OPERATIONS}.{module_name}")
-            op: BaseOperation = mod.Operation()
-            kebab_name = module_name.replace("_", "-")
+        parser.add_argument(
+            "--version",
+            action="version",
+            version=self._get_version(),
+        )
+
+        subparsers = parser.add_subparsers(
+            dest="command",
+        )
+        for kebab_name, op in ops:
+            aliases = getattr(op, "__aliases__", [])
             op_parser = subparsers.add_parser(
                 kebab_name,
-                aliases=getattr(op, "__aliases__", []),
+                aliases=aliases,
+                help=argparse.SUPPRESS,  # скрываем из главного списка — используем epilog
                 description=op.__doc__,
                 formatter_class=self.ArgumentFormatter,
             )
+            if aliases:
+                op_parser.epilog = f"Псевдонимы: {', '.join(aliases)}"
             op_parser.set_defaults(run=op.run)
             op.setup_parser(op_parser)
         parser.set_defaults(run=None)
         return parser
+
+    def _get_version(self) -> str:
+        try:
+            from importlib.metadata import version
+
+            return f"hh-applicant-tool {version(__package__ or 'hh-applicant-tool')}"
+        except Exception:
+            return "hh-applicant-tool (версия неизвестна)"
 
     def __init__(self, argv: Sequence[str] | None):
         self._parse_args(argv)
@@ -404,6 +510,8 @@ class HHApplicantTool(MegaTool):
                     except Exception as ex:
                         logger.error(f"Не удалось сохранить cookies: {ex}")
                 return 1
+            from .utils.ui import print_banner_from_tool
+            print_banner_from_tool(self)
             self._parser.print_help(file=sys.stderr)
             return 2
         finally:

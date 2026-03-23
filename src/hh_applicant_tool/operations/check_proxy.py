@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from ..main import BaseNamespace, BaseOperation
+from ..utils.ui import console, info
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -21,10 +22,13 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Проверить прокси"""
 
+    __category__: str = "Утилиты"
+
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
     def run(self, applicant_tool: HHApplicantTool) -> None:
         session = applicant_tool.session
         assert session.proxies, "Прокси не заданы"
-        print(session.get("https://icanhazip.com").text)
+        ip = session.get("https://icanhazip.com").text.strip()
+        info(f"Внешний IP: [bold]{ip}[/bold]")

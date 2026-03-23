@@ -30,6 +30,7 @@ from ..utils.string import (
     strip_tags,
     unescape_string,
 )
+from ..utils.ui import info, ok, warn
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -85,6 +86,7 @@ class Operation(BaseOperation):
     """Откликнуться на все подходящие вакансии."""
 
     __aliases__ = ("apply", "apply-similar")
+    __category__: str = "Отклики"
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
@@ -367,7 +369,7 @@ class Operation(BaseOperation):
         #     except RepositoryError as e:
         #         logger.warning(e)
 
-        print("📝 Отклики на вакансии разосланы!")
+        ok("Отклики на вакансии разосланы!")
 
     def _apply_resume(
         self,
@@ -380,7 +382,7 @@ class Operation(BaseOperation):
             resume["alternate_url"],
             resume["title"],
         )
-        print("🚀 Начинаю рассылку откликов для резюме:", resume["title"])
+        info(f"Начинаю рассылку для резюме: [bold]{resume['title']}[/bold]")
 
         placeholders = {
             "first_name": user.get("first_name") or "",
@@ -439,7 +441,7 @@ class Operation(BaseOperation):
                             "Вы получили отказ от %s",
                             vacancy["alternate_url"],
                         )
-                        print("⛔ Пришел отказ от", vacancy["alternate_url"])
+                        warn(f"Получен отказ: [hh.dim]{vacancy['alternate_url']}[/]")
                     continue
 
                 if vacancy.get("archived"):
@@ -565,19 +567,16 @@ class Operation(BaseOperation):
                                 letter=letter,
                             )
                             if result.get("success") == "true":
-                                print(
-                                    "📨 Отправили отклик на вакансию с тестом",
-                                    vacancy["alternate_url"],
-                                )
+                                ok(f"Отклик с тестом: [hh.dim]{vacancy['alternate_url']}[/]")
                             else:
-                                err = result.get("error")
+                                apply_err = result.get("error")
 
-                                if err == "negotiations-limit-exceeded":
+                                if apply_err == "negotiations-limit-exceeded":
                                     do_apply = False
-                                    logger.warning("Достигли лимита на отклики")
+                                    warn("Достигли лимита на отклики")
                                 else:
                                     logger.error(
-                                        f"Произошла ошибка при отклике на вакансию с тестом: {vacancy['alternate_url']} - {err}"
+                                        f"Произошла ошибка при отклике на вакансию с тестом: {vacancy['alternate_url']} - {apply_err}"
                                     )
                     except Exception as ex:
                         logger.error(f"Произошла непредвиденная ошибка: {ex}")
@@ -597,10 +596,7 @@ class Operation(BaseOperation):
                                 delay=random.uniform(1, 3),
                             )
                             assert res == {}
-                            print(
-                                "📨 Отправили отклик на вакансию",
-                                vacancy["alternate_url"],
-                            )
+                            ok(f"Отклик отправлен: [hh.dim]{vacancy['alternate_url']}[/]")
                     except Redirect:
                         logger.warning(
                             f"Игнорирую перенаправление на форму: {vacancy['alternate_url']}"  # noqa: E501
@@ -631,10 +627,7 @@ class Operation(BaseOperation):
                         )
                         try:
                             self._send_email(mail_to, mail_subject, mail_body)
-                            print(
-                                "📧 Отправлено письмо на email по поводу вакансии",
-                                vacancy["alternate_url"],
-                            )
+                            ok(f"Письмо отправлено на {mail_to}  [hh.dim]{vacancy['alternate_url']}[/]")
                         except Exception as ex:
                             logger.error(f"Ошибка отправки письма: {ex}")
             except LimitExceeded:
@@ -650,7 +643,7 @@ class Operation(BaseOperation):
             resume["alternate_url"],
             resume["title"],
         )
-        print("✅️ Закончили рассылку откликов для резюме:", resume["title"])
+        ok(f"Закончили рассылку для резюме: [bold]{resume['title']}[/bold]")
 
     def _send_email(self, to: str, subject: str, body: str) -> None:
         cfg = self.tool.config.get("smtp", {})

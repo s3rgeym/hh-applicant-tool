@@ -19,17 +19,20 @@ include = [
 python = "^3.11"
 requests = {extras = ["socks"], version = "^2.32.3"}
 prettytable = "^3.6.0"
+rich = "^14.0.0"
 # poetry add playwright --optional
 playwright = { version = "^1.57.0", optional = true }
 # Он не работает или устаревший
 # libsixel-python = { version = "^0.5.0", optional = true }
 pillow = { version = "^12.1.0", optional = true }
+rookiepy = { version = ">=0.5.0", optional = true }
 
 # poetry install --with playwright,pillow
 [tool.poetry.extras]
 playwright = ["playwright"]
 # sixel = ["libsixel-python", "pillow"]
 pillow = ["pillow"]
+browser = ["rookiepy"]
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.12.0"

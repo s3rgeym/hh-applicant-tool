@@ -10,6 +10,7 @@ import requests
 from ..api.errors import ApiError
 from ..main import BaseNamespace, BaseOperation
 from ..utils.date import parse_api_datetime
+from ..utils.ui import info, ok, warn
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -30,6 +31,7 @@ class Operation(BaseOperation):
     """Удалить отказы и/или старые отклики. Опционально так же удаляет чаты и блокирует работодателей. Из-за особенностей API эту команду иногда нужно вызывать больше одного раза."""
 
     __aliases__ = ["clear-negotiations", "delete-negotiations"]
+    __category__: str = "Отклики"
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
@@ -134,11 +136,7 @@ class Operation(BaseOperation):
                         != "discard",
                     )
 
-                    print(
-                        "❌ Отменили отклик на вакансию:",
-                        vacancy["alternate_url"],
-                        vacancy["name"],
-                    )
+                    info(f"Отменён отклик: [bold]{vacancy['name']}[/bold]  [hh.dim]{vacancy['alternate_url']}[/]")
 
                 if self.args.delete_chat:
                     logger.debug(
@@ -148,7 +146,7 @@ class Operation(BaseOperation):
 
                     if not self.args.dry_run:
                         if self.delete_chat(negotiation["id"]):
-                            print(f"❌ Удалили чат #{negotiation['id']}")
+                            info(f"Удалён чат [hh.muted]#{negotiation['id']}[/]")
 
                 d = parse_api_datetime(
                     negotiation["updated_at"]
@@ -189,12 +187,8 @@ class Operation(BaseOperation):
                         )
                         blacklisted.add(employer_id)
 
-                        print(
-                            "💀 Работодатель заблокирован:",
-                            employer["alternate_url"],
-                            employer["name"],
-                        )
-            except ApiError as err:
-                logger.error(err)
+                        warn(f"Работодатель заблокирован: [bold]{employer['name']}[/bold]  [hh.dim]{employer['alternate_url']}[/]")
+            except ApiError as api_err:
+                logger.error(api_err)
 
-        print("✅ Удаление откликов завершено.")
+        ok("Удаление откликов завершено.")

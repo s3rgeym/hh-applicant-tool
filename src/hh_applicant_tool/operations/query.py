@@ -8,9 +8,8 @@ import sqlite3
 import sys
 from typing import TYPE_CHECKING
 
-from prettytable import PrettyTable
-
 from ..main import BaseNamespace, BaseOperation
+from ..utils.ui import console, err, info, make_table, ok, warn
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -36,6 +35,7 @@ class Operation(BaseOperation):
     """Выполняет SQL-запрос. Поддерживает вывод в консоль или CSV файл."""
 
     __aliases__: list[str] = ["sql"]
+    __category__: str = "Утилиты"
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("sql", nargs="?", help="SQL запрос")
@@ -62,7 +62,6 @@ class Operation(BaseOperation):
                     columns = [d[0] for d in cursor.description]
 
                     if tool.args.csv or tool.args.output:
-                        # Если -o не задан, используем sys.stdout
                         output = (
                             tool.args.output.open("w", encoding="utf-8")
                             if tool.args.output
@@ -73,33 +72,30 @@ class Operation(BaseOperation):
                         writer.writerows(cursor.fetchall())
 
                         if output is not sys.stdout:
-                            print(f"✅  Exported to {output.name}")
+                            ok(f"Экспортировано в {output.name}")
                         return
 
                     rows = cursor.fetchmany(MAX_RESULTS + 1)
                     if not rows:
-                        print("No results found.")
+                        info("Результатов не найдено.")
                         return
 
-                    table = PrettyTable()
-                    table.field_names = columns
+                    table = make_table(*columns)
                     for row in rows[:MAX_RESULTS]:
-                        table.add_row(row)
+                        table.add_row(*[str(v) if v is not None else "[hh.muted]—[/]" for v in row])
 
-                    print(table)
+                    console.print(table)
 
                     if len(rows) > MAX_RESULTS:
-                        print(
-                            f"⚠️  Warning: Showing only first {MAX_RESULTS} results."
-                        )
+                        warn(f"Показаны первые {MAX_RESULTS} результатов.")
                 else:
                     tool.db.commit()
 
                     if cursor.rowcount > 0:
-                        print(f"Rows affected: {cursor.rowcount}")
+                        info(f"Затронуто строк: [bold]{cursor.rowcount}[/bold]")
 
             except sqlite3.Error as ex:
-                print(f"❌  SQL Error: {ex}")
+                err(f"SQL Error: {ex}")
                 return 1
 
         if initial_sql := tool.args.sql:
@@ -108,7 +104,7 @@ class Operation(BaseOperation):
         if not sys.stdin.isatty():
             return execute(sys.stdin.read())
 
-        print("SQL Console (q or ^D to exit)")
+        info("SQL Console (q или ^D для выхода)")
         try:
             while True:
                 try:

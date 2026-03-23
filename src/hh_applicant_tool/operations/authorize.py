@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import getpass
 import logging
+import os
 import typing
+from pathlib import Path
 from datetime import datetime
 from http.cookiejar import Cookie
 from typing import TYPE_CHECKING
@@ -11,11 +14,17 @@ from urllib.parse import parse_qs, urlsplit
 
 try:
     from playwright.async_api import async_playwright
+    _PLAYWRIGHT_AVAILABLE = True
 except ImportError:
-    pass
+    _PLAYWRIGHT_AVAILABLE = False
 
 from ..main import BaseOperation
+from ..utils.browser_cookies import (
+    find_hh_browser_profiles,
+    import_browser_cookies_to_session,
+)
 from ..utils.terminal import print_kitty_image, print_sixel_mage
+from ..utils.ui import console, err, info, ok, section, warn
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -30,6 +39,7 @@ class Operation(BaseOperation):
     """Авторизация через Playwright"""
 
     __aliases__: list = ["authenticate", "auth", "login"]
+    __category__: str = "Авторизация"
 
     # Селекторы
     SEL_LOGIN_INPUT = 'input[data-qa="login-input-username"]'
@@ -46,87 +56,285 @@ class Operation(BaseOperation):
 
     @property
     def is_headless(self) -> bool:
-        return not self._tool.args.no_headless and self.is_automated
-
-    @property
-    def is_automated(self) -> bool:
-        return not self._tool.args.manual
-
-    @property
-    def selector_timeout(self) -> int | None:
-        return None if self.is_headless else 5000
+        return not self._tool.args.no_headless
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
-        parser.add_argument("username", nargs="?", help="Email или телефон")
-        parser.add_argument("--password", "-p", help="Пароль для входа")
         parser.add_argument(
-            "--no-headless",
-            "-n",
+            "username",
+            nargs="?",
+            help="Email или телефон (если не указан — будет запрошен)",
+        )
+        parser.add_argument(
+            "--password", "-p",
+            help="Пароль (если не указан — будет запрошен)",
+        )
+        parser.add_argument(
+            "--no-headless", "-n",
             action="store_true",
             help="Показать окно браузера",
         )
         parser.add_argument(
-            "-m", "--manual", action="store_true", help="Ручной режим ввода"
+            "--from-browser", "-b",
+            action="store_true",
+            help="Импортировать сессию из установленных браузеров",
         )
         parser.add_argument(
-            "-k",
-            "--use-kitty",
-            "--kitty",
+            "--new", "--add",
             action="store_true",
-            help="Вывод капчи в kitty",
-        )
-        parser.add_argument(
-            "-s",
-            "--use-sixel",
-            "--sixel",
-            action="store_true",
-            help="Вывод капчи в sixel",
+            help="Принудительно создать новый профиль (не показывать существующие)",
         )
 
     def run(self, tool: HHApplicantTool) -> int | None:
         self._tool = tool
         try:
-            asyncio.run(self._run())
+            return asyncio.run(self._run())
         except (KeyboardInterrupt, asyncio.TimeoutError):
-            logger.warning("Операция прервана пользователем или по таймауту")
+            warn("Авторизация отменена.")
             return 1
-        return 0
 
-    async def _run(self) -> None:
+    async def _run(self) -> int | None:
+        args = self._tool.args
+
+        # Если --from-browser — импортируем из браузера и выходим
+        if args.from_browser:
+            return await self._import_from_browser()
+
+        # Если не --new — показываем существующие профили
+        if not args.new:
+            chosen = await self._maybe_pick_existing_profile()
+            if chosen == "DONE":
+                return 0  # пользователь выбрал существующий профиль
+
+        # Авторизуем новый профиль через Playwright
+        return await self._playwright_auth()
+
+    # ------------------------------------------------------------------ #
+    #  Выбор существующего профиля                                         #
+    # ------------------------------------------------------------------ #
+
+    async def _maybe_pick_existing_profile(self) -> str | None:
+        """
+        Показывает список существующих профилей.
+        Если пользователь выбирает существующий — загружает его токен.
+        Возвращает "DONE" если профиль выбран, None если надо продолжать.
+        """
+        from ..main import DEFAULT_CONFIG_DIR
+        from ..operations.list_profiles import _find_local_profiles
+
+        base_dir = Path(DEFAULT_CONFIG_DIR)
+        profiles = _find_local_profiles(base_dir)
+        active = [(n, i) for n, i in profiles if i["has_token"]]
+
+        # Также ищем в браузерах
+        browser_profiles = find_hh_browser_profiles()
+
+        if not active and not browser_profiles:
+            return None  # нечего показывать, идём авторизовываться
+
+        section("Существующие профили hh.ru")
+
+        options: list[tuple[str, typing.Any]] = []
+
+        if active:
+            console.print("[hh.muted]Локальные:[/]")
+            for name, pinfo in active:
+                idx = len(options) + 1
+                last = pinfo["last_login"] or "никогда"
+                console.print(
+                    f"  [hh.label]\\[{idx}][/] [hh.profile]{name}[/]"
+                    f"  [hh.dim](последний вход: {last})[/]"
+                )
+                options.append(("local", name))
+
+        if browser_profiles:
+            console.print("\n[hh.muted]Из браузеров:[/]")
+            for bp in browser_profiles:
+                idx = len(options) + 1
+                console.print(
+                    f"  [hh.label]\\[{idx}][/] [bold]{bp.browser}[/]"
+                    f" — [hh.id]{bp.username}[/]"
+                )
+                options.append(("browser", bp))
+
+        new_idx = len(options) + 1
+        console.print(
+            f"\n  [hh.label]\\[{new_idx}][/] Добавить новый профиль"
+            f"\n  [hh.muted]\\[0][/]  Отмена\n"
+        )
+
+        while True:
+            raw = await asyncio.to_thread(
+                input, f"Выберите [0-{new_idx}]: "
+            )
+            raw = raw.strip()
+            if raw == "0":
+                return "DONE"
+            if raw.isdigit() and 1 <= int(raw) <= new_idx:
+                choice_idx = int(raw) - 1
+                if choice_idx == len(options):
+                    # "Добавить новый"
+                    return None
+                kind, payload = options[choice_idx]
+                if kind == "local":
+                    ok(f"Профиль '{payload}' уже авторизован.")
+                    info(
+                        f"Используйте: hh-applicant-tool --profile-id {payload} <команда>"
+                    )
+                    return "DONE"
+                elif kind == "browser":
+                    return await self._use_browser_profile(payload)
+            warn("Введите число из списка.")
+
+    async def _use_browser_profile(self, bp) -> str:
+        """Импортирует куки из выбранного браузерного профиля."""
+        info(f"Импортирую сессию из {bp.browser}...")
+        count = import_browser_cookies_to_session(
+            self._tool.session.cookies, bp.cookies
+        )
+        info(f"Импортировано {count} куки.")
+        self._tool.save_cookies()
+
+        result = await self._try_oauth_with_existing_session()
+        if result:
+            ok("Токен получен. Профиль активен.")
+            self._tool.storage.settings.set_value(
+                "auth.last_login", str(datetime.now())
+            )
+            return "DONE"
+        else:
+            warn("Не удалось получить токен через браузерную сессию. Попробуем обычную авторизацию...")
+            return None
+
+    async def _try_oauth_with_existing_session(self) -> bool:
+        """Пытается получить OAuth code используя уже авторизованную сессию hh."""
+        try:
+            api_client = self._tool.api_client
+            oauth_url = api_client.oauth_client.authorize_url
+
+            # Делаем GET запрос к OAuth URL — если куки валидны,
+            # hh.ru сразу редиректит на hhandroid:// без ввода логина
+            resp = self._tool.session.get(
+                oauth_url, allow_redirects=False, timeout=15
+            )
+            location = resp.headers.get("Location", "")
+            if location.startswith(f"{HH_ANDROID_SCHEME}://"):
+                code = parse_qs(urlsplit(location).query).get("code", [None])[0]
+                if code:
+                    token = await asyncio.to_thread(
+                        api_client.oauth_client.authenticate, code
+                    )
+                    api_client.handle_access_token(token)
+                    return True
+        except Exception as e:
+            logger.debug("OAuth через сессию не удался: %s", e)
+        return False
+
+    # ------------------------------------------------------------------ #
+    #  Импорт из браузера (--from-browser)                                 #
+    # ------------------------------------------------------------------ #
+
+    async def _import_from_browser(self) -> int:
+        profiles = find_hh_browser_profiles()
+        if not profiles:
+            err("Активных сессий hh.ru в браузерах не найдено.")
+            try:
+                import rookiepy  # noqa: F401
+            except ImportError:
+                warn("rookiepy не установлен: [bold]pip install rookiepy[/]")
+            return 1
+
+        if len(profiles) == 1:
+            bp = profiles[0]
+            info(f"Найдена сессия: {bp}")
+        else:
+            section("Браузерные сессии")
+            for i, bp in enumerate(profiles, 1):
+                console.print(
+                    f"  [hh.label]\\[{i}][/] [bold]{bp.browser}[/]"
+                    f" — [hh.id]{bp.username}[/]"
+                )
+            console.print()
+            while True:
+                raw = (
+                    await asyncio.to_thread(
+                        input, f"Выберите [1-{len(profiles)}]: "
+                    )
+                ).strip()
+                if raw.isdigit() and 1 <= int(raw) <= len(profiles):
+                    bp = profiles[int(raw) - 1]
+                    break
+                warn("Некорректный ввод.")
+
+        count = import_browser_cookies_to_session(
+            self._tool.session.cookies, bp.cookies
+        )
+        info(f"Импортировано {count} куки из {bp.browser}.")
+        self._tool.save_cookies()
+
+        result = await self._try_oauth_with_existing_session()
+        if result:
+            self._tool.storage.settings.set_value(
+                "auth.last_login", str(datetime.now())
+            )
+            ok("Авторизация через браузерные куки прошла успешно!")
+            return 0
+        else:
+            err("Не удалось получить токен. Сессия истекла или требует повторного входа.")
+            info("Запустите: hh-applicant-tool authorize")
+            return 1
+
+    # ------------------------------------------------------------------ #
+    #  Playwright авторизация                                              #
+    # ------------------------------------------------------------------ #
+
+    async def _playwright_auth(self) -> int:
+        if not _PLAYWRIGHT_AVAILABLE:
+            err("Playwright не установлен.")
+            info(
+                "Установите его командой:\n\n"
+                "  hh-applicant-tool install\n\n"
+                "или вручную:\n\n"
+                "  pip install playwright && playwright install chromium"
+            )
+            return 1
+
         args = self._tool.args
         api_client = self._tool.api_client
         storage = self._tool.storage
 
-        if self.is_automated:
-            username = (
-                args.username
-                or storage.settings.get_value("auth.username")
-                or (
-                    await asyncio.to_thread(
-                        input, "👤 Введите email или телефон: "
-                    )
-                )
+        # Получаем логин
+        username = (
+            args.username
+            or storage.settings.get_value("auth.username")
+            or (
+                await asyncio.to_thread(input, "Email или телефон: ")
             ).strip()
-            if not username:
-                raise RuntimeError("Empty username")
-            logger.debug(f"authenticate with: {username}")
+        )
+        if not username:
+            err("Логин не может быть пустым.")
+            return 1
+
+        # Получаем пароль
+        password = args.password or storage.settings.get_value("auth.password")
+        if not password:
+            password = await asyncio.to_thread(
+                getpass.getpass, "Пароль (Enter — войти по коду): "
+            )
+
+        logger.debug("Авторизация для: %s", username)
 
         proxies = api_client.proxies
         proxy_url = proxies.get("https")
         chromium_args: list[str] = []
         if proxy_url:
             chromium_args.append(f"--proxy-server={proxy_url}")
-            logger.debug(f"Используется прокси: {proxy_url}")
-
-        if self.is_headless:
-            logger.debug("Headless режим активен")
 
         async with async_playwright() as pw:
             logger.debug("Запуск браузера...")
             browser = await pw.chromium.launch(
-                headless=self.is_headless, args=chromium_args
+                headless=self.is_headless,
+                args=chromium_args,
             )
-
             try:
                 android_device = pw.devices["Galaxy A55"]
                 context = await browser.new_context(**android_device)
@@ -137,7 +345,7 @@ class Operation(BaseOperation):
                 def handle_request(request):
                     url = request.url
                     if url.startswith(f"{HH_ANDROID_SCHEME}://"):
-                        logger.info(f"Перехвачен OAuth redirect: {url}")
+                        logger.info("OAuth redirect: %s", url)
                         if not code_future.done():
                             sp = urlsplit(url)
                             code = parse_qs(sp.query).get("code", [None])[0]
@@ -145,122 +353,123 @@ class Operation(BaseOperation):
 
                 page.on("request", handle_request)
 
-                logger.debug(
-                    f"Переход на страницу OAuth: {api_client.oauth_client.authorize_url}"
-                )
                 await page.goto(
                     api_client.oauth_client.authorize_url,
                     timeout=30000,
                     wait_until="load",
                 )
 
-                if self.is_automated:
-                    await page.wait_for_selector(
-                        self.SEL_LOGIN_INPUT, timeout=self.selector_timeout
-                    )
-                    await page.fill(self.SEL_LOGIN_INPUT, username)
-                    logger.debug("Логин введен")
+                await page.wait_for_selector(self.SEL_LOGIN_INPUT, timeout=10000)
+                await page.fill(self.SEL_LOGIN_INPUT, username)
 
-                    password = args.password or storage.settings.get_value(
-                        "auth.password"
-                    )
-                    if password:
-                        await self._direct_login(page, password)
-                    else:
-                        await self._onetime_code_login(page)
+                if password:
+                    await self._direct_login(page, password)
+                else:
+                    await self._onetime_code_login(page)
 
-                logger.debug("Ожидание OAuth-кода...")
-                auth_code = await asyncio.wait_for(
-                    code_future, timeout=[None, 60.0][self.is_automated]
-                )
+                info("Ожидаю подтверждения...")
+                auth_code = await asyncio.wait_for(code_future, timeout=120.0)
 
                 page.remove_listener("request", handle_request)
 
-                logger.debug("Код получен, пробуем получить токен...")
                 token = await asyncio.to_thread(
                     api_client.oauth_client.authenticate, auth_code
                 )
                 api_client.handle_access_token(token)
 
-                print("🔓 Авторизация прошла успешно!")
+                ok("Авторизация прошла успешно!")
 
-                if self.is_automated:
-                    storage.settings.set_value("auth.username", username)
-                    if args.password:
-                        storage.settings.set_value(
-                            "auth.password", args.password
-                        )
+                storage.settings.set_value("auth.username", username)
+                if args.password:
+                    storage.settings.set_value("auth.password", args.password)
+                storage.settings.set_value(
+                    "auth.last_login", str(datetime.now())
+                )
 
-                storage.settings.set_value("auth.last_login", datetime.now())
                 cookies = await context.cookies()
                 self._set_session_cookies(cookies)
 
             finally:
-                logger.debug("Закрытие браузера")
                 await browser.close()
+
+        return 0
+
+    # ------------------------------------------------------------------ #
+    #  Методы входа                                                        #
+    # ------------------------------------------------------------------ #
 
     async def _direct_login(self, page, password: str) -> None:
         logger.info("Вход по паролю...")
         await page.click(self.SEL_EXPAND_PASSWORD)
         await self._handle_captcha(page)
-        await page.wait_for_selector(
-            self.SEL_PASSWORD_INPUT, timeout=self.selector_timeout
-        )
+        await page.wait_for_selector(self.SEL_PASSWORD_INPUT, timeout=10000)
         await page.fill(self.SEL_PASSWORD_INPUT, password)
         await page.press(self.SEL_PASSWORD_INPUT, "Enter")
-        logger.debug("Форма с паролем отправлена")
 
     async def _onetime_code_login(self, page) -> None:
         logger.info("Вход по одноразовому коду...")
         await page.press(self.SEL_LOGIN_INPUT, "Enter")
         await self._handle_captcha(page)
-        await page.wait_for_selector(
-            self.SEL_CODE_CONTAINER, timeout=self.selector_timeout
-        )
+        await page.wait_for_selector(self.SEL_CODE_CONTAINER, timeout=15000)
 
-        print("📨 Код был отправлен. Проверьте почту или SMS.")
+        info("Код отправлен на почту или телефон.")
         code = (
-            await asyncio.to_thread(input, "📩 Введите полученный код: ")
+            await asyncio.to_thread(input, "Введите код: ")
         ).strip()
         if not code:
-            raise RuntimeError("Код подтверждения не может быть пустым.")
+            raise RuntimeError("Код не может быть пустым.")
 
         await page.fill(self.SEL_PIN_CODE_INPUT, code)
         await page.press(self.SEL_PIN_CODE_INPUT, "Enter")
-        logger.debug("Форма с кодом отправлена")
 
-    async def _handle_captcha(self, page):
+    async def _handle_captcha(self, page) -> None:
         try:
             captcha_element = await page.wait_for_selector(
                 self.SEL_CAPTCHA_IMAGE,
-                timeout=self.selector_timeout,
+                timeout=5000,
                 state="visible",
             )
         except Exception:
             logger.debug("Капчи нет, продолжаем.")
             return
 
-        args = self._tool.args
-        if not (args.use_kitty or args.use_sixel):
-            raise RuntimeError(
-                "Требуется ввод капчи! Используйте --kitty или --sixel."
-            )
-
         img_bytes = await captcha_element.screenshot()
-        print("\n[!] Требуется ввод капчи.")
-        if args.use_kitty:
-            print_kitty_image(img_bytes)
-        elif args.use_sixel:
-            print_sixel_mage(img_bytes)
+        warn("Требуется ввод капчи.")
+
+        # Автодетект формата терминала
+        displayed = False
+        term = os.environ.get("TERM", "") + os.environ.get("TERM_PROGRAM", "")
+        if "kitty" in term.lower():
+            try:
+                print_kitty_image(img_bytes)
+                displayed = True
+            except Exception:
+                pass
+        if not displayed:
+            try:
+                print_sixel_mage(img_bytes)
+                displayed = True
+            except Exception:
+                pass
+        if not displayed:
+            # Сохраняем в файл как fallback
+            captcha_path = self._tool.config_path / "captcha.png"
+            captcha_path.write_bytes(img_bytes)
+            info(f"Капча сохранена в файл: {captcha_path}")
 
         captcha_text = (
             await asyncio.to_thread(input, "Введите текст с картинки: ")
         ).strip()
         await page.fill(self.SEL_CAPTCHA_INPUT, captcha_text)
         await page.press(self.SEL_CAPTCHA_INPUT, "Enter")
-        logger.debug("Капча отправлена")
 
-    def _set_session_cookies(self, cookies: list[dict[str, typing.Any]]):
+    # ------------------------------------------------------------------ #
+    #  Утилиты                                                             #
+    # ------------------------------------------------------------------ #
+
+    def _set_session_cookies(
+        self, cookies: list[dict[str, typing.Any]]
+    ) -> None:
         for c in cookies:
             cookie = Cookie(
                 version=0,
