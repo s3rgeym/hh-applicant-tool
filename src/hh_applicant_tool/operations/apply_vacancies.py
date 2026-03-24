@@ -486,9 +486,11 @@ class Operation(BaseOperation):
                         logger.exception(ex)
 
                     # Если есть сайт, то ищем на нем емейлы для отправки письма
-                    if self.args.send_email and (site_url := (
-                        employer_profile.get("site_url") or ""
-                    ).strip()):
+                    if self.args.send_email and (
+                        site_url := (
+                            employer_profile.get("site_url") or ""
+                        ).strip()
+                    ):
                         site_url = (
                             site_url
                             if "://" in site_url
