@@ -18,16 +18,20 @@ RUN groupadd -g $GID docker && \
 
 WORKDIR /app
 
-# Копируем файлы пакета
-COPY src /app/src
 COPY pyproject.toml poetry.lock* README.md /app/
 
-# И ставим его
-RUN pip install --no-cache-dir -e '.[playwright,pillow]'
+# 1. Сначала ставим только playwright, чтобы получить доступ к его CLI
+RUN pip install --no-cache-dir playwright
 
-# Ставим зависимости хромиума и сам хромиум пользователю docker
+# 2. Скачиваем браузер и системные зависимости (этот тяжелый слой теперь закэшируется)
 RUN playwright install-deps chromium && \
-  su docker -c "playwright install chromium"
+    su docker -c "playwright install chromium"
+
+# 3. Теперь копируем исходный код
+COPY src /app/src
+
+# 4. Устанавливаем саму утилиту и остальные зависимости
+RUN pip install --no-cache-dir -e '.[playwright,pillow]'
 
 # Очистка кеша пакетов для уменьшения веса контейнера
 RUN rm -rf /var/lib/apt/lists/*
