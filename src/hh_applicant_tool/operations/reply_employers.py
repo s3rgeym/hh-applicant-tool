@@ -99,8 +99,7 @@ class Operation(BaseOperation):
             default="Напиши короткий ответ работодателю на основе истории переписки.",
         )
 
-    def run(self, tool: HHApplicantTool) -> None:
-        args: Namespace = tool.args
+    def run(self, tool: HHApplicantTool, args: Namespace) -> None:
         self.tool = tool
         self.api_client = tool.api_client
         self.resume_id = tool.first_resume_id()

@@ -278,14 +278,15 @@ class Operation(BaseOperation):
 
     @property
     def args(self) -> Namespace:
-        return self.tool.args
+        return self._args
 
     def run(
         self,
         tool: HHApplicantTool,
+        args: Namespace,
     ) -> None:
         self.tool = tool
-        args = self.args
+        self._args = args
         self.cover_letter = (
             args.letter_file.read_text(encoding="utf-8", errors="ignore")
             if args.letter_file

@@ -30,13 +30,13 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("name", nargs="?", help="Имя миграции")
 
-    def run(self, tool: HHApplicantTool) -> None:
+    def run(self, tool: HHApplicantTool, args: Namespace) -> None:
         def apply(name: str) -> None:
             apply_migration(tool.db, name)
             print(SUCKASS)
 
         try:
-            if a := tool.args.name:
+            if a := args.name:
                 return apply(a)
             if not (migrations := list_migrations()):
                 return

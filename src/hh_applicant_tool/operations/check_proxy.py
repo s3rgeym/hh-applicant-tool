@@ -24,7 +24,11 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, applicant_tool: HHApplicantTool) -> None:
+    def run(
+        self,
+        applicant_tool: HHApplicantTool,
+        args: BaseNamespace,
+    ) -> None:
         session = applicant_tool.session
         assert session.proxies, "Прокси не заданы"
         print(session.get("https://icanhazip.com").text)

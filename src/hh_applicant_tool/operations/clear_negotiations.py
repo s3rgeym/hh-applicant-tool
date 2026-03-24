@@ -61,9 +61,9 @@ class Operation(BaseOperation):
             help="Тестовый запуск без реального удаления",
         )
 
-    def run(self, tool: HHApplicantTool) -> None:
+    def run(self, tool: HHApplicantTool, args: Namespace) -> None:
         self.tool = tool
-        self.args = tool.args
+        self.args = args
         self.clear()
 
     def delete_chat(self, topic: int | str) -> bool:

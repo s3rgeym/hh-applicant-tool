@@ -28,7 +28,7 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, tool: HHApplicantTool) -> None:
+    def run(self, tool: HHApplicantTool, args: BaseNamespace) -> None:
         resumes: list[datatypes.Resume] = tool.get_resumes()
         # Там вызов API меняет поля
         tool.storage.resumes.save_batch(resumes)
