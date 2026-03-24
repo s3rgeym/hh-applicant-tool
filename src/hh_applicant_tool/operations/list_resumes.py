@@ -30,7 +30,7 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, tool: HHApplicantTool) -> None:
+    def run(self, tool: HHApplicantTool, args: Namespace) -> None:
         resumes: PaginatedItems[datatypes.Resume] = tool.get_resumes()
         logger.debug(resumes)
         tool.storage.resumes.save_batch(resumes)

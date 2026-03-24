@@ -43,14 +43,15 @@ class Operation(BaseOperation):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._tool: HHApplicantTool | None = None
+        self._args = None
 
     @property
     def is_headless(self) -> bool:
-        return not self._tool.args.no_headless and self.is_automated
+        return not self._args.no_headless and self.is_automated
 
     @property
     def is_automated(self) -> bool:
-        return not self._tool.args.manual
+        return not self._args.manual
 
     @property
     def selector_timeout(self) -> int | None:
@@ -83,8 +84,9 @@ class Operation(BaseOperation):
             help="Вывод капчи в sixel",
         )
 
-    def run(self, tool: HHApplicantTool) -> int | None:
+    def run(self, tool: HHApplicantTool, args) -> int | None:
         self._tool = tool
+        self._args = args
         try:
             asyncio.run(self._run())
         except (KeyboardInterrupt, asyncio.TimeoutError):
@@ -93,7 +95,7 @@ class Operation(BaseOperation):
         return 0
 
     async def _run(self) -> None:
-        args = self._tool.args
+        args = self._args
         api_client = self._tool.api_client
         storage = self._tool.storage
 
@@ -240,7 +242,7 @@ class Operation(BaseOperation):
             logger.debug("Капчи нет, продолжаем.")
             return
 
-        args = self._tool.args
+        args = self._args
         if not (args.use_kitty or args.use_sixel):
             raise RuntimeError(
                 "Требуется ввод капчи! Используйте --kitty или --sixel."

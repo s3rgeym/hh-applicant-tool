@@ -28,7 +28,7 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, tool: HHApplicantTool) -> None:
+    def run(self, tool: HHApplicantTool, args: BaseNamespace) -> None:
         try:
             tool.api_client.delete("/oauth/token")
         except ApiError as ex:

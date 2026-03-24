@@ -49,7 +49,7 @@ class Operation(BaseOperation):
             help="Файл для сохранения",
         )
 
-    def run(self, tool: HHApplicantTool) -> None:
+    def run(self, tool: HHApplicantTool, args: Namespace) -> None:
         def execute(sql_query: str) -> None:
             sql_query = sql_query.strip()
             if not sql_query:
@@ -61,11 +61,11 @@ class Operation(BaseOperation):
                 if cursor.description:
                     columns = [d[0] for d in cursor.description]
 
-                    if tool.args.csv or tool.args.output:
+                    if args.csv or args.output:
                         # Если -o не задан, используем sys.stdout
                         output = (
-                            tool.args.output.open("w", encoding="utf-8")
-                            if tool.args.output
+                            args.output.open("w", encoding="utf-8")
+                            if args.output
                             else sys.stdout
                         )
                         writer = csv.writer(output)
@@ -102,7 +102,7 @@ class Operation(BaseOperation):
                 print(f"❌  SQL Error: {ex}")
                 return 1
 
-        if initial_sql := tool.args.sql:
+        if initial_sql := args.sql:
             return execute(initial_sql)
 
         if not sys.stdin.isatty():

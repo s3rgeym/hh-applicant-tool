@@ -28,7 +28,7 @@ class Operation(BaseOperation):
         # parser
         ...
 
-    def run(self, tool: HHApplicantTool) -> None:
+    def run(self, tool: HHApplicantTool, args: BaseNamespace) -> None:
         r = tool.session.get("https://hh.ru")
 
         if m := re.search(r'^\s+login: "([^"]+)', r.text, re.MULTILINE):

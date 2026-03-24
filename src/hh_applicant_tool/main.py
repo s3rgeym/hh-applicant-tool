@@ -14,27 +14,28 @@ from itertools import count
 from os import getenv
 from pathlib import Path
 from pkgutil import iter_modules
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 import requests
 import urllib3
 
 from . import ai, api, utils
+from .constants import (
+    CONFIG_DIR,
+    CONFIG_FILENAME,
+    COOKIES_FILENAME,
+    DATABASE_FILENAME,
+    DESKTOP_USER_AGENT,
+    LOG_FILENAME,
+)
 from .storage import StorageFacade
 from .utils.cookiejar import HHOnlyCookieJar
 from .utils.log import setup_logger
 from .utils.mixins import MegaTool
 
-DEFAULT_CONFIG_DIR = utils.get_config_path() / (__package__ or "").replace(
-    "_", "-"
-)
-DEFAULT_CONFIG_FILENAME = "config.json"
-DEFAULT_LOG_FILENAME = "log.txt"
-DEFAULT_DATABASE_FILENAME = "data"
-DEFAULT_COOKIES_FILENAME = "cookies.txt"
-DEFAULT_DESKTOP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
-
 logger = logging.getLogger(__package__)
+
+OPERATIONS = "operations"
 
 
 class BaseOperation:
@@ -43,20 +44,20 @@ class BaseOperation:
     def run(
         self,
         tool: HHApplicantTool,
+        args: BaseNamespace,
     ) -> None | int:
         raise NotImplementedError()
-
-
-OPERATIONS = "operations"
 
 
 class BaseNamespace(argparse.Namespace):
     profile_id: str
     config_dir: Path
     verbosity: int
-    delay: float
+    api_delay: float
     user_agent: str
     proxy_url: str
+    openai_proxy_url: str
+    operation_run: Callable[[HHApplicantTool, BaseNamespace], None | int] | None
 
 
 class HHApplicantTool(MegaTool):
@@ -73,10 +74,11 @@ class HHApplicantTool(MegaTool):
     ):
         pass
 
-    def _create_parser(self) -> argparse.ArgumentParser:
+    @classmethod
+    def _create_parser(cls) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
-            description=self.__doc__,
-            formatter_class=self.ArgumentFormatter,
+            description=cls.__doc__,
+            formatter_class=cls.ArgumentFormatter,
         )
         parser.add_argument(
             "-v",
@@ -113,6 +115,12 @@ class HHApplicantTool(MegaTool):
             "--proxy-url",
             help="Прокси, используемый для запросов и авторизации",
         )
+        parser.add_argument(
+            "--openai-proxy",
+            "--ai-proxy",
+            dest="openai_proxy_url",
+            help="Отдельный прокси, используемый только для OpenAI чата",
+        )
         subparsers = parser.add_subparsers(help="commands")
         package_dir = Path(__file__).resolve().parent / OPERATIONS
         for _, module_name, _ in iter_modules([str(package_dir)]):
@@ -125,30 +133,31 @@ class HHApplicantTool(MegaTool):
                 kebab_name,
                 aliases=getattr(op, "__aliases__", []),
                 description=op.__doc__,
-                formatter_class=self.ArgumentFormatter,
+                formatter_class=cls.ArgumentFormatter,
             )
-            op_parser.set_defaults(run=op.run)
+            op_parser.set_defaults(operation_run=op.run)
             op.setup_parser(op_parser)
-        parser.set_defaults(run=None)
+        parser.set_defaults(operation_run=None)
         return parser
 
-    def __init__(self, argv: Sequence[str] | None):
-        self._parse_args(argv)
+    def __init__(self):
+        self._parser = self._create_parser()
 
-        # Создаем путь до конфига
-        self.config_path.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
+    @staticmethod
+    def _proxy_url_to_dict(proxy_url: str | None) -> dict[str, str]:
+        if not proxy_url:
+            return {}
+
+        return {
+            "http": proxy_url,
+            "https": proxy_url,
+        }
 
     def _get_proxies(self) -> dict[str, str]:
-        proxy_url = self.args.proxy_url or self.config.get("proxy_url")
+        proxy_url = self.proxy_url or self.config.get("proxy_url")
 
         if proxy_url:
-            return {
-                "http": proxy_url,
-                "https": proxy_url,
-            }
+            return self._proxy_url_to_dict(proxy_url)
 
         proxies = {}
         http_env = getenv("HTTP_PROXY") or getenv("http_proxy")
@@ -161,50 +170,71 @@ class HHApplicantTool(MegaTool):
 
         return proxies
 
-    @cached_property
-    def session(self) -> requests.Session:
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    def _get_openai_proxies(self) -> dict[str, str]:
+        openai_config = self.config.get("openai", {})
+        proxy_url = self.openai_proxy_url or openai_config.get("proxy_url")
+        if proxy_url:
+            return self._proxy_url_to_dict(proxy_url)
+        return self._get_proxies()
 
+    def _create_http_session(
+        self,
+        proxies: dict[str, str],
+        *,
+        log_label: str,
+    ) -> requests.Session:
         session = requests.Session()
         session.verify = False
 
-        if proxies := self._get_proxies():
-            logger.info("Use proxies for requests: %r", proxies)
+        if proxies:
+            logger.info("Use proxies for %s: %r", log_label, proxies)
             session.proxies = proxies
+
+        session.headers.update({"User-Agent": DESKTOP_USER_AGENT})
+        return session
+
+    @cached_property
+    def session(self) -> requests.Session:
+        session = self._create_http_session(
+            self._get_proxies(),
+            log_label="requests",
+        )
 
         session.cookies = HHOnlyCookieJar(str(self.cookies_file))
         if self.cookies_file.exists():
             session.cookies.load(ignore_discard=True, ignore_expires=True)
 
-        session.headers.update({"User-Agent": DEFAULT_DESKTOP_USER_AGENT})
-
         return session
+
+    @cached_property
+    def openai_session(self) -> requests.Session:
+        return self._create_http_session(
+            self._get_openai_proxies(),
+            log_label="OpenAI requests",
+        )
 
     @cached_property
     def config_path(self) -> Path:
         return (
-            (
-                self.args.config_dir
-                or Path(getenv("CONFIG_DIR", DEFAULT_CONFIG_DIR))
-            )
-            / (self.args.profile_id or getenv("HH_PROFILE_ID", "."))
+            (self.config_dir or Path(getenv("CONFIG_DIR", CONFIG_DIR)))
+            / (self.profile_id or getenv("HH_PROFILE_ID", "."))
         ).resolve()
 
     @cached_property
     def config(self) -> utils.Config:
-        return utils.Config(self.config_path / DEFAULT_CONFIG_FILENAME)
+        return utils.Config(self.config_path / CONFIG_FILENAME)
 
     @cached_property
     def log_file(self) -> Path:
-        return self.config_path / DEFAULT_LOG_FILENAME
+        return self.config_path / LOG_FILENAME
 
     @cached_property
     def cookies_file(self) -> Path:
-        return self.config_path / DEFAULT_COOKIES_FILENAME
+        return self.config_path / COOKIES_FILENAME
 
     @cached_property
     def db_path(self) -> Path:
-        return self.config_path / DEFAULT_DATABASE_FILENAME
+        return self.config_path / DATABASE_FILENAME
 
     @cached_property
     def db(self) -> sqlite3.Connection:
@@ -217,7 +247,6 @@ class HHApplicantTool(MegaTool):
 
     @cached_property
     def api_client(self) -> api.client.ApiClient:
-        args = self.args
         config = self.config
         token = config.get("token", {})
         return api.client.ApiClient(
@@ -226,8 +255,8 @@ class HHApplicantTool(MegaTool):
             access_token=token.get("access_token"),
             refresh_token=token.get("refresh_token"),
             access_expires_at=token.get("access_expires_at"),
-            delay=args.api_delay or config.get("api_delay"),
-            user_agent=args.user_agent or config.get("user_agent"),
+            delay=self.api_delay or config.get("api_delay"),
+            user_agent=self.user_agent or config.get("user_agent"),
             session=self.session,
         )
 
@@ -304,7 +333,7 @@ class HHApplicantTool(MegaTool):
             max_completion_tokens=c.get("max_completion_tokens", 1000),
             system_prompt=system_prompt,
             completion_endpoint=c.get("completion_endpoint"),
-            session=self.session,
+            session=self.openai_session,
         )
 
     # TODO: вынести в миксин какой
@@ -356,10 +385,19 @@ class HHApplicantTool(MegaTool):
 
         return server
 
-    def run(self) -> None | int:
+    def run(self, argv: Sequence[str] | None = None) -> None | int:
+        args = self._parser.parse_args(argv, namespace=BaseNamespace())
+        self._assign_args(args)
+
+        # Создаем путь до конфига
+        self.config_path.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
         verbosity_level = max(
             logging.DEBUG,
-            logging.WARNING - self.args.verbosity * 10,
+            logging.WARNING - self.verbosity * 10,
         )
 
         setup_logger(logger, verbosity_level, self.log_file)
@@ -369,9 +407,9 @@ class HHApplicantTool(MegaTool):
         utils.setup_terminal()
 
         try:
-            if self.args.run:
+            if self.operation_run:
                 try:
-                    return self.args.run(self)
+                    return self.operation_run(self, args)
                 except KeyboardInterrupt:
                     logger.warning("Выполнение прервано пользователем!")
                 except api.errors.CaptchaRequired as ex:
@@ -413,10 +451,11 @@ class HHApplicantTool(MegaTool):
                 pass
                 # raise
 
-    def _parse_args(self, argv) -> None:
-        self._parser = self._create_parser()
-        self.args = self._parser.parse_args(argv, namespace=BaseNamespace())
+    def _assign_args(self, args: BaseNamespace) -> None:
+        for name, value in vars(args).items():
+            setattr(self, name, value)
 
 
 def main(argv: Sequence[str] | None = None) -> None | int:
-    return HHApplicantTool(argv).run()
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    return HHApplicantTool().run(argv)

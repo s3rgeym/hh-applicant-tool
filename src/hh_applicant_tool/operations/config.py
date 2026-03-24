@@ -103,8 +103,7 @@ class Operation(BaseOperation):
             help="Вывести полный путь к конфигу",
         )
 
-    def run(self, applicant_tool: HHApplicantTool) -> None:
-        args = applicant_tool.args
+    def run(self, applicant_tool: HHApplicantTool, args: Namespace) -> None:
         config = applicant_tool.config
         if args.set:
             key, value = args.set

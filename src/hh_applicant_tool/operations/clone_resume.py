@@ -32,10 +32,9 @@ class Operation(BaseOperation):
             help="Необязательный идентификатор резюме. Если не указать, то будет клонировано дефолтное (первое)",
         )
 
-    def run(self, tool: HHApplicantTool) -> None:
+    def run(self, tool: HHApplicantTool, args: Namespace) -> None:
         resumes: list[datatypes.Resume] = tool.get_resumes()
         tool.storage.resumes.save_batch(resumes)
-        args = tool.args
         api_client = tool.api_client
         resume = (
             {res["id"]: res for res in resumes}[args.resume_id]

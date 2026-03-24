@@ -33,7 +33,7 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass
 
-    def run(self, tool: HHApplicantTool) -> None:
+    def run(self, tool: HHApplicantTool, args: BaseNamespace) -> None:
         api_client = tool.api_client
         result: datatypes.User = api_client.get("me")
         if result.get('auth_type') != 'applicant':
