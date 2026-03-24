@@ -485,10 +485,10 @@ class Operation(BaseOperation):
                     except RepositoryError as ex:
                         logger.exception(ex)
 
-                    # Если есть сайт, то ищем на нем емейлы
-                    if site_url := (
+                    # Если есть сайт, то ищем на нем емейлы для отправки письма
+                    if self.args.send_email and (site_url := (
                         employer_profile.get("site_url") or ""
-                    ).strip():
+                    ).strip()):
                         site_url = (
                             site_url
                             if "://" in site_url
