@@ -148,8 +148,21 @@ CREATE TABLE IF NOT EXISTS employer_sites (
     UNIQUE (employer_id, site_url)
 );
 
+/* ===================== skipped_vacancies ===================== */
+CREATE TABLE IF NOT EXISTS skipped_vacancies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    resume_id TEXT NOT NULL DEFAULT '',
+    vacancy_id INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    alternate_url TEXT,
+    name TEXT,
+    employer_name TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (resume_id, vacancy_id)
+);
 /* ===================== ИНДЕКСЫ ===================== */
 CREATE INDEX IF NOT EXISTS idx_emp_site_upd ON employer_sites(updated_at);
+CREATE INDEX IF NOT EXISTS idx_skipped_vac_resume ON skipped_vacancies(resume_id, vacancy_id);
 
 /* ===================== ТРИГГЕРЫ ===================== */
 CREATE TRIGGER IF NOT EXISTS trg_employer_sites_updated
