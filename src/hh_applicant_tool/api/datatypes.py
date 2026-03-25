@@ -178,6 +178,7 @@ class SearchVacancy(VacancyShort):
     is_adv_vacancy: bool
     adv_context: Optional[dict]
     allow_chat_with_manager: bool
+    key_skills: Optional[List[dict]]
 
 
 class ResumeShort(TypedDict):

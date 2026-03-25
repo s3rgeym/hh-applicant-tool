@@ -324,18 +324,28 @@ class HHApplicantTool(MegaTool):
 
     def get_openai_chat(self, system_prompt: str) -> ai.ChatOpenAI:
         c = self.config.get("openai", {})
-        # Поддержка как token так и api_key для совместимости
-        api_key = c.get("api_key") or c.get("token")
+        api_key = c.get("api_key")
         if not api_key:
-            raise ValueError("Токен для OpenAI не задан")
+            raise ValueError(
+                "API-ключ не задан. Укажите 'api_key' в секции 'openai' конфигурации."
+            )
+
+        base_url = c.get("base_url")
+        if not base_url:
+            raise ValueError(
+                "Параметр 'base_url' обязателен для AI-конфигурации. "
+                "Примеры: OpenAI='https://api.openai.com/v1/chat/completions', "
+                "Ollama='http://localhost:11434/v1/chat/completions', "
+                "OpenRouter='https://openrouter.ai/api/v1/chat/completions'"
+            )
+
         return ai.ChatOpenAI(
             api_key=api_key,
             model=c.get("model"),
             temperature=c.get("temperature", 0.7),
             max_completion_tokens=c.get("max_completion_tokens", 1000),
             system_prompt=system_prompt,
-            base_url=c.get("base_url"),
-            completion_endpoint=c.get("completion_endpoint"),
+            base_url=base_url,
             rate_limit=c.get("rate_limit", 40),
             session=self.session,
         )

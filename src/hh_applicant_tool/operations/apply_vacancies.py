@@ -6,11 +6,13 @@ import json
 import logging
 import random
 import re
+import textwrap
 import time
+from datetime import datetime
 from email.message import EmailMessage
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterator, Literal
 from urllib.parse import urlparse
 
 import requests
@@ -38,13 +40,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__package__)
 
 
+AI_FILTER_MAX_RETRIES = 12
+AI_FILTER_RETRY_DELAY = 10
+
+
 class Namespace(BaseNamespace):
     resume_id: str | None
     letter_file: Path | None
     ignore_employers: Path | None
     force_message: bool
     use_ai: bool
-    ai_filter: bool
+    ai_filter: Literal["heavy", "light"] | None
     ai_rate_limit: int
     ai_prompt: str
     first_prompt: str
@@ -118,8 +124,9 @@ class Operation(BaseOperation):
         )
         parser.add_argument(
             "--ai-filter",
-            help="Использовать AI для фильтрации вакансий перед откликом",
-            action=argparse.BooleanOptionalAction,
+            help="Использовать AI для фильтрации вакансий. Режимы: heavy - полный анализ вакансии и резюме, light - быстрый анализ по названию и навыкам",
+            choices=["heavy", "light"],
+            default=None,
         )
         parser.add_argument(
             "--ai-rate-limit",
@@ -130,11 +137,11 @@ class Operation(BaseOperation):
         parser.add_argument(
             "--ai-prompt",
             help="Промпт для AI фильтрации вакансий",
-            default="Определи, подходит ли вакансия для резюме соискателя. Ответь только 'да' или 'нет'.",
+            default="Определи, подходит ли вакансия для резюме соискателя. Ответь строго JSON: {\"suitable\": true} или {\"suitable\": false}.",
         )
         parser.add_argument(
             "--first-prompt",
-            help="Начальный помпт чата для генерации сопроводительного письма",
+            help="Начальный промпт чата для генерации сопроводительного письма",
             default="Напиши сопроводительное письмо для отклика на эту вакансию. Не используй placeholder'ы, твой ответ будет отправлен без обработки.",  # noqa: E501
         )
         parser.add_argument(
@@ -354,31 +361,18 @@ class Operation(BaseOperation):
         self.ai_filter = args.ai_filter
         self.ai_prompt = args.ai_prompt
         self.ai_filter_chat = None
-        self._resume_analysis: str | None = None
+        self._resume_analysis_cache: dict[tuple[str | None, str], str] = {}
         
-        if self.ai_filter:
-            if self.resume_id:
-                resume_data = self._get_full_resume(self.resume_id)
-            else:
-                resumes_list = self.tool.get_resumes()
-                resume_data = resumes_list[0] if resumes_list else {}
-
-            resume_analysis = self._analyze_resume(resume_data)
-            filter_system_prompt = self._build_filter_system_prompt(resume_analysis)
-            self.ai_filter_chat = tool.get_openai_chat(filter_system_prompt)
-            
-            #logger.debug(filter_system_prompt)
-            
-            if args.ai_rate_limit:
-                self.ai_filter_chat.rate_limit = args.ai_rate_limit
         self._apply_vacancies()
 
     def _get_full_resume(self, resume_id: str) -> dict:
         return self.api_client.get(f"/resumes/{resume_id}")
 
-    def _analyze_resume(self, resume: dict, resume_full: dict | None = None) -> str:
-        if self._resume_analysis:
-            return self._resume_analysis
+    def _analyze_resume_heavy(self, resume: dict, resume_full: dict | None = None) -> str:
+        resume_id = resume.get("id")
+        cache_key = (resume_id, "heavy")
+        if cache_key in self._resume_analysis_cache:
+            return self._resume_analysis_cache[cache_key]
 
         resume_id = resume.get("id")
         if resume_id:
@@ -417,84 +411,273 @@ class Operation(BaseOperation):
                             parts.append(f" Описание:")
                             parts.append(f" {description}")
                             
-                self._resume_analysis = "\n".join(parts)
-                return self._resume_analysis
+                result = "\n".join(parts)
+                self._resume_analysis_cache[cache_key] = result
+                return result
 
             except Exception as e:
                 logger.warning(f"Не удалось получить полное резюме: {e}")
 
-        return self._resume_analysis
-    
-    # КТО ЭТО ПРОЧИТАЛ ТОТ ПИД@РАС
-    def _is_vacancy_suitable(self, vacancy: dict, resume_analysis: str) -> bool:
+        return ""
+
+    def _analyze_resume_light(self, resume: dict) -> str:
+        resume_id = resume.get("id")
+        cache_key = (resume_id, "light")
+        if cache_key in self._resume_analysis_cache:
+            return self._resume_analysis_cache[cache_key]
+
+        parts = []
+
+        title = resume.get("title", "")
+        if title:
+            parts.append(f"Должность: {title}")
+
+        if "skill_set" in resume and resume["skill_set"]:
+            parts.append("\n---------- НАВЫКИ ----------")
+            skills_row = ", ".join(resume["skill_set"])
+            parts.append(skills_row)
+
+        result = "\n".join(parts)
+        self._resume_analysis_cache[cache_key] = result
+        return result
+
+    def _get_vacancy_key_skills(self, vacancy_id: str | int) -> str:
+        try:
+            full_vacancy = self.api_client.get(f"/vacancies/{vacancy_id}")
+            key_skills_data = full_vacancy.get("key_skills") or []
+            return ", ".join(s["name"] for s in key_skills_data if s.get("name"))
+        except Exception as e:
+            logger.warning("Не удалось получить key_skills вакансии %s: %s", vacancy_id, e)
+            return ""
+
+    def _build_vacancy_context(self, vacancy: dict, include_snippet: bool = True) -> str:
+        parts: list[str] = [f"\nВакансия: {vacancy.get('name', '')}"]
+
+        employer = vacancy.get("employer", {}) or {}
+        employer_name = employer.get("name", "")
+        if employer_name:
+            parts.append(f"Работодатель: {employer_name}")
+
+        if include_snippet:
+            snippet = vacancy.get("snippet", {}) or {}
+            requirements = snippet.get("requirement", "")
+            responsibility = snippet.get("responsibility", "")
+            if requirements:
+                parts.append(f"Требования: {requirements}")
+            if responsibility:
+                parts.append(f"Обязанности: {responsibility}")
+
+        vacancy_id = vacancy.get("id")
+        if vacancy_id:
+            key_skills = self._get_vacancy_key_skills(vacancy_id)
+            if key_skills:
+                parts.append(f"Ключевые навыки: {key_skills}")
+
+        return "\n".join(parts)
+
+    def _ask_ai_suitability(self, prompt: str, vacancy_name: str, log_suffix: str = "") -> bool:
         if not self.ai_filter_chat:
             return True
-        
-        vacancy_name = vacancy.get("name", "")
-        employer = vacancy.get("employer", {})
-        employer_name = employer.get("name", "")
-        
-        snippet = vacancy.get("snippet", {})
-        requirements = snippet.get("requirement", "")
-        responsibility = snippet.get("responsibility", "")
-        
-        vacancy_info = f"\nВакансия: {vacancy_name}"
-        vacancy_info += f"\nРаботодатель: {employer_name}"
-        
-        if requirements:
-            vacancy_info += f"\nТребования: {requirements}"
-        if responsibility:
-            vacancy_info += f"\nОбязанности: {responsibility}"
-        
 
-        prompt = f"{self.ai_prompt} {vacancy_info}"
-
-        # Вывод промпта в дебаге
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"AI промпт: {prompt}") 
-
-        # повторные попытки при ошибке 429 (Too Many Requests)
-        max_retries = 12
-        retry_delay = 10
-
-        for attempt in range(max_retries):
+        for attempt in range(AI_FILTER_MAX_RETRIES):
             try:
-                response = self.ai_filter_chat.send_message(prompt).strip().lower()
-                
+                response = self.ai_filter_chat.send_message(prompt).strip()
+
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug(f"AI ответ: {response}")
+                    logger.debug("AI %s ответ (попытка %d): %s", log_suffix, attempt + 1, response)
 
-                if response.startswith("да") or response.startswith("yes"):
-                    return True
-                elif response.startswith("нет") or response.startswith("no"):
-                    logger.info(f"Вакансия {vacancy_name} отклонена AI")
+                result = self._parse_ai_json_response(response)
+                if result is not None:
+                    if result:
+                        return True
+                    logger.info("Вакансия %s отклонена AI %s", vacancy_name, log_suffix)
                     return False
-                return True
+
+                # Если не удалось распарсить JSON, просто повторяем запрос
+                logger.warning(
+                    "AI %s не дал валидный JSON для вакансии %s %s (попытка %d/%d)",
+                    log_suffix,
+                    vacancy_name,
+                    attempt + 1,
+                    AI_FILTER_MAX_RETRIES,
+                )
+                continue
+
             except Exception as e:
-                error_str = str(e)
-
-                if "429" in error_str and attempt < max_retries - 1:
+                if "429" in str(e) and attempt < AI_FILTER_MAX_RETRIES - 1:
                     logger.warning(
-                        f"Получена ошибка 429 (Too Many Requests). "
-                        f"Повторная попытка через {retry_delay} сек... "
-                        f"(попытка {attempt + 1}/{max_retries})"
+                        "Получена ошибка 429. Повторная попытка через %d сек... "
+                        "(попытка %d/%d)",
+                        AI_FILTER_RETRY_DELAY,
+                        attempt + 1,
+                        AI_FILTER_MAX_RETRIES,
                     )
-                    time.sleep(retry_delay)
+                    time.sleep(AI_FILTER_RETRY_DELAY)
                     continue
-                logger.error(f"Ошибка AI: {e}")
-                return True  # при любой другой ошибке пропускаем вакансию
 
-    def _build_filter_system_prompt(self, resume_analysis: str) -> str:
-        return f"""Ты - эксперт по подбору персонала с многолетним опытом работы в HR.
-Твоя задача - анализировать резюме кандидатов и сравнивать их с вакансиями работодателей.
-Ты должен внимательно изучить ВСЮ информацию о резюме кандидата и вакансии, затем принять решение о соответствии.
+                # мне лень было делать нормальный фолбэк, поэтому я просто делаю отклик при любой ошибке (срал)
+                logger.error("Ошибка AI %s: %s", log_suffix, e)
+                return True
 
-ВОТ ИНФОРМАЦИЯ О КАНДИДАТЕ:
-                
-{resume_analysis}
-                               
-Отвечай ТОЛЬКО 'да' если вакансия ПОДХОДИТ кандидату, или 'нет' если НЕ ПОДХОДИТ.
-Не добавляй никаких пояснений, только одно слово - 'да' или 'нет'."""
+        logger.warning(
+            "AI %s не дал валидный JSON после %d попыток для вакансии %s",
+            log_suffix,
+            AI_FILTER_MAX_RETRIES,
+            vacancy_name,
+        )
+        return True
+
+    def _parse_ai_json_response(self, response: str) -> bool | None:
+        response = response.strip().lower()
+
+        if response in ("да", "yes", "true"):
+            return True
+        if response in ("нет", "no", "false"):
+            return False
+
+        import re
+        from ..utils import json as utils_json
+
+        if response.startswith("```"):
+            response = re.sub(r"^```(?:json)?\s*", "", response)
+            response = re.sub(r"\s*```$", "", response)
+
+        json_match = re.search(
+            r'\{[^{}]*"suitable"\s*:\s*(true|false)[^{}]*\}',
+            response,
+            re.IGNORECASE,
+        )
+        if json_match:
+            try:
+                data = utils_json.loads(json_match.group(0))
+                return data.get("suitable")
+            except Exception:
+                pass
+
+        return None
+
+    # КТО ЭТО ПРОЧИТАЛ ТОТ ПИД@РАС
+    def _is_vacancy_suitable_heavy(self, vacancy: dict) -> bool:
+        if not self.ai_filter_chat:
+            return True
+
+        vacancy_info = self._build_vacancy_context(vacancy, include_snippet=True)
+        prompt = f"Вакансия: \n {vacancy_info}"
+        return self._ask_ai_suitability(prompt, vacancy.get("name", ""), "(heavy)")
+
+    def _is_vacancy_suitable_light(self, vacancy: dict) -> bool:
+        if not self.ai_filter_chat:
+            return True
+
+        vacancy_info = self._build_vacancy_context(vacancy, include_snippet=False)
+        prompt = f"Вакансия: \n {vacancy_info}"
+        return self._ask_ai_suitability(prompt, vacancy.get("name", ""), "(light)")
+
+    def _build_filter_system_prompt_heavy(self, resume_analysis: str) -> str:
+        return textwrap.dedent(f"""
+            Ты оцениваешь соответствие вакансии кандидату по шкале от 0 до 100.
+
+            Работай только по фактам. Не додумывай.
+
+            Как анализировать вакансию:
+
+            - Название задает основную роль
+            - Требования и обязанности уточняют реальную работу
+            - Описание задач имеет приоритет над списком технологий
+            - Если технологии совпадают, но задачи другие — это слабое соответствие
+
+            Как анализировать кандидата:
+
+            - Основа — реальный опыт (должности + задачи)
+            - Навыки сами по себе не определяют профессию без опыта
+            - Важно направление развития, а не только текущая роль
+
+            Оцени по критериям:
+
+            1. Совпадение роли (0-40):
+            - 40: роль совпадает или почти совпадает
+            - 25: роль близкая
+            - 10: роль смежная (может быть логичным развитием)
+            - 0: другая профессия
+
+            2. Задачи и опыт (0-30):
+            - 30: задачи совпадают
+            - 15: частично совпадают
+            - 0: задачи не совпадают
+
+            3. Навыки и технологии (0-20):
+            - 20: сильное совпадение
+            - 10: частичное
+            - 0: почти нет совпадений
+
+            4. Контекст и область (0-10):
+            - 10: та же область или логичное развитие
+            - 0: другая область
+
+            Как принимать решение:
+
+            - Сначала определи, относится ли вакансия к той же профессиональной области
+            - Если явно другая область → suitable = false
+
+            Иначе:
+
+            - Посчитай общий score (0-100)
+            - Если score >= 65 → suitable = true
+            - Иначе → suitable = false
+
+            Важно:
+
+            - Совпадение технологий без совпадения задач — слабый сигнал
+            - Частичное совпадение допустимо, если есть логичное развитие
+            - Не требуй полного совпадения формулировок
+            - При пограничных случаях допускается true, если есть разумное соответствие
+
+            ОТВЕТ ТОЛЬКО JSON:
+            {{"suitable": true}} или {{"suitable": false}}
+
+            Кандидат:
+            {resume_analysis}
+        """).strip()
+
+    def _build_filter_system_prompt_light(self, resume_analysis: str) -> str:
+        return textwrap.dedent(f"""
+            Ты оцениваешь соответствие вакансии кандидату по шкале от 0 до 100.
+
+            Оцени по критериям:
+
+            1. Совпадение роли (0-40):
+            - 40: почти одинаковая роль
+            - 25: близкая роль
+            - 10: смежная
+            - 0: другая профессия
+
+            2. Навыки (0-30):
+            - 30: сильное совпадение
+            - 15: частичное
+            - 0: почти нет совпадений
+
+            3. Задачи (0-20):
+            - 20: совпадают
+            - 10: частично
+            - 0: не совпадают
+
+            4. Область (0-10):
+            - 10: та же или логичное развитие
+            - 0: нет
+
+            Посчитай общий score (0-100).
+
+            Если score >= 60 → suitable = true  
+            Иначе → suitable = false  
+
+            Не объясняй решение.
+
+            Ответ только JSON:
+            {{"suitable": true}} или {{"suitable": false}}
+
+            Кандидат:
+            {resume_analysis}
+        """).strip()
 
     def _apply_vacancies(self) -> None:
         resumes: list[datatypes.Resume] = self.tool.get_resumes()
@@ -561,6 +744,19 @@ class Operation(BaseOperation):
         storage = self.tool.storage
         site_emails = {}
 
+        if self.ai_filter:
+            if self.ai_filter == "heavy":
+                system_prompt = self._build_filter_system_prompt_heavy(self._analyze_resume_heavy(resume))
+            elif self.ai_filter == "light":
+                system_prompt = self._build_filter_system_prompt_light(self._analyze_resume_light(resume))
+            else:
+                raise ValueError(f"Неизвестный режим AI фильтра: {self.ai_filter}")
+            
+            self.ai_filter_chat = self.tool.get_openai_chat(system_prompt)
+            
+            if self.args.ai_rate_limit:
+                self.ai_filter_chat.rate_limit = self.args.ai_rate_limit
+                
         for vacancy in self._get_vacancies(resume_id=resume["id"]):
             try:
                 employer = vacancy.get("employer", {})
@@ -627,7 +823,9 @@ class Operation(BaseOperation):
                         "Вакансия попала под фильтр: %s",
                         vacancy["alternate_url"],
                     )
-
+                    
+                    self._save_skipped_vacancy(vacancy, "excluded_filter", resume["id"])
+                    
                     self.api_client.put(
                         f"/vacancies/blacklisted/{vacancy['id']}"
                     )
@@ -636,16 +834,33 @@ class Operation(BaseOperation):
                         vacancy["alternate_url"],
                     )
                     continue
-
+                
                 # AI фильтрация вакансий
                 if self.ai_filter and self.ai_filter_chat:
-                    resume_analysis = self._analyze_resume(resume)
-                    if not self._is_vacancy_suitable(vacancy, resume_analysis):
-                        logger.info(
-                            "Вакансия отклонена AI фильтром: %s",
+                    if self._is_vacancy_already_skipped(vacancy, resume["id"]):
+                        logger.debug(
+                            "Вакансия уже была отклонена ранее: %s",
                             vacancy["alternate_url"],
                         )
-                        print("🧠 AI пропустил", vacancy["alternate_url"])
+                        print("⏩ Вакансия уже отклонена ранее", vacancy["alternate_url"])
+                        continue
+    
+                    if self.ai_filter == "heavy":
+                        is_suitable = self._is_vacancy_suitable_heavy(vacancy)
+                    elif self.ai_filter == "light":
+                        is_suitable = self._is_vacancy_suitable_light(vacancy)
+                    else:
+                        raise ValueError(f"Неизвестный режим AI фильтра: {self.ai_filter}")
+    
+                    if not is_suitable:
+                        logger.info(
+                            "Вакансия отклонена AI фильтром (%s): %s",
+                            self.ai_filter,
+                            vacancy["alternate_url"],
+                        )
+                        print(f"🧠 AI ({self.ai_filter}) посчитал неподходящей", vacancy["alternate_url"])
+    
+                        self._save_skipped_vacancy(vacancy, "ai_rejected", resume["id"])
                         continue
 
                 # Перед откликом выгружаем профиль компании
@@ -1165,7 +1380,47 @@ class Operation(BaseOperation):
 
         description, _ = self.json_decoder.raw_decode(
             re.search(r'"description": (.*)', r.text).group(1)
-        )
+        )   
         description = strip_tags(description)
         logger.debug(description[:2047])
         return bool(excluded_pat.search(description))
+
+    def _is_vacancy_already_skipped(self, vacancy: SearchVacancy, resume_id: str | None = None) -> bool:
+        try:
+            vacancy_id = vacancy["id"]
+
+            if resume_id:
+                if any(
+                    self.tool.storage.skipped_vacancies.find(
+                        resume_id=resume_id,
+                        vacancy_id=vacancy_id,
+                    )
+                ):
+                    return True
+
+            return any(
+                self.tool.storage.skipped_vacancies.find(
+                    resume_id="",
+                    vacancy_id=vacancy_id,
+                )
+            )
+
+        except Exception:
+            return False
+
+    def _save_skipped_vacancy(self, vacancy: SearchVacancy, reason: str, resume_id: str | None = None) -> None:
+        try:
+            employer = vacancy.get("employer", {})
+            self.tool.storage.skipped_vacancies.save(
+                {
+                    "resume_id": resume_id or "",
+                    "vacancy_id": vacancy["id"],
+                    "reason": reason,
+                    "alternate_url": vacancy.get("alternate_url"),
+                    "name": vacancy.get("name"),
+                    "employer_name": employer.get("name"),
+                    "created_at": datetime.now(),
+                }
+            )
+        except Exception as ex:
+            logger.warning(f"Не удалось сохранить пропущенную вакансию: {ex}")
