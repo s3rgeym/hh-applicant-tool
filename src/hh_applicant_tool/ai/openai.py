@@ -144,7 +144,7 @@ class ChatOpenAI:
 
             try:
                 assistant_message = data["choices"][0]["message"]["content"]
-                return assistant_message
+                return assistant_message if assistant_message is not None else ""
             except (KeyError, IndexError) as ex:
                 raise OpenAIError(f"Invalid response format: {ex}") from ex
 
