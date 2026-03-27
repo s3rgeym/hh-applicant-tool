@@ -6,7 +6,6 @@ import json
 import logging
 import random
 import re
-import textwrap
 import time
 from datetime import datetime
 from email.message import EmailMessage
@@ -40,8 +39,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__package__)
 
 
-AI_FILTER_MAX_RETRIES = 12
-AI_FILTER_RETRY_DELAY = 10
 
 
 class Namespace(BaseNamespace):
@@ -52,9 +49,8 @@ class Namespace(BaseNamespace):
     use_ai: bool
     ai_filter: Literal["heavy", "light"] | None
     ai_rate_limit: int
-    ai_prompt: str
-    first_prompt: str
-    prompt: str
+    system_prompt: str
+    message_prompt: str
     order_by: str
     search: str
     schedule: str
@@ -135,16 +131,13 @@ class Operation(BaseOperation):
             default=40,
         )
         parser.add_argument(
-            "--ai-prompt",
-            help="Промпт для AI фильтрации вакансий",
-            default="Определи, подходит ли вакансия для резюме соискателя. Ответь строго JSON: {\"suitable\": true} или {\"suitable\": false}.",
-        )
-        parser.add_argument(
-            "--first-prompt",
-            help="Начальный промпт чата для генерации сопроводительного письма",
+            "--system-prompt",
+            "--ai-system",
+            help="Системный промпт для AI генерации сопроводительных писем",
             default="Напиши сопроводительное письмо для отклика на эту вакансию. Не используй placeholder'ы, твой ответ будет отправлен без обработки.",  # noqa: E501
         )
         parser.add_argument(
+            "--message-prompt",
             "--prompt",
             help="Промпт для генерации сопроводительного письма",
             default="Сгенерируй сопроводительное письмо не более 5-7 предложений от моего имени для вакансии",  # noqa: E501
@@ -340,7 +333,7 @@ class Operation(BaseOperation):
         self.order_by = args.order_by
         self.per_page = args.per_page
         self.period = args.period
-        self.pre_prompt = args.prompt
+        self.message_prompt = args.message_prompt
         self.premium = args.premium
         self.professional_role = args.professional_role
         self.resume_id = args.resume_id
@@ -353,14 +346,9 @@ class Operation(BaseOperation):
         self.sort_point_lng = args.sort_point_lng
         self.top_lat = args.top_lat
         self.total_pages = args.total_pages
-        self.openai_chat = (
-            tool.get_openai_chat(args.first_prompt) if args.use_ai else None
-        )
-        
-        # Инициализация AI фильтра вакансий
+        self.cover_letter_ai = (tool.get_cover_letter_ai(args.system_prompt) if args.use_ai else None)
         self.ai_filter = args.ai_filter
-        self.ai_prompt = args.ai_prompt
-        self.ai_filter_chat = None
+        self.vacancy_filter_ai = None
         self._resume_analysis_cache: dict[tuple[str | None, str], str] = {}
         
         self._apply_vacancies()
@@ -368,16 +356,15 @@ class Operation(BaseOperation):
     def _get_full_resume(self, resume_id: str) -> dict:
         return self.api_client.get(f"/resumes/{resume_id}")
 
-    def _analyze_resume_heavy(self, resume: dict, resume_full: dict | None = None) -> str:
+    def _analyze_resume_heavy(self, resume: dict) -> str:
         resume_id = resume.get("id")
         cache_key = (resume_id, "heavy")
         if cache_key in self._resume_analysis_cache:
             return self._resume_analysis_cache[cache_key]
 
-        resume_id = resume.get("id")
         if resume_id:
             try:
-                full_resume = self.api_client.get(f"/resumes/{resume_id}")
+                full_resume = self._get_full_resume(resume_id)
                 
                 parts = []
 
@@ -427,14 +414,16 @@ class Operation(BaseOperation):
             return self._resume_analysis_cache[cache_key]
 
         parts = []
-
-        title = resume.get("title", "")
+        
+        full_resume = self._get_full_resume(resume_id)
+        
+        title = full_resume.get("title", "")
         if title:
             parts.append(f"Должность: {title}")
 
-        if "skill_set" in resume and resume["skill_set"]:
-            parts.append("\n---------- НАВЫКИ ----------")
-            skills_row = ", ".join(resume["skill_set"])
+        if "skill_set" in full_resume and full_resume["skill_set"]:
+            parts.append("Навыки: ")
+            skills_row = ", ".join(full_resume["skill_set"])
             parts.append(skills_row)
 
         result = "\n".join(parts)
@@ -450,38 +439,35 @@ class Operation(BaseOperation):
             logger.warning("Не удалось получить key_skills вакансии %s: %s", vacancy_id, e)
             return ""
 
-    def _build_vacancy_context(self, vacancy: dict, include_snippet: bool = True) -> str:
-        parts: list[str] = [f"\nВакансия: {vacancy.get('name', '')}"]
+    def _build_vacancy_context(self, vacancy: dict, full_vacancy: dict | None = None, include_full: bool = False) -> str:
+        parts: list[str] = []
 
-        employer = vacancy.get("employer", {}) or {}
-        employer_name = employer.get("name", "")
-        if employer_name:
-            parts.append(f"Работодатель: {employer_name}")
+        name = vacancy.get("name")
+        if name:
+            parts.append(f"Вакансия: {name}")
 
-        if include_snippet:
-            snippet = vacancy.get("snippet", {}) or {}
-            requirements = snippet.get("requirement", "")
-            responsibility = snippet.get("responsibility", "")
-            if requirements:
-                parts.append(f"Требования: {requirements}")
-            if responsibility:
-                parts.append(f"Обязанности: {responsibility}")
-
-        vacancy_id = vacancy.get("id")
-        if vacancy_id:
-            key_skills = self._get_vacancy_key_skills(vacancy_id)
-            if key_skills:
-                parts.append(f"Ключевые навыки: {key_skills}")
+        if full_vacancy:
+            description = full_vacancy.get("description")
+            if description:
+                parts.append(f"Описание: {strip_tags(description)}")
+        else:
+            if vacancy.get("id"):
+                key_skills = self._get_vacancy_key_skills(vacancy["id"])
+                if key_skills:
+                    parts.append(f"Ключевые навыки: {key_skills}")
 
         return "\n".join(parts)
 
     def _ask_ai_suitability(self, prompt: str, vacancy_name: str, log_suffix: str = "") -> bool:
-        if not self.ai_filter_chat:
+
+        MAX_RETRIES = 3
+
+        if not self.vacancy_filter_ai:
             return True
 
-        for attempt in range(AI_FILTER_MAX_RETRIES):
+        for attempt in range(MAX_RETRIES):
             try:
-                response = self.ai_filter_chat.send_message(prompt).strip()
+                response = self.vacancy_filter_ai.complete(prompt).strip()
 
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("AI %s ответ (попытка %d): %s", log_suffix, attempt + 1, response)
@@ -493,36 +479,25 @@ class Operation(BaseOperation):
                     logger.info("Вакансия %s отклонена AI %s", vacancy_name, log_suffix)
                     return False
 
-                # Если не удалось распарсить JSON, просто повторяем запрос
+                # Если не удалось распарсить JSON, повторяем запрос
                 logger.warning(
-                    "AI %s не дал валидный JSON для вакансии %s %s (попытка %d/%d)",
+                    "AI %s не дал валидный JSON для вакансии %s (попытка %d/%d)",
                     log_suffix,
                     vacancy_name,
                     attempt + 1,
-                    AI_FILTER_MAX_RETRIES,
+                    MAX_RETRIES,
                 )
                 continue
 
-            except Exception as e:
-                if "429" in str(e) and attempt < AI_FILTER_MAX_RETRIES - 1:
-                    logger.warning(
-                        "Получена ошибка 429. Повторная попытка через %d сек... "
-                        "(попытка %d/%d)",
-                        AI_FILTER_RETRY_DELAY,
-                        attempt + 1,
-                        AI_FILTER_MAX_RETRIES,
-                    )
-                    time.sleep(AI_FILTER_RETRY_DELAY)
-                    continue
-
-                # мне лень было делать нормальный фолбэк, поэтому я просто делаю отклик при любой ошибке (срал)
+            except AIError as e:
+                # ChatOpenAI уже делает retry для 429, поэтому здесь только логируем
                 logger.error("Ошибка AI %s: %s", log_suffix, e)
                 return True
 
         logger.warning(
             "AI %s не дал валидный JSON после %d попыток для вакансии %s",
             log_suffix,
-            AI_FILTER_MAX_RETRIES,
+            MAX_RETRIES,
             vacancy_name,
         )
         return True
@@ -558,126 +533,75 @@ class Operation(BaseOperation):
 
     # КТО ЭТО ПРОЧИТАЛ ТОТ ПИД@РАС
     def _is_vacancy_suitable_heavy(self, vacancy: dict) -> bool:
-        if not self.ai_filter_chat:
-            return True
+        full_vacancy = None
+        if vacancy.get("id"):
+            full_vacancy = self.api_client.get(f"/vacancies/{vacancy['id']}")
 
-        vacancy_info = self._build_vacancy_context(vacancy, include_snippet=True)
-        prompt = f"Вакансия: \n {vacancy_info}"
+        vacancy_info = self._build_vacancy_context(
+            vacancy,
+            full_vacancy=full_vacancy,
+            include_full=True,
+        )
+        prompt = f"Вакансия: {vacancy_info}"
         return self._ask_ai_suitability(prompt, vacancy.get("name", ""), "(heavy)")
 
     def _is_vacancy_suitable_light(self, vacancy: dict) -> bool:
-        if not self.ai_filter_chat:
-            return True
-
-        vacancy_info = self._build_vacancy_context(vacancy, include_snippet=False)
-        prompt = f"Вакансия: \n {vacancy_info}"
+        vacancy_info = self._build_vacancy_context(vacancy, include_full=False)
+        prompt = f"Вакансия: {vacancy_info}"
         return self._ask_ai_suitability(prompt, vacancy.get("name", ""), "(light)")
 
     def _build_filter_system_prompt_heavy(self, resume_analysis: str) -> str:
-        return textwrap.dedent(f"""
-            Ты оцениваешь соответствие вакансии кандидату по шкале от 0 до 100.
+        return f"""
+Определи, подходит ли вакансия кандидату.
 
-            Работай только по фактам. Не додумывай.
+Смотри в первую очередь на тип работы (роль), а не на технологии.
 
-            Как анализировать вакансию:
+Правила:
 
-            - Название задает основную роль
-            - Требования и обязанности уточняют реальную работу
-            - Описание задач имеет приоритет над списком технологий
-            - Если технологии совпадают, но задачи другие — это слабое соответствие
+1. Если работа по сути другая -> suitable = false
 
-            Как анализировать кандидата:
+2. Если роль совпадает или очень близкая:
+   - есть пересечения по задачам или навыкам -> suitable = true
+   - даже частичное совпадение допустимо
 
-            - Основа — реальный опыт (должности + задачи)
-            - Навыки сами по себе не определяют профессию без опыта
-            - Важно направление развития, а не только текущая роль
+3. Общие технологии сами по себе ничего не значат.
+   Если работа разная, это не делает вакансию подходящей.
 
-            Оцени по критериям:
+4. Если данных мало:
+   - ориентируйся на название роли
 
-            1. Совпадение роли (0-40):
-            - 40: роль совпадает или почти совпадает
-            - 25: роль близкая
-            - 10: роль смежная (может быть логичным развитием)
-            - 0: другая профессия
+Не пиши объяснения.
+Ответ строго JSON:
+{{"suitable": true}} или {{"suitable": false}}
 
-            2. Задачи и опыт (0-30):
-            - 30: задачи совпадают
-            - 15: частично совпадают
-            - 0: задачи не совпадают
-
-            3. Навыки и технологии (0-20):
-            - 20: сильное совпадение
-            - 10: частичное
-            - 0: почти нет совпадений
-
-            4. Контекст и область (0-10):
-            - 10: та же область или логичное развитие
-            - 0: другая область
-
-            Как принимать решение:
-
-            - Сначала определи, относится ли вакансия к той же профессиональной области
-            - Если явно другая область → suitable = false
-
-            Иначе:
-
-            - Посчитай общий score (0-100)
-            - Если score >= 65 → suitable = true
-            - Иначе → suitable = false
-
-            Важно:
-
-            - Совпадение технологий без совпадения задач — слабый сигнал
-            - Частичное совпадение допустимо, если есть логичное развитие
-            - Не требуй полного совпадения формулировок
-            - При пограничных случаях допускается true, если есть разумное соответствие
-
-            ОТВЕТ ТОЛЬКО JSON:
-            {{"suitable": true}} или {{"suitable": false}}
-
-            Кандидат:
-            {resume_analysis}
-        """).strip()
+Кандидат:
+{resume_analysis}
+"""
 
     def _build_filter_system_prompt_light(self, resume_analysis: str) -> str:
-        return textwrap.dedent(f"""
-            Ты оцениваешь соответствие вакансии кандидату по шкале от 0 до 100.
+        return f"""
+Ты делаешь очень грубую проверку: подходит вакансия или нет.
 
-            Оцени по критериям:
+Используй только:
+- название резюме
+- список навыков резюме
+- название вакансии
+- явно указанные ключевые навыки вакансии
 
-            1. Совпадение роли (0-40):
-            - 40: почти одинаковая роль
-            - 25: близкая роль
-            - 10: смежная
-            - 0: другая профессия
+Не анализируй описание, обязанности, контекст, домен, уровень, карьерный рост и прочую воду.
+Не додумывай ничего, чего нет в тексте.
 
-            2. Навыки (0-30):
-            - 30: сильное совпадение
-            - 15: частичное
-            - 0: почти нет совпадений
+Правила:
+- если название вакансии и резюме в одной профессии или близких ролях, и есть хотя бы частичное совпадение по ключевым навыкам -> suitable = true
+- если роли явно разные или совпадений по навыкам почти нет -> suitable = false
+- если данных мало -> ориентируйся только на явные совпадения, без фантазий
 
-            3. Задачи (0-20):
-            - 20: совпадают
-            - 10: частично
-            - 0: не совпадают
+Ответ только JSON:
+{{"suitable": true}} или {{"suitable": false}}
 
-            4. Область (0-10):
-            - 10: та же или логичное развитие
-            - 0: нет
-
-            Посчитай общий score (0-100).
-
-            Если score >= 60 → suitable = true  
-            Иначе → suitable = false  
-
-            Не объясняй решение.
-
-            Ответ только JSON:
-            {{"suitable": true}} или {{"suitable": false}}
-
-            Кандидат:
-            {resume_analysis}
-        """).strip()
+Кандидат:
+{resume_analysis}
+"""
 
     def _apply_vacancies(self) -> None:
         resumes: list[datatypes.Resume] = self.tool.get_resumes()
@@ -751,11 +675,15 @@ class Operation(BaseOperation):
                 system_prompt = self._build_filter_system_prompt_light(self._analyze_resume_light(resume))
             else:
                 raise ValueError(f"Неизвестный режим AI фильтра: {self.ai_filter}")
-            
-            self.ai_filter_chat = self.tool.get_openai_chat(system_prompt)
-            
+
+
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("AI системный промпт (%s): %s", self.ai_filter, system_prompt)
+
+            self.vacancy_filter_ai = self.tool.get_vacancy_filter_ai(system_prompt)
+
             if self.args.ai_rate_limit:
-                self.ai_filter_chat.rate_limit = self.args.ai_rate_limit
+                self.vacancy_filter_ai.rate_limit = self.args.ai_rate_limit
                 
         for vacancy in self._get_vacancies(resume_id=resume["id"]):
             try:
@@ -836,7 +764,7 @@ class Operation(BaseOperation):
                     continue
                 
                 # AI фильтрация вакансий
-                if self.ai_filter and self.ai_filter_chat:
+                if self.ai_filter and self.vacancy_filter_ai:
                     if self._is_vacancy_already_skipped(vacancy, resume["id"]):
                         logger.debug(
                             "Вакансия уже была отклонена ранее: %s",
@@ -921,17 +849,17 @@ class Operation(BaseOperation):
                 if self.force_message or vacancy.get(
                     "response_letter_required"
                 ):
-                    if self.openai_chat:
-                        msg = self.pre_prompt + "\n\n"
+                    if self.cover_letter_ai:
+                        msg = self.message_prompt + "\n\n"
                         msg += (
                             "Название вакансии: "
                             + message_placeholders["vacancy_name"]
                         )
                         msg += (
-                            "Мое резюме:" + message_placeholders["resume_title"]
+                            "Мое резюме: " + message_placeholders["resume_title"]
                         )
                         logger.debug("prompt: %s", msg)
-                        letter = self.openai_chat.send_message(msg)
+                        letter = self.cover_letter_ai.complete(msg)
                     else:
                         letter = (
                             rand_text(self.cover_letter) % message_placeholders
@@ -1117,7 +1045,7 @@ class Operation(BaseOperation):
             question = (task.get("description") or "").strip()
 
             if solutions:
-                if self.openai_chat:
+                if self.cover_letter_ai:
                     options = "\n".join(
                         [
                             f"{s['id']}: {strip_tags(s['text'])}"
@@ -1129,7 +1057,7 @@ class Operation(BaseOperation):
                         f"Варианты:\n{options}\n"
                         f"Выбери ID правильного ответа. Пришли только ID."
                     )
-                    ai_answer = self.openai_chat.send_message(prompt).strip()
+                    ai_answer = self.cover_letter_ai.complete(prompt).strip()
                     # Ищем ID в ответе AI на случай лишнего текста
                     match = re.search(r"\d+", ai_answer)
                     selected_id = (
@@ -1160,9 +1088,9 @@ class Operation(BaseOperation):
                     answer = rand_text(
                         "{{Простите|Извините}, но я не перехожу по {внешним|сторонним} ссылкам, так как {опасаюсь взлома|не хочу {быть взломанным|подхватить вирус|чтобы у меня {со|с банковского} счета украли деньги}}.|У меня нет времени на заполнение анкет и гуглодоков}"
                     )
-                elif self.openai_chat:
+                elif self.cover_letter_ai:
                     prompt = f"Дай краткий и профессиональный ответ на вопрос: {question}"
-                    answer = self.openai_chat.send_message(prompt)
+                    answer = self.cover_letter_ai.complete(prompt)
                 # Тупоеблые любят вопросы с ответами да/нет, где ответ да является правильным в большинстве случаев.
                 else:
                     answer = "Да"

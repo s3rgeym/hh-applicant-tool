@@ -322,32 +322,66 @@ class HHApplicantTool(MegaTool):
                 f"Сессионные куки имеют неправильный тип: {type(self.session.cookies)}"
             )
 
-    def get_openai_chat(self, system_prompt: str) -> ai.ChatOpenAI:
-        c = self.config.get("openai", {})
+
+    def get_cover_letter_ai(self, system_prompt: str) -> ai.ChatOpenAI:
+        
+        return self._init_ai_client(system_prompt, purpose="cover_letter")
+
+
+    def get_vacancy_filter_ai(self, system_prompt: str) -> ai.ChatOpenAI:
+    
+        return self._init_ai_client(system_prompt, purpose="vacancy_filter")
+
+
+    def _init_ai_client(self, system_prompt: str, purpose: str) -> ai.ChatOpenAI:
+
+        config_sections = {
+            "cover_letter": "openai_cover_letter",
+            "vacancy_filter": "openai_vacancy_filter",
+        }
+        
+        if purpose not in config_sections:
+            raise ValueError(
+                f"Неизвестная цель AI: {purpose}. "
+                f"Допустимые значения: {list(config_sections.keys())}"
+            )
+        
+        config_section = config_sections[purpose]
+        c = self.config.get(config_section, {})
+        
         api_key = c.get("api_key")
         if not api_key:
             raise ValueError(
-                "API-ключ не задан. Укажите 'api_key' в секции 'openai' конфигурации."
+                f"API-ключ не задан. Укажите 'api_key' в секции '{config_section}' конфигурации."
             )
 
         base_url = c.get("base_url")
         if not base_url:
             raise ValueError(
-                "Параметр 'base_url' обязателен для AI-конфигурации. "
+                f"Параметр 'base_url' обязателен для AI-конфигурации в секции '{config_section}'. "
                 "Примеры: OpenAI='https://api.openai.com/v1/chat/completions', "
                 "Ollama='http://localhost:11434/v1/chat/completions', "
                 "OpenRouter='https://openrouter.ai/api/v1/chat/completions'"
             )
 
+        model = c.get("model")
+        if not model:
+            logger.warning(
+                "Параметр 'model' не задан в секции '%s'. "
+                "Большинство AI-провайдеров (OpenAI, OpenRouter) требуют указания модели. "
+                "Примеры: 'gpt-4o-mini', 'gpt-3.5-turbo', 'openai/gpt-4'",
+                config_section,
+            )
+    
         return ai.ChatOpenAI(
             api_key=api_key,
-            model=c.get("model"),
-            temperature=c.get("temperature", 0.7),
+            model=model,
+            temperature=c.get("temperature", 0.0),
             max_completion_tokens=c.get("max_completion_tokens", 1000),
             system_prompt=system_prompt,
             base_url=base_url,
             rate_limit=c.get("rate_limit", 40),
-            session=self.session,
+            session=self.openai_session,
         )
 
     # TODO: вынести в миксин какой
@@ -435,6 +469,8 @@ class HHApplicantTool(MegaTool):
                     )
                 except api.errors.Forbidden:
                     logger.error("Требуется авторизация")
+                except ValueError as ex:
+                    logger.error(ex)
                 except sqlite3.Error as ex:
                     logger.exception(ex)
 
