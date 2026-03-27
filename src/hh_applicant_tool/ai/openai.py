@@ -109,6 +109,7 @@ class ChatOpenAI:
             "messages": messages,
             "temperature": self.temperature,
             "max_completion_tokens": self.max_completion_tokens,
+            "stream": False
         }
         if self.model:
             payload["model"] = self.model
