@@ -13,6 +13,7 @@ from ..utils.date import parse_api_datetime
 from ..utils.string import rand_text
 
 if TYPE_CHECKING:
+    from ..ai.openai import ChatOpenAI
     from ..main import HHApplicantTool
 
 
@@ -35,8 +36,8 @@ class Namespace(BaseNamespace):
     only_invitations: bool
     dry_run: bool
     use_ai: bool
-    first_prompt: str
-    prompt: str
+    system_prompt: str
+    message_prompt: str
     period: int
 
 
@@ -89,11 +90,13 @@ class Operation(BaseOperation):
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
-            "--first-prompt",
-            help="Начальный промпт чата для AI",
+            "--system-prompt",
+            "--ai-system",
+            help="Системный промпт для AI",
             default="Ты — соискатель на HeadHunter. Отвечай вежливо и кратко.",
         )
         parser.add_argument(
+            "--message-prompt",
             "--prompt",
             help="Промпт для генерации сообщения",
             default="Напиши короткий ответ работодателю на основе истории переписки.",
@@ -110,10 +113,8 @@ class Operation(BaseOperation):
         self.dry_run = args.dry_run
         self.only_invitations = args.only_invitations
 
-        self.pre_prompt = args.prompt
-        self.openai_chat = (
-            tool.get_openai_chat(args.first_prompt) if args.use_ai else None
-        )
+        self.message_prompt = args.message_prompt
+        self.cover_letter_ai = (tool.get_cover_letter_ai(args.system_prompt) if args.use_ai else None)
         self.period = args.period
 
         logger.debug(f"{self.reply_message = }")
@@ -251,15 +252,15 @@ class Operation(BaseOperation):
                             rand_text(self.reply_message) % placeholders
                         )
                         logger.debug(f"Template message: {send_message}")
-                    elif self.openai_chat:
+                    elif self.cover_letter_ai:
                         try:
                             ai_query = (
                                 f"Вакансия: {placeholders['vacancy_name']}\n"
                                 f"История переписки:\n"
                                 + "\n".join(message_history[-10:])
-                                + f"\n\nИнструкция: {self.pre_prompt}"
+                                + f"\n\nИнструкция: {self.message_prompt}"
                             )
-                            send_message = self.openai_chat.send_message(
+                            send_message = self.cover_letter_ai.complete(
                                 ai_query
                             )
                             logger.debug(f"AI message: {send_message}")
@@ -325,7 +326,7 @@ class Operation(BaseOperation):
                     # Финальная отправка текста
                     if self.dry_run:
                         logger.debug(
-                            "dry-run: отклик на",
+                            "dry-run: отклик на %s: %s",
                             vacancy["alternate_url"],
                             send_message,
                         )

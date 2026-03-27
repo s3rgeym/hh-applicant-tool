@@ -32,9 +32,10 @@
       "request": "launch",
       "module": "hh_applicant_tool",
       "args": [
-        "-vv",
+        "-vvv",
         "apply-vacancies",
-        "--ai-filter"
+        "--ai-filter=light",
+        "--dry-run"
       ],
       "justMyCode": true
     },
