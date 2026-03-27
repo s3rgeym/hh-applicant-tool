@@ -10,55 +10,64 @@ from .base import AIError
 
 logger = logging.getLogger(__package__)
 
-
-DEFAULT_COMPLETION_ENDPOINT = "https://api.openai.com/v1/chat/completions"
-
-
 class OpenAIError(AIError):
     pass
 
 
 @dataclass
 class ChatOpenAI:
-    token: str
+    api_key: str
+
     _: KW_ONLY
+
+    base_url: str
     system_prompt: str | None = None
     timeout: float = 15.0
-    min_request_interval: float = 1.0
+
+    # Параметры для retry логики
     max_retries: int = 5
-    temperature: float = 0.7
+
+    temperature: float = 0.0
     max_completion_tokens: int = 1000
     model: str | None = None
-    completion_endpoint: str = None
+
+    # количество запросов в минуту (0 = отключено)
+    rate_limit: int = 40
+
     session: requests.Session = field(default_factory=requests.Session)
+
+    # Внутренние поля для retry логики
     _previous_request_time: float = field(default=0.0, init=False)
     _lock: Lock = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        self.completion_endpoint = (
-            self.completion_endpoint or DEFAULT_COMPLETION_ENDPOINT
-        )
         self._lock = Lock()
 
     def _default_headers(self) -> dict[str, str]:
         return {
-            "Authorization": f"Bearer {self.token}",
+            "Authorization": f"Bearer {self.api_key}",
         }
 
+    @property
+    def _min_request_interval(self) -> float:
+        return 60.0 / self.rate_limit if self.rate_limit > 0 else 0.0
+
     def _request(self, payload: dict) -> requests.Response:
+        """Выполнение запроса с минимальным интервалом между запросами."""
         with self._lock:
-            delay = (
-                self.min_request_interval
-                - time.monotonic()
-                + self._previous_request_time
-            )
-            if delay > 0:
-                logger.debug("Wait %.2fs before OpenAI request", delay)
-                time.sleep(delay)
+            if self._previous_request_time > 0:
+                delay = (
+                    self._min_request_interval
+                    - time.monotonic()
+                    + self._previous_request_time
+                )
+                if delay > 0:
+                    logger.debug("Wait %.2fs before OpenAI request", delay)
+                    time.sleep(delay)
 
             try:
                 return self.session.post(
-                    self.completion_endpoint,
+                    self.base_url,
                     json=payload,
                     headers=self._default_headers(),
                     timeout=self.timeout,
@@ -67,38 +76,41 @@ class ChatOpenAI:
                 self._previous_request_time = time.monotonic()
 
     def _get_retry_delay(self, response: requests.Response, attempt: int) -> float:
+        """Вычисление задержки перед повторным запросом при 429 ошибке."""
+        min_interval = self._min_request_interval or 1.0
         retry_after = response.headers.get("Retry-After")
         if retry_after:
             try:
-                return max(float(retry_after), self.min_request_interval)
+                return max(float(retry_after), min_interval)
             except ValueError:
                 try:
                     retry_at = parsedate_to_datetime(retry_after).timestamp()
-                    return max(
-                        retry_at - time.time(),
-                        self.min_request_interval,
-                    )
+                    return max(retry_at - time.time(), min_interval)
                 except (TypeError, ValueError, OverflowError):
                     pass
 
-        return max(self.min_request_interval * (attempt + 1), 1.0)
+        return max(min_interval * (attempt + 1), 1.0)
 
-    def send_message(self, message: str) -> str:
+    def complete(self, message: str) -> str:
+        """Генерация текста через OpenAI API"""
         messages = []
 
         # Добавляем системный промпт только если он не пустой и не None
         if self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
-
         # Пользовательское сообщение всегда обязательно
         messages.append({"role": "user", "content": message})
+
+        # Логирование запроса к AI при DEBUG уровне
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("AI запрос: %s", message)
 
         payload = {
             "messages": messages,
             "temperature": self.temperature,
             "max_completion_tokens": self.max_completion_tokens,
+            "stream": False
         }
-
         if self.model:
             payload["model"] = self.model
 
@@ -131,8 +143,10 @@ class ChatOpenAI:
             if "error" in data:
                 raise OpenAIError(data["error"]["message"])
 
-            assistant_message = data["choices"][0]["message"]["content"]
-
-            return assistant_message
+            try:
+                assistant_message = data["choices"][0]["message"]["content"]
+                return assistant_message if assistant_message is not None else ""
+            except (KeyError, IndexError) as ex:
+                raise OpenAIError(f"Invalid response format: {ex}") from ex
 
         raise OpenAIError("OpenAI request failed after retries")
