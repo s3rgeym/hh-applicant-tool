@@ -1,3 +1,4 @@
+import base64
 import logging
 import time
 from dataclasses import KW_ONLY, dataclass, field
@@ -106,13 +107,12 @@ class ChatOpenAI:
             logger.debug("AI запрос: %s", message)
 
         payload = {
+            "model": self.model,
             "messages": messages,
             "temperature": self.temperature,
             "max_completion_tokens": self.max_completion_tokens,
             "stream": False
         }
-        if self.model:
-            payload["model"] = self.model
 
         for attempt in range(self.max_retries + 1):
             try:
@@ -150,3 +150,81 @@ class ChatOpenAI:
                 raise OpenAIError(f"Invalid response format: {ex}") from ex
 
         raise OpenAIError("OpenAI request failed after retries")
+
+    def solve_captcha(self, image_data: bytes) -> str:
+        image_base64 = base64.b64encode(image_data).decode("utf-8")
+
+        content_type = "image/png"
+
+        messages = []
+
+        system_prompt = ("Ты должен распознать текст на изображении. Верни ТОЛЬКО текст, без каких-либо объяснений или дополнительных символов.")
+
+        messages.append({"role": "system", "content": system_prompt})
+
+        messages.append({
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{content_type};base64,{image_base64}"
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": "Распознай текст на изображении. Верни только результат распознавания (текст на изображении)."
+                }
+            ]
+        })
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("AI запрос на распознавание капчи: %d bytes", len(image_data))
+
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.0,
+            "max_completion_tokens": 20,
+            "stream": False
+        }
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = self._request(payload)
+            except requests.exceptions.RequestException as ex:
+                raise OpenAIError(f"Network error: {ex}") from ex
+
+            if response.status_code == 429:
+                if attempt >= self.max_retries:
+                    raise OpenAIError("OpenAI rate limit exceeded")
+
+                delay = self._get_retry_delay(response, attempt)
+                logger.warning(
+                    "OpenAI returned 429 Too Many Requests, retry in %.2fs",
+                    delay,
+                )
+                time.sleep(delay)
+                continue
+
+            try:
+                response.raise_for_status()
+                data = response.json()
+            except requests.exceptions.RequestException as ex:
+                raise OpenAIError(f"Network error: {ex}") from ex
+            except ValueError as ex:
+                raise OpenAIError(f"Invalid JSON response: {ex}") from ex
+
+            if "error" in data:
+                raise OpenAIError(data["error"]["message"])
+
+            try:
+                captcha_text = data["choices"][0]["message"]["content"]
+                if captcha_text:
+                    captcha_text = captcha_text.strip()
+                logger.debug("Распознанный текст капчи: %s", captcha_text)
+                return captcha_text if captcha_text else ""
+            except (KeyError, IndexError) as ex:
+                raise OpenAIError(f"Invalid response format: {ex}") from ex
+
+        raise OpenAIError("Captcha recognition failed after retries")
