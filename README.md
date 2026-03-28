@@ -52,6 +52,8 @@
 
 - 🧠 **AI-фильтрация вакансий.** Можно автоматически фильтровать вакансии через AI, чтобы откликаться только на подходящие. Два режима: `heavy` — полный анализ резюме и вакансии (должность, навыки, опыт работы, задачи), `light` — быстрая оценка по названию и ключевым навыкам.
 
+- 🔒 **Автоматическое решение капчи.** Утилита поддерживает автоматическое распознавание капчи при откликах на вакансии через Vision модель.
+
 - 📊 **Сохранение пропущенных вакансий.** Все вакансии, отклонённые фильтром или AI, сохраняются в базу данных с указанием причины. Это позволяет анализировать, почему вакансии были пропущены.
 
 > Наглядно о раб_отном рынке в ресурсной федерации
@@ -734,17 +736,48 @@ hh-applicant-tool config -e
 "rate_limit": 40
 },
 "openai_vacancy_filter": {
-"api_key": "ВАШ_API_КЛЮЧ",
-"base_url": "https://api.openai.com/v1/chat/completions",
-"model": "gpt-4o-mini",
-"temperature": 0.1,
-"max_completion_tokens": 100,
-"rate_limit": 60
+    "api_key": "ВАШ_API_КЛЮЧ",
+    "base_url": "https://api.openai.com/v1/chat/completions",
+    "model": "gpt-4o-mini",
+    "temperature": 0.1,
+    "max_completion_tokens": 100,
+    "rate_limit": 60
+},
+"openai_captcha": {
+    "api_key": "ВАШ_API_КЛЮЧ",
+    "base_url": "https://api.openai.com/v1/chat/completions",
+    "model": "gpt-4o-mini",
+    "temperature": 0.0,
+    "max_completion_tokens": 20,
+    "rate_limit": 40
 }
 }
 ```
 
 > При использовании Docker нужно указывать IP хоста вместо `localhost`, например `http://192.168.1.100:11434/v1/chat/completions`
+
+### Автоматическое решение капчи
+
+Утилита поддерживает автоматическое распознавание капчи при откликах на вакансии через Vision AI.
+
+#### Настройка
+
+Добавьте секцию `openai_captcha` в конфиг:
+
+```json
+{
+"openai_captcha": {
+"api_key": "ВАШ_API_КЛЮЧ",
+"base_url": "https://api.openai.com/v1/chat/completions",
+"model": "gpt-4o-mini",
+"temperature": 0.0,
+"max_completion_tokens": 20,
+"rate_limit": 40
+}
+}
+```
+
+- **model** обязательно с поддержкой Vision!
 
 ---
 
@@ -817,6 +850,7 @@ hh-applicant-tool config -p
 | `client_secret` | Секретный ключ клиента, используемый для авторизации. По умолчанию используется от Android |
 | `openai_cover_letter` | Конфигурация AI для генерации сопроводительных писем |
 | `openai_vacancy_filter` | Конфигурация AI для фильтрации вакансий |
+| `openai_captcha` | Конфигурация AI для распознавания капчи |
 
 Если вы залогинитесь под другим аккаунтом, то данные не исчезнут.
 
