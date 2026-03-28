@@ -1005,28 +1005,50 @@ class Operation(BaseOperation):
         
                 # Отправка письма на email
                 if self.args.send_email:
-                    mail_to: str | list[str] | None = vacancy.get(
-                        "contacts", {}
-                    ).get("email") or site_emails.get(employer_id)
+                    contacts = vacancy.get("contacts") or {}
+                    logger.debug(f"vacancy.get('contacts') = {contacts!r}")
+
+                    mail_to: str | list[str] | None = (
+                        contacts.get("email")
+                        or site_emails.get(employer_id)
+                    )
+
                     if mail_to:
-                        mail_to = (
-                            ", ".join(mail_to)
-                            if isinstance(mail_to, list)
-                            else mail_to
-                        )
-                        mail_subject = rand_text(
-                            self.tool.config.get("apply_mail_subject")
+                        if isinstance(mail_to, str):
+                            mail_to = [mail_to]
+
+                        subject_template = self.tool.config.get("apply_mail_subject") \
                             or "{Отклик|Резюме} на вакансию %(vacancy_name)s"
-                        )
-                        mail_body = unescape_string(
-                            rand_text(
-                                self.tool.config.get("apply_mail_body")
-                                or "{Здравствуйте|Добрый день}, {прошу рассмотреть|пожалуйста рассмотрите} мое резюме %(resume_url)s на вакансию %(vacancy_name)s."
-                                % message_placeholders
-                            )
-                        )
+
+                        subject_template = rand_text(subject_template)
+
                         try:
-                            self._send_email(mail_to, mail_subject, mail_body)
+                            mail_subject = subject_template % message_placeholders
+                        except Exception:
+                            logger.error(f"Ошибка форматирования subject: {subject_template}")
+                            mail_subject = subject_template
+
+                        body_template = self.tool.config.get("apply_mail_body") \
+                            or "{Здравствуйте|Добрый день}!\\n\\nМое резюме %(resume_url)s"
+
+                        body_template = rand_text(body_template)
+
+                        try:
+                            mail_body = unescape_string(body_template % message_placeholders)
+                        except Exception:
+                            logger.error(f"Ошибка форматирования body: {body_template}")
+                            mail_body = body_template
+
+                        logger.debug(f"MAIL TO: {mail_to}")
+                        logger.debug(f"SUBJECT: {mail_subject}")
+                        logger.debug(f"BODY: {mail_body}")
+
+                        try:
+                            for email in mail_to:
+                                if "@" not in email:
+                                    continue
+                                self._send_email(email.strip(), mail_subject, mail_body)
+
                             print(
                                 "📧 Отправлено письмо на email по поводу вакансии",
                                 vacancy["alternate_url"],
@@ -1048,14 +1070,58 @@ class Operation(BaseOperation):
         )
         print("✅️ Закончили рассылку откликов для резюме:", resume["title"])
 
-    def _send_email(self, to: str, subject: str, body: str) -> None:
+    def _send_email(self, to: str | list[str], subject: str, body: str) -> None:
+        import imaplib
+        import time
+        from email.message import EmailMessage
+        from email.utils import make_msgid, formatdate
+
         cfg = self.tool.config.get("smtp", {})
+
+        recipients: list[str] = []
+
+        if isinstance(to, list):
+            recipients.extend(to)
+        elif isinstance(to, str):
+            recipients.append(to)
+
+        recipients = list(set(filter(None, recipients)))
+
+        if not recipients:
+            return
+
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = cfg.get("from") or cfg.get("user")
-        msg["To"] = to
-        msg.set_content(body)
+        msg["To"] = ", ".join(recipients)
+        msg["Message-ID"] = make_msgid()
+        msg["Date"] = formatdate(localtime=True)
+        msg["MIME-Version"] = "1.0"
+        msg["X-Mailer"] = "Mozilla Thunderbird"
+
+        msg.set_content(body, charset="utf-8")
+
         self.tool.smtp.send_message(msg)
+
+        try:
+            imap = imaplib.IMAP4_SSL("imap.yandex.ru")
+            imap.login(cfg["user"], cfg["password"])
+
+            folder = "bot"
+
+            imap.create(folder)
+
+            imap.append(
+                folder,
+                "",
+                imaplib.Time2Internaldate(time.time()),
+                msg.as_bytes(),
+            )
+
+            imap.logout()
+
+        except Exception as ex:
+            logger.warning(f"IMAP append failed: {ex}")
 
     json_decoder = JSONDecoder()
 
