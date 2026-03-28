@@ -322,22 +322,21 @@ class HHApplicantTool(MegaTool):
                 f"Сессионные куки имеют неправильный тип: {type(self.session.cookies)}"
             )
 
-
     def get_cover_letter_ai(self, system_prompt: str) -> ai.ChatOpenAI:
-        
         return self._init_ai_client(system_prompt, purpose="cover_letter")
 
-
     def get_vacancy_filter_ai(self, system_prompt: str) -> ai.ChatOpenAI:
-    
         return self._init_ai_client(system_prompt, purpose="vacancy_filter")
 
+    def get_captcha_ai(self) -> ai.ChatOpenAI:
+        return self._init_ai_client(system_prompt="Что написано на картинке?", purpose="captcha")
 
     def _init_ai_client(self, system_prompt: str, purpose: str) -> ai.ChatOpenAI:
 
         config_sections = {
             "cover_letter": "openai_cover_letter",
             "vacancy_filter": "openai_vacancy_filter",
+            "captcha": "openai_captcha",
         }
         
         if purpose not in config_sections:

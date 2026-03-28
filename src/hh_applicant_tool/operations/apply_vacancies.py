@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import html
 import json
 import logging
@@ -20,7 +21,7 @@ from .. import utils
 from ..ai.base import AIError
 from ..api import BadResponse, Redirect, datatypes
 from ..api.datatypes import PaginatedItems, SearchVacancy
-from ..api.errors import ApiError, LimitExceeded
+from ..api.errors import ApiError, CaptchaRequired, LimitExceeded
 from ..main import BaseNamespace, BaseOperation
 from ..storage.repositories.errors import RepositoryError
 from ..utils.datatypes import VacancyTestsData
@@ -602,6 +603,57 @@ class Operation(BaseOperation):
 Кандидат:
 {resume_analysis}
 """
+    SEL_CAPTCHA_IMAGE = 'img[data-qa="account-captcha-picture"]'
+    SEL_CAPTCHA_INPUT = 'input[data-qa="account-captcha-input"]'
+
+    async def _solve_captcha_async(self, captcha_url: str) -> bool:
+        from playwright.async_api import async_playwright
+
+        captcha_ai = self.tool.get_captcha_ai()
+
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            try:
+                context = await browser.new_context()
+                page = await context.new_page()
+
+                await page.goto(captcha_url, timeout=30000)
+
+                captcha_element = await page.wait_for_selector(
+                    self.SEL_CAPTCHA_IMAGE,
+                    timeout=10000,
+                    state="visible"
+                )
+
+                img_bytes = await captcha_element.screenshot()
+
+                captcha_text = await asyncio.to_thread(captcha_ai.solve_captcha, img_bytes)
+
+                if not captcha_text:
+                    logger.error("AI не смог распознать капчу")
+                    return False
+
+                logger.info(f"Распознанный текст капчи: {captcha_text}")
+
+                await page.fill(self.SEL_CAPTCHA_INPUT, captcha_text)
+                await page.press(self.SEL_CAPTCHA_INPUT, "Enter")
+
+                await page.wait_for_load_state("networkidle", timeout=15000)
+
+                cookies = await context.cookies()
+                for c in cookies:
+                    self.tool.session.cookies.set(
+                        c['name'],
+                        c['value'],
+                        domain=c.get('domain', ''),
+                        path=c.get('path', '/'),
+                    )
+
+                return True
+            finally:
+                await browser.close()
+
+        return False
 
     def _apply_vacancies(self) -> None:
         resumes: list[datatypes.Resume] = self.tool.get_resumes()
@@ -924,10 +976,33 @@ class Operation(BaseOperation):
                             )
                     except Redirect:
                         logger.warning(
-                            f"Игнорирую перенаправление на форму: {vacancy['alternate_url']}"  # noqa: E501
+                            f"Игнорирую перенаправление на форму: {vacancy['alternate_url']}" # noqa: E501
                         )
                         continue
+                    except CaptchaRequired as ex:
+                        logger.warning(f"Требуется капча: {ex.captcha_url}")
+                        try:
+                            success = asyncio.run(self._solve_captcha_async(ex.captcha_url))
+                            if success:
 
+                                if not self.dry_run:
+                                    res = self.api_client.post(
+                                        "/negotiations",
+                                        params,
+                                        delay=random.uniform(1, 3),
+                                    )
+                                    assert res == {}
+                                    print(
+                                        "📨 Отправили отклик на вакансию после капчи",
+                                        vacancy["alternate_url"],
+                                    )
+                            else:
+                                logger.error("Не удалось решить капчу")
+                                raise
+                        except Exception as e:
+                            logger.error(f"Ошибка при решении капчи: {e}")
+                            raise
+        
                 # Отправка письма на email
                 if self.args.send_email:
                     mail_to: str | list[str] | None = vacancy.get(
