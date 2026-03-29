@@ -11,6 +11,7 @@ from .base import AIError
 
 logger = logging.getLogger(__package__)
 
+
 class OpenAIError(AIError):
     pass
 
@@ -76,7 +77,9 @@ class ChatOpenAI:
             finally:
                 self._previous_request_time = time.monotonic()
 
-    def _get_retry_delay(self, response: requests.Response, attempt: int) -> float:
+    def _get_retry_delay(
+        self, response: requests.Response, attempt: int
+    ) -> float:
         """Вычисление задержки перед повторным запросом при 429 ошибке."""
         min_interval = self._min_request_interval or 1.0
         retry_after = response.headers.get("Retry-After")
@@ -111,7 +114,7 @@ class ChatOpenAI:
             "messages": messages,
             "temperature": self.temperature,
             "max_completion_tokens": self.max_completion_tokens,
-            "stream": False
+            "stream": False,
         }
 
         for attempt in range(self.max_retries + 1):
@@ -145,7 +148,9 @@ class ChatOpenAI:
 
             try:
                 assistant_message = data["choices"][0]["message"]["content"]
-                return assistant_message if assistant_message is not None else ""
+                return (
+                    assistant_message if assistant_message is not None else ""
+                )
             except (KeyError, IndexError) as ex:
                 raise OpenAIError(f"Invalid response format: {ex}") from ex
 
@@ -158,35 +163,38 @@ class ChatOpenAI:
 
         messages = []
 
-        system_prompt = ("Ты должен распознать текст на изображении. Верни ТОЛЬКО текст, без каких-либо объяснений или дополнительных символов.")
+        system_prompt = "Ты должен распознать текст на изображении. Верни ТОЛЬКО текст, без каких-либо объяснений или дополнительных символов."
 
         messages.append({"role": "system", "content": system_prompt})
 
-        messages.append({
-            "role": "user",
-            "content": [
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:{content_type};base64,{image_base64}"
-                    }
-                },
-                {
-                    "type": "text",
-                    "text": "Распознай текст на изображении. Верни только результат распознавания (текст на изображении)."
-                }
-            ]
-        })
+        messages.append(
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{content_type};base64,{image_base64}"
+                        },
+                    },
+                    {
+                        "type": "text",
+                        "text": "Распознай текст на изображении. Верни только результат распознавания (текст на изображении).",
+                    },
+                ],
+            }
+        )
 
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug("AI запрос на распознавание капчи: %d bytes", len(image_data))
+        logger.debug(
+            "AI запрос на распознавание капчи: %d bytes", len(image_data)
+        )
 
         payload = {
             "model": self.model,
             "messages": messages,
             "temperature": 0.0,
             "max_completion_tokens": 20,
-            "stream": False
+            "stream": False,
         }
 
         for attempt in range(self.max_retries + 1):
