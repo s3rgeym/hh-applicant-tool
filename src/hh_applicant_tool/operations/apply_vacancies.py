@@ -1056,9 +1056,9 @@ class Operation(BaseOperation):
 
                 # Отправка письма на email
                 if self.args.send_email:
-                    mail_to: str | list[str] | None = vacancy.get(
-                        "contacts", {}
-                    ).get("email") or site_emails.get(employer_id)
+                    # fix NoneType has no attribute get
+                    # contacts может быть null
+                    mail_to: str | list[str] | None = (vacancy.get("contacts") or {}).get("email") or site_emails.get(employer_id)
                     if mail_to:
                         mail_to = (
                             ", ".join(mail_to)
