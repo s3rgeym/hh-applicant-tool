@@ -40,8 +40,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__package__)
 
 
-
-
 class Namespace(BaseNamespace):
     resume_id: str | None
     letter_file: Path | None
@@ -347,11 +345,15 @@ class Operation(BaseOperation):
         self.sort_point_lng = args.sort_point_lng
         self.top_lat = args.top_lat
         self.total_pages = args.total_pages
-        self.cover_letter_ai = (tool.get_cover_letter_ai(args.system_prompt) if args.use_ai else None)
+        self.cover_letter_ai = (
+            tool.get_cover_letter_ai(args.system_prompt)
+            if args.use_ai
+            else None
+        )
         self.ai_filter = args.ai_filter
         self.vacancy_filter_ai = None
         self._resume_analysis_cache: dict[tuple[str | None, str], str] = {}
-        
+
         self._apply_vacancies()
 
     def _get_full_resume(self, resume_id: str) -> dict:
@@ -366,7 +368,7 @@ class Operation(BaseOperation):
         if resume_id:
             try:
                 full_resume = self._get_full_resume(resume_id)
-                
+
                 parts = []
 
                 title = full_resume.get("title", "")
@@ -374,16 +376,16 @@ class Operation(BaseOperation):
                     parts.append(f"Должность: {title}")
 
                 if "skills" in full_resume:
-                    parts.append(f"\n---------- О СЕБЕ ----------")
+                    parts.append("\n---------- О СЕБЕ ----------")
                     parts.append(full_resume.get("skills", ""))
-                
+
                 if "skill_set" in full_resume and full_resume["skill_set"]:
-                    parts.append(f"\n---------- НАВЫКИ ----------")
+                    parts.append("\n---------- НАВЫКИ ----------")
                     skills_row = ", ".join(full_resume["skill_set"])
                     parts.append(skills_row)
 
                 if "experience" in full_resume:
-                    parts.append(f"\n---------- ОПЫТ РАБОТЫ ----------")
+                    parts.append("\n---------- ОПЫТ РАБОТЫ ----------")
                     for exp in full_resume.get("experience", []):
                         company = exp.get("company", "Не указано")
                         position = exp.get("position", "Не указано")
@@ -396,9 +398,9 @@ class Operation(BaseOperation):
 
                         description = exp.get("description")
                         if description:
-                            parts.append(f" Описание:")
+                            parts.append(" Описание:")
                             parts.append(f" {description}")
-                            
+
                 result = "\n".join(parts)
                 self._resume_analysis_cache[cache_key] = result
                 return result
@@ -415,9 +417,9 @@ class Operation(BaseOperation):
             return self._resume_analysis_cache[cache_key]
 
         parts = []
-        
+
         full_resume = self._get_full_resume(resume_id)
-        
+
         title = full_resume.get("title", "")
         if title:
             parts.append(f"Должность: {title}")
@@ -435,12 +437,21 @@ class Operation(BaseOperation):
         try:
             full_vacancy = self.api_client.get(f"/vacancies/{vacancy_id}")
             key_skills_data = full_vacancy.get("key_skills") or []
-            return ", ".join(s["name"] for s in key_skills_data if s.get("name"))
+            return ", ".join(
+                s["name"] for s in key_skills_data if s.get("name")
+            )
         except Exception as e:
-            logger.warning("Не удалось получить key_skills вакансии %s: %s", vacancy_id, e)
+            logger.warning(
+                "Не удалось получить key_skills вакансии %s: %s", vacancy_id, e
+            )
             return ""
 
-    def _build_vacancy_context(self, vacancy: dict, full_vacancy: dict | None = None, include_full: bool = False) -> str:
+    def _build_vacancy_context(
+        self,
+        vacancy: dict,
+        full_vacancy: dict | None = None,
+        include_full: bool = False,
+    ) -> str:
         parts: list[str] = []
 
         name = vacancy.get("name")
@@ -459,7 +470,9 @@ class Operation(BaseOperation):
 
         return "\n".join(parts)
 
-    def _ask_ai_suitability(self, prompt: str, vacancy_name: str, log_suffix: str = "") -> bool:
+    def _ask_ai_suitability(
+        self, prompt: str, vacancy_name: str, log_suffix: str = ""
+    ) -> bool:
 
         MAX_RETRIES = 3
 
@@ -471,13 +484,20 @@ class Operation(BaseOperation):
                 response = self.vacancy_filter_ai.complete(prompt).strip()
 
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug("AI %s ответ (попытка %d): %s", log_suffix, attempt + 1, response)
+                    logger.debug(
+                        "AI %s ответ (попытка %d): %s",
+                        log_suffix,
+                        attempt + 1,
+                        response,
+                    )
 
                 result = self._parse_ai_json_response(response)
                 if result is not None:
                     if result:
                         return True
-                    logger.info("Вакансия %s отклонена AI %s", vacancy_name, log_suffix)
+                    logger.info(
+                        "Вакансия %s отклонена AI %s", vacancy_name, log_suffix
+                    )
                     return False
 
                 # Если не удалось распарсить JSON, повторяем запрос
@@ -512,6 +532,7 @@ class Operation(BaseOperation):
             return False
 
         import re
+
         from ..utils import json as utils_json
 
         if response.startswith("```"):
@@ -544,12 +565,16 @@ class Operation(BaseOperation):
             include_full=True,
         )
         prompt = f"Вакансия: {vacancy_info}"
-        return self._ask_ai_suitability(prompt, vacancy.get("name", ""), "(heavy)")
+        return self._ask_ai_suitability(
+            prompt, vacancy.get("name", ""), "(heavy)"
+        )
 
     def _is_vacancy_suitable_light(self, vacancy: dict) -> bool:
         vacancy_info = self._build_vacancy_context(vacancy, include_full=False)
         prompt = f"Вакансия: {vacancy_info}"
-        return self._ask_ai_suitability(prompt, vacancy.get("name", ""), "(light)")
+        return self._ask_ai_suitability(
+            prompt, vacancy.get("name", ""), "(light)"
+        )
 
     def _build_filter_system_prompt_heavy(self, resume_analysis: str) -> str:
         return f"""
@@ -603,6 +628,7 @@ class Operation(BaseOperation):
 Кандидат:
 {resume_analysis}
 """
+
     SEL_CAPTCHA_IMAGE = 'img[data-qa="account-captcha-picture"]'
     SEL_CAPTCHA_INPUT = 'input[data-qa="account-captcha-input"]'
 
@@ -620,14 +646,14 @@ class Operation(BaseOperation):
                 await page.goto(captcha_url, timeout=30000)
 
                 captcha_element = await page.wait_for_selector(
-                    self.SEL_CAPTCHA_IMAGE,
-                    timeout=10000,
-                    state="visible"
+                    self.SEL_CAPTCHA_IMAGE, timeout=10000, state="visible"
                 )
 
                 img_bytes = await captcha_element.screenshot()
 
-                captcha_text = await asyncio.to_thread(captcha_ai.solve_captcha, img_bytes)
+                captcha_text = await asyncio.to_thread(
+                    captcha_ai.solve_captcha, img_bytes
+                )
 
                 if not captcha_text:
                     logger.error("AI не смог распознать капчу")
@@ -643,10 +669,10 @@ class Operation(BaseOperation):
                 cookies = await context.cookies()
                 for c in cookies:
                     self.tool.session.cookies.set(
-                        c['name'],
-                        c['value'],
-                        domain=c.get('domain', ''),
-                        path=c.get('path', '/'),
+                        c["name"],
+                        c["value"],
+                        domain=c.get("domain", ""),
+                        path=c.get("path", "/"),
                     )
 
                 return True
@@ -722,21 +748,32 @@ class Operation(BaseOperation):
 
         if self.ai_filter:
             if self.ai_filter == "heavy":
-                system_prompt = self._build_filter_system_prompt_heavy(self._analyze_resume_heavy(resume))
+                system_prompt = self._build_filter_system_prompt_heavy(
+                    self._analyze_resume_heavy(resume)
+                )
             elif self.ai_filter == "light":
-                system_prompt = self._build_filter_system_prompt_light(self._analyze_resume_light(resume))
+                system_prompt = self._build_filter_system_prompt_light(
+                    self._analyze_resume_light(resume)
+                )
             else:
-                raise ValueError(f"Неизвестный режим AI фильтра: {self.ai_filter}")
-
+                raise ValueError(
+                    f"Неизвестный режим AI фильтра: {self.ai_filter}"
+                )
 
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("AI системный промпт (%s): %s", self.ai_filter, system_prompt)
+                logger.debug(
+                    "AI системный промпт (%s): %s",
+                    self.ai_filter,
+                    system_prompt,
+                )
 
-            self.vacancy_filter_ai = self.tool.get_vacancy_filter_ai(system_prompt)
+            self.vacancy_filter_ai = self.tool.get_vacancy_filter_ai(
+                system_prompt
+            )
 
             if self.args.ai_rate_limit:
                 self.vacancy_filter_ai.rate_limit = self.args.ai_rate_limit
-                
+
         for vacancy in self._get_vacancies(resume_id=resume["id"]):
             try:
                 employer = vacancy.get("employer", {})
@@ -803,9 +840,11 @@ class Operation(BaseOperation):
                         "Вакансия попала под фильтр: %s",
                         vacancy["alternate_url"],
                     )
-                    
-                    self._save_skipped_vacancy(vacancy, "excluded_filter", resume["id"])
-                    
+
+                    self._save_skipped_vacancy(
+                        vacancy, "excluded_filter", resume["id"]
+                    )
+
                     self.api_client.put(
                         f"/vacancies/blacklisted/{vacancy['id']}"
                     )
@@ -814,7 +853,7 @@ class Operation(BaseOperation):
                         vacancy["alternate_url"],
                     )
                     continue
-                
+
                 # AI фильтрация вакансий
                 if self.ai_filter and self.vacancy_filter_ai:
                     if self._is_vacancy_already_skipped(vacancy, resume["id"]):
@@ -822,25 +861,35 @@ class Operation(BaseOperation):
                             "Вакансия уже была отклонена ранее: %s",
                             vacancy["alternate_url"],
                         )
-                        print("⏩ Вакансия уже отклонена ранее", vacancy["alternate_url"])
+                        print(
+                            "⏩ Вакансия уже отклонена ранее",
+                            vacancy["alternate_url"],
+                        )
                         continue
-    
+
                     if self.ai_filter == "heavy":
                         is_suitable = self._is_vacancy_suitable_heavy(vacancy)
                     elif self.ai_filter == "light":
                         is_suitable = self._is_vacancy_suitable_light(vacancy)
                     else:
-                        raise ValueError(f"Неизвестный режим AI фильтра: {self.ai_filter}")
-    
+                        raise ValueError(
+                            f"Неизвестный режим AI фильтра: {self.ai_filter}"
+                        )
+
                     if not is_suitable:
                         logger.info(
                             "Вакансия отклонена AI фильтром (%s): %s",
                             self.ai_filter,
                             vacancy["alternate_url"],
                         )
-                        print(f"🧠 AI ({self.ai_filter}) посчитал неподходящей", vacancy["alternate_url"])
-    
-                        self._save_skipped_vacancy(vacancy, "ai_rejected", resume["id"])
+                        print(
+                            f"🧠 AI ({self.ai_filter}) посчитал неподходящей",
+                            vacancy["alternate_url"],
+                        )
+
+                        self._save_skipped_vacancy(
+                            vacancy, "ai_rejected", resume["id"]
+                        )
                         continue
 
                 # Перед откликом выгружаем профиль компании
@@ -908,7 +957,8 @@ class Operation(BaseOperation):
                             + message_placeholders["vacancy_name"]
                         )
                         msg += (
-                            "Мое резюме: " + message_placeholders["resume_title"]
+                            "Мое резюме: "
+                            + message_placeholders["resume_title"]
                         )
                         logger.debug("prompt: %s", msg)
                         letter = self.cover_letter_ai.complete(msg)
@@ -976,15 +1026,16 @@ class Operation(BaseOperation):
                             )
                     except Redirect:
                         logger.warning(
-                            f"Игнорирую перенаправление на форму: {vacancy['alternate_url']}" # noqa: E501
+                            f"Игнорирую перенаправление на форму: {vacancy['alternate_url']}"  # noqa: E501
                         )
                         continue
                     except CaptchaRequired as ex:
                         logger.warning(f"Требуется капча: {ex.captcha_url}")
                         try:
-                            success = asyncio.run(self._solve_captcha_async(ex.captcha_url))
+                            success = asyncio.run(
+                                self._solve_captcha_async(ex.captcha_url)
+                            )
                             if success:
-
                                 if not self.dry_run:
                                     res = self.api_client.post(
                                         "/negotiations",
@@ -1002,7 +1053,7 @@ class Operation(BaseOperation):
                         except Exception as e:
                             logger.error(f"Ошибка при решении капчи: {e}")
                             raise
-        
+
                 # Отправка письма на email
                 if self.args.send_email:
                     contacts = vacancy.get("contacts") or {}
@@ -1287,8 +1338,11 @@ class Operation(BaseOperation):
 
             # Поиск email
             emails = set(
-                re.findall(
-                    r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", r.text
+                m.group(0)
+                # Исключение всякого мусора типа energy-software-slider-225x225@2x.png
+                for m in re.finditer(
+                    r"\b[a-z][a-z0-9_.-]+@([a-z0-9][a-z0-9-]+)(?!\.(?:png|jpe?g|bmp|gif|ico|js|css)\b)(\.[a-z0-9][a-z0-9-]+)+\b",
+                    r.text,
                 )
             )
 
@@ -1449,12 +1503,14 @@ class Operation(BaseOperation):
 
         description, _ = self.json_decoder.raw_decode(
             re.search(r'"description": (.*)', r.text).group(1)
-        )   
+        )
         description = strip_tags(description)
         logger.debug(description[:2047])
         return bool(excluded_pat.search(description))
 
-    def _is_vacancy_already_skipped(self, vacancy: SearchVacancy, resume_id: str | None = None) -> bool:
+    def _is_vacancy_already_skipped(
+        self, vacancy: SearchVacancy, resume_id: str | None = None
+    ) -> bool:
         try:
             vacancy_id = vacancy["id"]
 
@@ -1477,7 +1533,9 @@ class Operation(BaseOperation):
         except Exception:
             return False
 
-    def _save_skipped_vacancy(self, vacancy: SearchVacancy, reason: str, resume_id: str | None = None) -> None:
+    def _save_skipped_vacancy(
+        self, vacancy: SearchVacancy, reason: str, resume_id: str | None = None
+    ) -> None:
         try:
             employer = vacancy.get("employer", {})
             self.tool.storage.skipped_vacancies.save(
