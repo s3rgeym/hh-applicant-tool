@@ -83,6 +83,7 @@ class Namespace(BaseNamespace):
     excluded_filter: str | None
     max_responses: int
     send_email: bool
+    skip_tests: bool
 
 
 class Operation(BaseOperation):
@@ -157,6 +158,11 @@ class Operation(BaseOperation):
         parser.add_argument(
             "--send-email",
             help="Отправлять письмо на email компании или рекрутера с просьбой рассмотреть резюме",
+            action=argparse.BooleanOptionalAction,
+        )
+        parser.add_argument(
+            "--skip-tests",
+            help="Пропускать тесты при откликах вместо",
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
@@ -632,6 +638,7 @@ class Operation(BaseOperation):
     SEL_CAPTCHA_IMAGE = 'img[data-qa="account-captcha-picture"]'
     SEL_CAPTCHA_INPUT = 'input[data-qa="account-captcha-input"]'
 
+    # Даже куки не грузятся, исправь
     async def _solve_captcha_async(self, captcha_url: str) -> bool:
         from playwright.async_api import async_playwright
 
@@ -760,12 +767,11 @@ class Operation(BaseOperation):
                     f"Неизвестный режим AI фильтра: {self.ai_filter}"
                 )
 
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(
-                    "AI системный промпт (%s): %s",
-                    self.ai_filter,
-                    system_prompt,
-                )
+            logger.debug(
+                "AI системный промпт (%s): %s",
+                self.ai_filter,
+                system_prompt,
+            )
 
             self.vacancy_filter_ai = self.tool.get_vacancy_filter_ai(
                 system_prompt
@@ -823,6 +829,13 @@ class Operation(BaseOperation):
                 if vacancy.get("archived"):
                     logger.debug(
                         "Пропускаем вакансию в архиве: %s",
+                        vacancy["alternate_url"],
+                    )
+                    continue
+
+                if vacancy.get("has_test") and self.args.skip_tests:
+                    logger.debug(
+                        "Пропускаю вакансию с тестом %s",
                         vacancy["alternate_url"],
                     )
                     continue
@@ -1058,7 +1071,9 @@ class Operation(BaseOperation):
                 if self.args.send_email:
                     # fix NoneType has no attribute get
                     # contacts может быть null
-                    mail_to: str | list[str] | None = (vacancy.get("contacts") or {}).get("email") or site_emails.get(employer_id)
+                    mail_to: str | list[str] | None = (
+                        vacancy.get("contacts") or {}
+                    ).get("email") or site_emails.get(employer_id)
                     if mail_to:
                         mail_to = (
                             ", ".join(mail_to)
