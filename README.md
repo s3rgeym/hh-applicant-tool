@@ -727,33 +727,34 @@ hh-applicant-tool config -e
 
 ```json
 {
-"openai_cover_letter": {
-"api_key": "ВАШ_API_КЛЮЧ",
-"base_url": "https://api.openai.com/v1/chat/completions",
-"model": "gpt-4o-mini",
-"temperature": 0.7,
-"max_completion_tokens": 1000,
-"rate_limit": 40
-},
-"openai_vacancy_filter": {
+  "openai_cover_letter": {
     "api_key": "ВАШ_API_КЛЮЧ",
     "base_url": "https://api.openai.com/v1/chat/completions",
     "model": "gpt-4o-mini",
-    "temperature": 0.1,
-    "max_completion_tokens": 100,
-    "rate_limit": 60
-},
-"openai_captcha": {
-    "api_key": "ВАШ_API_КЛЮЧ",
-    "base_url": "https://api.openai.com/v1/chat/completions",
-    "model": "gpt-4o-mini",
-    "temperature": 0.0,
-    "max_completion_tokens": 20,
+    "temperature": 0.7,
+    "max_completion_tokens": 1000,
     "rate_limit": 40
-}
+  },
+  "openai_vacancy_filter": {
+      "api_key": "ВАШ_API_КЛЮЧ",
+      "base_url": "https://api.openai.com/v1/chat/completions",
+      "model": "gpt-4o-mini",
+      "temperature": 0.1,
+      "max_completion_tokens": 100,
+      "rate_limit": 60
+  },
+  "openai_captcha": {
+      "api_key": "ВАШ_API_КЛЮЧ",
+      "base_url": "https://api.openai.com/v1/chat/completions",
+      "model": "gpt-4o-mini",
+      "temperature": 0.0,
+      "max_completion_tokens": 20,
+      "rate_limit": 40
+  }
 }
 ```
 
+> `api.openai.com` указан в качестве примера. Утилита работает с любыми провайдерами хуИИ в тч с локальынми
 > При использовании Docker нужно указывать IP хоста вместо `localhost`, например `http://192.168.1.100:11434/v1/chat/completions`
 
 ### Автоматическое решение капчи
