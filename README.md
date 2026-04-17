@@ -680,7 +680,7 @@ npx @redocly/cli preview -d docs/hhapi
 
 ## Использование AI
 
-Для генерации сопроводительных писем при откликах и ответах в чаты работодателей (`reply-employers`) можно использовать OpenAI (ChatGPT) или Ollama модели.
+AI здесь используется для трёх вещей: сопроводительных писем, фильтрации вакансий и распознавания капчи. Для каждой задачи можно выбрать свой провайдер и модель.
 
 Пример рассылки откликов с генерированным письмом:
 
@@ -726,44 +726,17 @@ hh-applicant-tool apply-vacancies --ai-filter heavy --ai-rate-limit 20
 hh-applicant-tool config -e
 ```
 
+Шаблон конфига лежит в `config/config.json.example`, а рабочий локальный конфиг - в `config/config.json`.
+
 #### Раздельная конфигурация
 
 Для разных задач можно настроить отдельные параметры AI:
 
-```json
-{
-  "ai_cover_letter": {
-    "provider": "openai",
-    "api_key": "ВАШ_API_КЛЮЧ",
-    "base_url": "https://api.openai.com/v1/chat/completions",
-    "model": "gpt-4o-mini",
-    "temperature": 0.7,
-    "max_completion_tokens": 1000,
-    "rate_limit": 40
-  },
-  "ai_vacancy_filter": {
-      "provider": "openai",
-      "api_key": "ВАШ_API_КЛЮЧ",
-      "base_url": "https://api.openai.com/v1/chat/completions",
-      "model": "gpt-4o-mini",
-      "temperature": 0.1,
-      "max_completion_tokens": 100,
-      "rate_limit": 60
-  },
-  "ai_captcha": {
-      "provider": "openai",
-      "api_key": "ВАШ_API_КЛЮЧ",
-      "base_url": "https://api.openai.com/v1/chat/completions",
-      "model": "gpt-4o-mini",
-      "temperature": 0.0,
-      "max_completion_tokens": 20,
-      "rate_limit": 40
-  }
-}
-```
+`letter.txt` для сопроводительного письма нужно положить рядом с `letter.txt.example`.
 
-> `api.openai.com` указан в качестве примера. Утилита работает с любыми провайдерами хуИИ в тч с локальынми
-> При использовании Docker нужно указывать IP хоста вместо `localhost`, например `http://192.168.1.100:11434/v1/chat/completions`
+Если Ollama запущена локально, `mode: host` уже достаточно. Если нужен Docker или другой хост, тогда используйте `mode: remote` и `remote_url`.
+
+Если нужен только OpenAI, можно использовать старые поля `ai_*` с `provider: openai`.
 
 #### Ollama
 

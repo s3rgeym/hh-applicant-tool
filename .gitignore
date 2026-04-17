@@ -88,6 +88,7 @@ docker/
 # Содержимое config кроме .gitkeep игнорируется
 /config/*
 !/config/.gitkeep
+!/config/config.json.example
 
 # Локальный шаблон сопроводительного письма
 /letter.txt

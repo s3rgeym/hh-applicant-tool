@@ -1,0 +1,38 @@
+{
+  "token": {
+    "access_expires_at": 0,
+    "access_token": "USER_ACCESS_TOKEN",
+    "refresh_token": "USER_REFRESH_TOKEN"
+  },
+  "ai_vacancy_rules": [
+    "роль должна совпадать с опытом",
+    "если требуется senior, а опыт только middle, отклонять",
+    "если стек не совпадает по ключевым навыкам, отклонять"
+  ],
+  "ai_cover_letter": {
+    "provider": "ollama",
+    "model": "gpt_oss_20b_cloud",
+    "think": "high",
+    "temperature": 0.2,
+    "max_tokens": 1000,
+    "rate_limit": 40
+  },
+  "ai_vacancy_filter": {
+    "provider": "ollama",
+    "model": "gpt_oss_120b_cloud",
+    "think": "high",
+    "temperature": 0.1,
+    "max_tokens": 256,
+    "rate_limit": 20
+  },
+  "ai_captcha": {
+    "provider": "ollama",
+    "model": "llava",
+    "temperature": 0.0,
+    "max_tokens": 20,
+    "rate_limit": 20
+  },
+  "ollama": {
+    "mode": "host"
+  }
+}
