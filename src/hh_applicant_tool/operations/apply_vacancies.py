@@ -40,6 +40,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__package__)
 
 
+class VacancyTestsNotFoundError(ValueError):
+    """Тесты для вакансии не найдены на странице отклика."""
+
+
 class Namespace(BaseNamespace):
     resume_id: str | None
     letter_file: Path | None
@@ -1011,6 +1015,11 @@ class Operation(BaseOperation):
                                 if err == "negotiations-limit-exceeded":
                                     do_apply = False
                                     logger.warning("Достигли лимита на отклики")
+                                elif err == "tests-not-found":
+                                    logger.warning(
+                                        "У вакансии нет доступных тестов: %s",
+                                        vacancy["alternate_url"],
+                                    )
                                 else:
                                     logger.error(
                                         f"Произошла ошибка при отклике на вакансию с тестом: {vacancy['alternate_url']} - {err}"
@@ -1134,7 +1143,7 @@ class Operation(BaseOperation):
         end_tests = r.text.find(',"counters":', start_tests)
 
         if -1 in (start_tests, end_tests):
-            raise ValueError("tests not found.")
+            raise VacancyTestsNotFoundError("tests not found.")
 
         try:
             return utils.json.loads(
@@ -1154,7 +1163,13 @@ class Operation(BaseOperation):
         response_url = f"https://hh.ru/applicant/vacancy_response?vacancyId={vacancy_id}&startedWithQuestion=false&hhtmFrom=vacancy"
 
         # Загружаем данные теста и токен
-        tests_data = self._get_vacancy_tests(response_url)
+        try:
+            tests_data = self._get_vacancy_tests(response_url)
+        except VacancyTestsNotFoundError:
+            return {
+                "success": "false",
+                "error": "tests-not-found",
+            }
 
         try:
             test_data = tests_data[str(vacancy_id)]

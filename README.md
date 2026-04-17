@@ -221,7 +221,7 @@ hh_applicant_tool  | ✅ Обновлено Программист
 
 Информацию об ошибках можно посмотреть в файле `config/log.txt`, а контакты работодателей — в `config/data` с помощью `sqlite3`. В `config/config.json` хранятся токены, дающие доступ к аккаунту.
 
-Также советую отредактировать файл `letter.txt`.
+Если нужно сопроводительное письмо, создайте локальный `letter.txt` по образцу `letter.txt.example` и отредактируйте его под себя.
 
 Запущенные сервисы докер стартуют автоматически после перезагрузки. Остановить их можно выполнив:
 
@@ -316,6 +316,8 @@ docker@1897bdd7c80b:/app$
   -l letter.txt \
   --excluded-filter "fullstack|junior|php" # укажите любые аргументы
 ```
+
+`letter.txt` должен лежать в корне проекта рядом с `letter.txt.example`, который можно взять за основу.
 
 В файлах `startup.sh` и `crontab` замените `/usr/local/bin/python -m hh_applicant_tool apply-vacancies` на `/bin/sh /app/apply-vacancies.sh`.
 
@@ -678,7 +680,7 @@ npx @redocly/cli preview -d docs/hhapi
 
 ## Использование AI
 
-Для генерации сопроводительных писем при откликах и ответа в чаты работодателей (`reply-employers`) можно использовать OpenAI (ChatGPT).
+AI здесь используется для трёх вещей: сопроводительных писем, фильтрации вакансий и распознавания капчи. Для каждой задачи можно выбрать свой провайдер и модель.
 
 Пример рассылки откликов с генерированным письмом:
 
@@ -716,7 +718,7 @@ hh-applicant-tool apply-vacancies --ai-filter heavy --ai-rate-limit 20
 - `--ai-filter` — режим фильтрации: `heavy` или `light`
 - `--ai-rate-limit` — ограничение запросов к AI в минуту (по умолчанию 40)
 
-### OpenAI/ChatGPT
+### AI
 
 Отредактируйте конфиг:
 
@@ -724,41 +726,161 @@ hh-applicant-tool apply-vacancies --ai-filter heavy --ai-rate-limit 20
 hh-applicant-tool config -e
 ```
 
+Шаблон конфига лежит в `config/config.json.example`, а рабочий локальный конфиг - в `config/config.json`.
+
 #### Раздельная конфигурация
 
 Для разных задач можно настроить отдельные параметры AI:
 
+`letter.txt` для сопроводительного письма нужно положить рядом с `letter.txt.example`.
+
+Если Ollama запущена локально, `mode: host` уже достаточно. Если нужен Docker или другой хост, тогда используйте `mode: remote` и `remote_url`.
+
+Если нужен только OpenAI, можно использовать старые поля `ai_*` с `provider: openai`.
+
+#### Ollama
+
+Для Ollama в `ai_*` секции задайте `provider: ollama`, имя модели и параметры работы Ollama:
+
+- `model` можно указывать любым валидным именем модели Ollama
+- `ollama.mode` выбирает, где запущена Ollama: `host` для локального запуска или `remote` для Docker/другого хоста
+- для `gpt_oss_20b`, `gpt_oss_20b_cloud` и `gpt_oss_120b_cloud` дополнительно используйте `think: "low" | "medium" | "high"`
+- если нужен интернет-доступ, это отдельная интеграция, а не настройка самой модели
+
 ```json
 {
-  "openai_cover_letter": {
-    "api_key": "ВАШ_API_КЛЮЧ",
-    "base_url": "https://api.openai.com/v1/chat/completions",
-    "model": "gpt-4o-mini",
+  "ai_cover_letter": {
+    "provider": "ollama",
+    "model": "llama3_2",
     "temperature": 0.7,
-    "max_completion_tokens": 1000,
+    "max_tokens": 1000,
     "rate_limit": 40
   },
-  "openai_vacancy_filter": {
-      "api_key": "ВАШ_API_КЛЮЧ",
-      "base_url": "https://api.openai.com/v1/chat/completions",
-      "model": "gpt-4o-mini",
-      "temperature": 0.1,
-      "max_completion_tokens": 100,
-      "rate_limit": 60
+  "ai_vacancy_filter": {
+    "provider": "ollama",
+    "model": "qwen2_5",
+    "temperature": 0.1,
+    "max_tokens": 100,
+    "rate_limit": 60
   },
-  "openai_captcha": {
-      "api_key": "ВАШ_API_КЛЮЧ",
-      "base_url": "https://api.openai.com/v1/chat/completions",
-      "model": "gpt-4o-mini",
+  "ai_captcha": {
+      "provider": "ollama",
+      "model": "llava",
       "temperature": 0.0,
-      "max_completion_tokens": 20,
+      "max_tokens": 20,
       "rate_limit": 40
+  },
+  "ollama": {
+    "mode": "host"
   }
 }
 ```
 
-> `api.openai.com` указан в качестве примера. Утилита работает с любыми провайдерами хуИИ в тч с локальынми
-> При использовании Docker нужно указывать IP хоста вместо `localhost`, например `http://192.168.1.100:11434/v1/chat/completions`
+Ниже коротко расписаны рекомендуемые модели Ollama и типичные конфиги.
+
+##### `llama3_2`
+
+Подходит для обычного текста и сопроводительных писем.
+
+```json
+{
+  "ai_cover_letter": {
+    "provider": "ollama",
+    "model": "llama3_2",
+    "temperature": 0.7,
+    "max_tokens": 1000,
+    "rate_limit": 40
+  },
+  "ollama": {
+    "mode": "host"
+  }
+}
+```
+
+##### `qwen2_5`
+
+Подходит для анализа вакансий и более строгого следования промпту.
+
+```json
+{
+  "ai_vacancy_filter": {
+    "provider": "ollama",
+    "model": "qwen2_5",
+    "temperature": 0.1,
+    "max_tokens": 100,
+    "rate_limit": 60
+  },
+  "ollama": {
+    "mode": "host"
+  }
+}
+```
+
+##### `gpt_oss_20b`
+
+Подходит для более тяжелого reasoning. Для него задавайте `think`; у этой модели trace не отключается полностью, а уровень задается явно.
+
+```json
+{
+  "ai_cover_letter": {
+    "provider": "ollama",
+    "model": "gpt_oss_20b",
+    "think": "high",
+    "temperature": 0.2,
+    "max_tokens": 1000,
+    "rate_limit": 40
+  },
+  "ollama": {
+    "mode": "host"
+  }
+}
+```
+
+##### `gpt_oss_20b_cloud`
+
+Cloud-вариант GPT-OSS. Если Ollama запущена в Docker или на другом хосте, укажите `mode: remote` и `remote_url` до endpoint'а самой Ollama.
+
+```json
+{
+  "ai_cover_letter": {
+    "provider": "ollama",
+    "model": "gpt_oss_20b_cloud",
+    "think": "high",
+    "temperature": 0.2,
+    "max_tokens": 1000,
+    "rate_limit": 40
+  },
+  "ollama": {
+    "mode": "remote",
+    "remote_url": "http://host.docker.internal:11434/v1/chat/completions"
+  }
+}
+```
+
+Если нужен старый cloud-вариант из предыдущего конфига, используйте `gpt_oss_120b_cloud` с тем же набором полей.
+
+##### `llava`
+
+Нужна для капчи, потому что это vision-модель.
+
+```json
+{
+  "ai_captcha": {
+    "provider": "ollama",
+    "model": "llava",
+    "temperature": 0.0,
+    "max_tokens": 20,
+    "rate_limit": 40
+  },
+  "ollama": {
+    "mode": "host"
+  }
+}
+```
+
+- `mode: host` - Ollama запущена на той же машине, используется `http://localhost:11434/v1/chat/completions`
+- `mode: remote` - Ollama запущена на другом хосте или в Docker, укажите `remote_url`; пример: `http://192.168.1.100:11434/v1/chat/completions`
+- Для капчи нужен vision-модель, например `llava`
 
 ### Автоматическое решение капчи
 
@@ -766,18 +888,19 @@ hh-applicant-tool config -e
 
 #### Настройка
 
-Добавьте секцию `openai_captcha` в конфиг:
+Добавьте секцию `ai_captcha` в конфиг:
 
 ```json
 {
-"openai_captcha": {
-"api_key": "ВАШ_API_КЛЮЧ",
-"base_url": "https://api.openai.com/v1/chat/completions",
-"model": "gpt-4o-mini",
-"temperature": 0.0,
-"max_completion_tokens": 20,
-"rate_limit": 40
-}
+  "ai_captcha": {
+    "provider": "openai",
+    "api_key": "ВАШ_API_КЛЮЧ",
+    "base_url": "https://api.openai.com/v1/chat/completions",
+    "model": "gpt-4o-mini",
+    "temperature": 0.0,
+    "max_completion_tokens": 20,
+    "rate_limit": 40
+  }
 }
 ```
 
@@ -852,9 +975,10 @@ hh-applicant-tool config -p
 | `user_agent` | Кастомный юзерагент, передаваемый при каждом запросе. По умолчанию используется от Android |
 | `client_id` | Идентификатор клиента, используемый для авторизации. По умолчанию используется от Android |
 | `client_secret` | Секретный ключ клиента, используемый для авторизации. По умолчанию используется от Android |
-| `openai_cover_letter` | Конфигурация AI для генерации сопроводительных писем |
-| `openai_vacancy_filter` | Конфигурация AI для фильтрации вакансий |
-| `openai_captcha` | Конфигурация AI для распознавания капчи |
+| `ai_cover_letter` | Конфигурация AI для генерации сопроводительных писем, `provider: openai|ollama` |
+| `ai_vacancy_filter` | Конфигурация AI для фильтрации вакансий, `provider: openai|ollama` |
+| `ai_captcha` | Конфигурация AI для распознавания капчи, `provider: openai|ollama` |
+| `ollama` | Глобальная конфигурация Ollama, обычно `mode: host`; для `remote` нужен `remote_url` |
 
 Если вы залогинитесь под другим аккаунтом, то данные не исчезнут.
 
