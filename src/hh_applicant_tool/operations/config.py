@@ -90,7 +90,7 @@ class Operation(BaseOperation):
             "--set",
             nargs=2,
             metavar=("KEY", "VALUE"),
-            help="Установить значение в конфиг, например, --set openai.model gpt-4o",
+            help="Установить значение в конфиг, например, --set ai_cover_letter.provider ollama",
         )
         group.add_argument(
             "-u", "--unset", metavar="KEY", help="Удалить ключ из конфига"

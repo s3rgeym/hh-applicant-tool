@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import logging
 import time
@@ -6,17 +8,17 @@ from email.utils import parsedate_to_datetime
 from threading import Lock
 from typing import Any
 
-from .base import AIError
+from ..base import AIError
 
 logger = logging.getLogger(__package__)
 
 
-class OpenAIError(AIError):
+class OllamaError(AIError):
     pass
 
 
 @dataclass
-class ChatOpenAI:
+class ChatOllama:
     api_key: str
 
     _: KW_ONLY
@@ -25,19 +27,17 @@ class ChatOpenAI:
     system_prompt: str | None = None
     timeout: float = 15.0
 
-    # Параметры для retry логики
     max_retries: int = 5
 
     temperature: float = 0.0
-    max_completion_tokens: int = 1000
+    max_tokens: int = 1000
     model: str | None = None
+    think: bool | str | None = None
 
-    # количество запросов в минуту (0 = отключено)
     rate_limit: int = 40
 
     session: Any = field(default_factory=lambda: __import__("requests").Session())
 
-    # Внутренние поля для retry логики
     _previous_request_time: float = field(default=0.0, init=False)
     _lock: Lock = field(init=False, repr=False)
 
@@ -54,7 +54,6 @@ class ChatOpenAI:
         return 60.0 / self.rate_limit if self.rate_limit > 0 else 0.0
 
     def _request(self, payload: dict) -> Any:
-        """Выполнение запроса с минимальным интервалом между запросами."""
         with self._lock:
             if self._previous_request_time > 0:
                 delay = (
@@ -63,7 +62,7 @@ class ChatOpenAI:
                     + self._previous_request_time
                 )
                 if delay > 0:
-                    logger.debug("Wait %.2fs before OpenAI request", delay)
+                    logger.debug("Wait %.2fs before Ollama request", delay)
                     time.sleep(delay)
 
             try:
@@ -74,12 +73,11 @@ class ChatOpenAI:
                     timeout=self.timeout,
                 )
             except Exception as ex:
-                raise OpenAIError(f"Network error: {ex}") from ex
+                raise OllamaError(f"Network error: {ex}") from ex
             finally:
                 self._previous_request_time = time.monotonic()
 
     def _get_retry_delay(self, response: Any, attempt: int) -> float:
-        """Вычисление задержки перед повторным запросом при 429 ошибке."""
         min_interval = self._min_request_interval or 1.0
         retry_after = response.headers.get("Retry-After")
         if retry_after:
@@ -95,16 +93,12 @@ class ChatOpenAI:
         return max(min_interval * (attempt + 1), 1.0)
 
     def complete(self, message: str) -> str:
-        """Генерация текста через OpenAI API"""
         messages = []
 
-        # Добавляем системный промпт только если он не пустой и не None
         if self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
-        # Пользовательское сообщение всегда обязательно
         messages.append({"role": "user", "content": message})
 
-        # Логирование запроса к AI при DEBUG уровне
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("AI запрос: %s", message)
 
@@ -112,23 +106,25 @@ class ChatOpenAI:
             "model": self.model,
             "messages": messages,
             "temperature": self.temperature,
-            "max_completion_tokens": self.max_completion_tokens,
+            "max_tokens": self.max_tokens,
             "stream": False,
         }
+        if self.think is not None:
+            payload["think"] = self.think
 
         for attempt in range(self.max_retries + 1):
             try:
                 response = self._request(payload)
             except Exception as ex:
-                raise OpenAIError(f"Network error: {ex}") from ex
+                raise OllamaError(f"Network error: {ex}") from ex
 
             if response.status_code == 429:
                 if attempt >= self.max_retries:
-                    raise OpenAIError("OpenAI rate limit exceeded")
+                    raise OllamaError("Ollama rate limit exceeded")
 
                 delay = self._get_retry_delay(response, attempt)
                 logger.warning(
-                    "OpenAI returned 429 Too Many Requests, retry in %.2fs",
+                    "Ollama returned 429 Too Many Requests, retry in %.2fs",
                     delay,
                 )
                 time.sleep(delay)
@@ -137,37 +133,35 @@ class ChatOpenAI:
             try:
                 response.raise_for_status()
             except Exception as ex:
-                raise OpenAIError(f"Network error: {ex}") from ex
+                raise OllamaError(f"Network error: {ex}") from ex
 
             try:
                 data = response.json()
             except ValueError as ex:
-                raise OpenAIError(f"Invalid JSON response: {ex}") from ex
+                raise OllamaError(f"Invalid JSON response: {ex}") from ex
 
             if "error" in data:
-                raise OpenAIError(data["error"]["message"])
+                raise OllamaError(data["error"]["message"])
 
             try:
                 assistant_message = data["choices"][0]["message"]["content"]
-                return (
-                    assistant_message if assistant_message is not None else ""
-                )
+                return assistant_message if assistant_message is not None else ""
             except (KeyError, IndexError) as ex:
-                raise OpenAIError(f"Invalid response format: {ex}") from ex
+                raise OllamaError(f"Invalid response format: {ex}") from ex
 
-        raise OpenAIError("OpenAI request failed after retries")
+        raise OllamaError("Ollama request failed after retries")
 
     def solve_captcha(self, image_data: bytes) -> str:
         image_base64 = base64.b64encode(image_data).decode("utf-8")
-
         content_type = "image/png"
-
         messages = []
 
-        system_prompt = "Ты должен распознать текст на изображении. Верни ТОЛЬКО текст, без каких-либо объяснений или дополнительных символов."
+        system_prompt = (
+            "Ты должен распознать текст на изображении. "
+            "Верни ТОЛЬКО текст, без каких-либо объяснений или дополнительных символов."
+        )
 
         messages.append({"role": "system", "content": system_prompt})
-
         messages.append(
             {
                 "role": "user",
@@ -194,23 +188,25 @@ class ChatOpenAI:
             "model": self.model,
             "messages": messages,
             "temperature": 0.0,
-            "max_completion_tokens": 20,
+            "max_tokens": 20,
             "stream": False,
         }
+        if self.think is not None:
+            payload["think"] = self.think
 
         for attempt in range(self.max_retries + 1):
             try:
                 response = self._request(payload)
             except Exception as ex:
-                raise OpenAIError(f"Network error: {ex}") from ex
+                raise OllamaError(f"Network error: {ex}") from ex
 
             if response.status_code == 429:
                 if attempt >= self.max_retries:
-                    raise OpenAIError("OpenAI rate limit exceeded")
+                    raise OllamaError("Ollama rate limit exceeded")
 
                 delay = self._get_retry_delay(response, attempt)
                 logger.warning(
-                    "OpenAI returned 429 Too Many Requests, retry in %.2fs",
+                    "Ollama returned 429 Too Many Requests, retry in %.2fs",
                     delay,
                 )
                 time.sleep(delay)
@@ -219,15 +215,15 @@ class ChatOpenAI:
             try:
                 response.raise_for_status()
             except Exception as ex:
-                raise OpenAIError(f"Network error: {ex}") from ex
+                raise OllamaError(f"Network error: {ex}") from ex
 
             try:
                 data = response.json()
             except ValueError as ex:
-                raise OpenAIError(f"Invalid JSON response: {ex}") from ex
+                raise OllamaError(f"Invalid JSON response: {ex}") from ex
 
             if "error" in data:
-                raise OpenAIError(data["error"]["message"])
+                raise OllamaError(data["error"]["message"])
 
             try:
                 captcha_text = data["choices"][0]["message"]["content"]
@@ -236,6 +232,6 @@ class ChatOpenAI:
                 logger.debug("Распознанный текст капчи: %s", captcha_text)
                 return captcha_text if captcha_text else ""
             except (KeyError, IndexError) as ex:
-                raise OpenAIError(f"Invalid response format: {ex}") from ex
+                raise OllamaError(f"Invalid response format: {ex}") from ex
 
-        raise OpenAIError("Captcha recognition failed after retries")
+        raise OllamaError("Captcha recognition failed after retries")

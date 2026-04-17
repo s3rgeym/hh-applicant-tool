@@ -20,6 +20,7 @@ import requests
 import urllib3
 
 from . import ai, api, utils
+from .ai.selection import get_ai_provider, get_ai_section
 from .constants import (
     CONFIG_DIR,
     CONFIG_FILENAME,
@@ -177,6 +178,13 @@ class HHApplicantTool(MegaTool):
             return self._proxy_url_to_dict(proxy_url)
         return self._get_proxies()
 
+    def _get_ollama_proxies(self) -> dict[str, str]:
+        ollama_config = self.config.get("ollama", {})
+        proxy_url = ollama_config.get("proxy_url")
+        if proxy_url:
+            return self._proxy_url_to_dict(proxy_url)
+        return {}
+
     def _create_http_session(
         self,
         proxies: dict[str, str],
@@ -211,6 +219,13 @@ class HHApplicantTool(MegaTool):
         return self._create_http_session(
             self._get_openai_proxies(),
             log_label="OpenAI requests",
+        )
+
+    @cached_property
+    def ollama_session(self) -> requests.Session:
+        return self._create_http_session(
+            self._get_ollama_proxies(),
+            log_label="Ollama requests",
         )
 
     @cached_property
@@ -331,23 +346,23 @@ class HHApplicantTool(MegaTool):
     def get_captcha_ai(self) -> ai.ChatOpenAI:
         return self._init_ai_client(system_prompt="Что написано на картинке?", purpose="captcha")
 
-    def _init_ai_client(self, system_prompt: str, purpose: str) -> ai.ChatOpenAI:
+    def _init_ai_client(self, system_prompt: str, purpose: str):
+        config_section, c = get_ai_section(self.config, purpose)
+        provider = get_ai_provider(config_section, c)
 
-        config_sections = {
-            "cover_letter": "openai_cover_letter",
-            "vacancy_filter": "openai_vacancy_filter",
-            "captcha": "openai_captcha",
-        }
-        
-        if purpose not in config_sections:
-            raise ValueError(
-                f"Неизвестная цель AI: {purpose}. "
-                f"Допустимые значения: {list(config_sections.keys())}"
+        if provider == "ollama":
+            return self._init_ollama_client(
+                config_section=config_section,
+                config=c,
+                system_prompt=system_prompt,
+                purpose=purpose,
             )
-        
-        config_section = config_sections[purpose]
-        c = self.config.get(config_section, {})
-        
+
+        if provider != "openai":
+            raise ValueError(
+                f"Неизвестный AI-провайдер '{provider}' в секции '{config_section}'"
+            )
+
         api_key = c.get("api_key")
         if not api_key:
             raise ValueError(
@@ -359,7 +374,6 @@ class HHApplicantTool(MegaTool):
             raise ValueError(
                 f"Параметр 'base_url' обязателен для AI-конфигурации в секции '{config_section}'. "
                 "Примеры: OpenAI='https://api.openai.com/v1/chat/completions', "
-                "Ollama='http://localhost:11434/v1/chat/completions', "
                 "OpenRouter='https://openrouter.ai/api/v1/chat/completions'"
             )
 
@@ -371,7 +385,7 @@ class HHApplicantTool(MegaTool):
                 "Примеры: 'gpt-4o-mini', 'gpt-3.5-turbo', 'openai/gpt-4'",
                 config_section,
             )
-    
+
         return ai.ChatOpenAI(
             api_key=api_key,
             model=model,
@@ -381,6 +395,48 @@ class HHApplicantTool(MegaTool):
             base_url=base_url,
             rate_limit=c.get("rate_limit", 40),
             session=self.openai_session,
+        )
+
+    def _init_ollama_client(
+        self,
+        *,
+        config_section: str,
+        config: dict[str, Any],
+        system_prompt: str,
+        purpose: str,
+    ) -> ai.ChatOllama:
+        model_key = config.get("model")
+        if not model_key:
+            raise ValueError(
+                f"Параметр 'model' не задан в секции '{config_section}'. "
+                "Для Ollama указывайте короткое имя модели, например: "
+                "'llama3_2', 'qwen2_5', 'gpt_oss_20b', 'llava'."
+            )
+
+        model_spec = ai.get_model_spec(str(model_key))
+        if purpose == "captcha" and not model_spec.vision:
+            raise ValueError(
+                f"Для распознавания капчи нужен vision-модель Ollama, "
+                f"а '{model_key}' её не поддерживает."
+            )
+
+        ollama_config = self.config.get("ollama", {})
+        # Глобальная секция Ollama задает режим/endpoint, а секция задачи - модель и тайминги.
+        base_url = ai.resolve_ollama_base_url(ollama_config | config)
+
+        return ai.ChatOllama(
+            api_key=str(config.get("api_key") or "ollama"),
+            model=model_spec.model,
+            temperature=config.get("temperature", 0.0),
+            max_tokens=config.get(
+                "max_tokens",
+                config.get("max_completion_tokens", 1000),
+            ),
+            think=config.get("think"),
+            system_prompt=system_prompt,
+            base_url=base_url,
+            rate_limit=config.get("rate_limit", 40),
+            session=self.ollama_session,
         )
 
     # TODO: вынести в миксин какой

@@ -89,4 +89,7 @@ docker/
 /config/*
 !/config/.gitkeep
 
+# Локальный шаблон сопроводительного письма
+/letter.txt
+
 Session.vim
