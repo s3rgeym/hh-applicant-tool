@@ -74,10 +74,11 @@ def test_resolve_ollama_base_url_rejects_base_url() -> None:
 def test_get_model_spec() -> None:
     assert get_model_spec("llama3_2").model == "llama3.2"
     assert get_model_spec("gpt_oss_20b").model == "gpt-oss:20b"
+    assert get_model_spec("gpt_oss_20b_cloud").model == "gpt-oss:20b-cloud"
+    assert get_model_spec("gpt_oss_120b_cloud").model == "gpt-oss:120b-cloud"
     assert get_model_spec("llava").vision is True
-
-    with pytest.raises(ValueError):
-        get_model_spec("unknown")
+    assert get_model_spec("unknown").model == "unknown"
+    assert get_model_spec("unknown").vision is None
 
 
 def test_ai_selection_keeps_legacy_openai_sections() -> None:

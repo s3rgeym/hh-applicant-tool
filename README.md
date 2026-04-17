@@ -767,11 +767,11 @@ hh-applicant-tool config -e
 
 #### Ollama
 
-Для Ollama в `ai_*` секции задайте `provider: ollama`, короткое имя модели и параметры работы Ollama:
+Для Ollama в `ai_*` секции задайте `provider: ollama`, имя модели и параметры работы Ollama:
 
-- `model` выбирает модель из `src/hh_applicant_tool/ai/ollama/models/`
+- `model` можно указывать любым валидным именем модели Ollama
 - `ollama.mode` выбирает, где запущена Ollama: `host` для локального запуска или `remote` для Docker/другого хоста
-- для `gpt_oss_20b` дополнительно используйте `think: "low" | "medium" | "high"`
+- для `gpt_oss_20b`, `gpt_oss_20b_cloud` и `gpt_oss_120b_cloud` дополнительно используйте `think: "low" | "medium" | "high"`
 - если нужен интернет-доступ, это отдельная интеграция, а не настройка самой модели
 
 ```json
@@ -803,7 +803,7 @@ hh-applicant-tool config -e
 }
 ```
 
-Ниже коротко расписаны поддерживаемые модели Ollama и типичные конфиги.
+Ниже коротко расписаны рекомендуемые модели Ollama и типичные конфиги.
 
 ##### `llama3_2`
 
@@ -862,6 +862,29 @@ hh-applicant-tool config -e
   }
 }
 ```
+
+##### `gpt_oss_20b_cloud`
+
+Cloud-вариант GPT-OSS. Если Ollama запущена в Docker или на другом хосте, укажите `mode: remote` и `remote_url` до endpoint'а самой Ollama.
+
+```json
+{
+  "ai_cover_letter": {
+    "provider": "ollama",
+    "model": "gpt_oss_20b_cloud",
+    "think": "high",
+    "temperature": 0.2,
+    "max_tokens": 1000,
+    "rate_limit": 40
+  },
+  "ollama": {
+    "mode": "remote",
+    "remote_url": "http://host.docker.internal:11434/v1/chat/completions"
+  }
+}
+```
+
+Если нужен старый cloud-вариант из предыдущего конфига, используйте `gpt_oss_120b_cloud` с тем же набором полей.
 
 ##### `llava`
 

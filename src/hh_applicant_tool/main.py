@@ -409,12 +409,13 @@ class HHApplicantTool(MegaTool):
         if not model_key:
             raise ValueError(
                 f"Параметр 'model' не задан в секции '{config_section}'. "
-                "Для Ollama указывайте короткое имя модели, например: "
-                "'llama3_2', 'qwen2_5', 'gpt_oss_20b', 'llava'."
+                "Для Ollama указывайте имя модели, например: "
+                "'llama3_2', 'qwen2_5', 'gpt_oss_20b', "
+                "'gpt_oss_20b_cloud', 'gpt_oss_120b_cloud', 'llava'."
             )
 
         model_spec = ai.get_model_spec(str(model_key))
-        if purpose == "captcha" and not model_spec.vision:
+        if purpose == "captcha" and model_spec.vision is False:
             raise ValueError(
                 f"Для распознавания капчи нужен vision-модель Ollama, "
                 f"а '{model_key}' её не поддерживает."
