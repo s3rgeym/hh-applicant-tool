@@ -105,7 +105,7 @@ class Operation(BaseOperation):
                 or storage.settings.get_value("auth.username")
                 or (
                     await asyncio.to_thread(
-                        input, "👤 Введите email или телефон: "
+                        input, "Введите email или телефон: "
                     )
                 )
             ).strip()
@@ -184,7 +184,7 @@ class Operation(BaseOperation):
                 )
                 api_client.handle_access_token(token)
 
-                print("🔓 Авторизация прошла успешно!")
+                print("Авторизация прошла успешно!")
 
                 if self.is_automated:
                     storage.settings.set_value("auth.username", username)
@@ -220,9 +220,9 @@ class Operation(BaseOperation):
             self.SEL_CODE_CONTAINER, timeout=self.selector_timeout
         )
 
-        print("📨 Код был отправлен. Проверьте почту или SMS.")
+        print("Код был отправлен. Проверьте почту или SMS.")
         code = (
-            await asyncio.to_thread(input, "📩 Введите полученный код: ")
+            await asyncio.to_thread(input, "Введите полученный код: ")
         ).strip()
         if not code:
             raise RuntimeError("Код подтверждения не может быть пустым.")

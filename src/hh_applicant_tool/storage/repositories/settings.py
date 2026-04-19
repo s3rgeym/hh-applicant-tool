@@ -33,3 +33,10 @@ class SettingsRepository(BaseRepository):
         setting = self.get(key)
         if setting:
             self.delete(setting, commit=commit)
+
+    def list_keys(self) -> list[str]:
+        """Возвращает список всех ключей в таблице settings."""
+        cur = self.conn.execute(
+            f"SELECT {self.pkey} FROM {self.table_name}"
+        )
+        return [row[0] for row in cur.fetchall()]

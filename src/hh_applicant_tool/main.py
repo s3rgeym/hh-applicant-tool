@@ -238,7 +238,7 @@ class HHApplicantTool(MegaTool):
 
     @cached_property
     def db(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
         return conn
 
     @cached_property
