@@ -90,3 +90,10 @@ docker/
 !/config/.gitkeep
 
 Session.vim
+
+# AI assistants / IDE agents
+.claude/
+CLAUDE.md
+.serena/
+.codex/
+uv.lock

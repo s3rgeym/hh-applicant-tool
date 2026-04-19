@@ -781,6 +781,9 @@ class Operation(BaseOperation):
                 self.vacancy_filter_ai.rate_limit = self.args.ai_rate_limit
 
         for vacancy in self._get_vacancies(resume_id=resume["id"]):
+            if getattr(self, '_cancel_event', None) and self._cancel_event.is_set():
+                logger.info("Операция отменена пользователем")
+                break
             try:
                 employer = vacancy.get("employer", {})
 

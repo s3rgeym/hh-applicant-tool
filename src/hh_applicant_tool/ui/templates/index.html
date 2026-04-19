@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HH Applicant Tool</title>
+    <link rel="stylesheet" href="css/utilities.css">
+    <link rel="stylesheet" href="css/app.css">
+</head>
+<body class="bg-gray-100 text-gray-900 min-h-screen flex">
+
+    <!-- ===== Sidebar ===== -->
+    <aside class="w-52 bg-white border-r border-gray-200 flex flex-col shrink-0">
+        <div class="px-4 py-5 border-b border-gray-100">
+            <h1 class="text-base font-bold text-blue-600 leading-tight">HH Applicant<br>Tool</h1>
+        </div>
+        <nav class="flex flex-col gap-0.5 p-3 flex-1">
+            <a class="sidebar-link active" data-section="dashboard" onclick="navigate('dashboard')">&#127968; Главная</a>
+            <a class="sidebar-link" data-section="search" onclick="navigate('search')">&#128269; Поиск вакансий</a>
+            <a class="sidebar-link" data-section="resumes" onclick="navigate('resumes')">&#128196; Резюме</a>
+            <a class="sidebar-link" data-section="negotiations" onclick="navigate('negotiations')">&#128172; Отклики</a>
+            <a class="sidebar-link" data-section="statistics" onclick="navigate('statistics')">&#128202; Статистика</a>
+            <a class="sidebar-link" data-section="settings" onclick="navigate('settings')">&#9881;&#65039; Настройки</a>
+        </nav>
+        <div class="px-4 py-3 border-t border-gray-100 text-xs text-gray-400">v UI</div>
+    </aside>
+
+    <!-- ===== Контент ===== -->
+    <main class="flex-1 overflow-y-auto">
+
+        <!-- ===== Главная ===== -->
+        <div id="dashboard" class="section active p-6">
+            <h2 class="page-title">Главная</h2>
+            <div class="card max-w-sm">
+                <div class="flex items-center gap-3 mb-4">
+                    <span id="status-dot" class="status-dot offline"></span>
+                    <div>
+                        <div id="status-text" class="text-sm font-semibold">Проверка...</div>
+                        <div id="user-name" class="text-xs text-gray-500">—</div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-400">Для работы необходима авторизация через hh.ru.<br>Запустите <code class="bg-gray-100 px-1 rounded">hh-applicant-tool authorize</code> в терминале.</p>
+            </div>
+        </div>
+
+        <!-- ===== Поиск вакансий ===== -->
+        <div id="search" class="section p-6">
+            <div class="flex items-center justify-between mb-5">
+                <h2 class="page-title mb-0">Поиск вакансий</h2>
+                <!-- Пресеты -->
+                <div class="flex items-center gap-2">
+                    <select id="preset-select" onchange="loadSelectedPreset()" class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:border-blue-400" style="min-width:160px">
+                        <option value="">— Пресет —</option>
+                    </select>
+                    <button onclick="savePreset()" class="btn-sm btn-secondary" title="Сохранить текущие параметры как пресет">Сохранить</button>
+                    <button onclick="deleteSelectedPreset()" class="btn-sm btn-danger" title="Удалить выбранный пресет">Удалить</button>
+                </div>
+            </div>
+
+            <form id="search-form" onsubmit="return false;" class="space-y-4">
+
+                <!-- Основное -->
+                <div class="card">
+                    <h3 class="section-title">Основное</h3>
+                    <div class="form-grid-3">
+                        <div class="form-group md:col-span-2">
+                            <label>Поисковый запрос</label>
+                            <input type="text" data-param="search" placeholder="Python developer, Senior backend...">
+                        </div>
+                        <div class="form-group">
+                            <label>Сортировка</label>
+                            <select data-param="order_by">
+                                <option value="">По умолчанию</option>
+                                <option value="relevance">По релевантности</option>
+                                <option value="publication_time">По дате публикации</option>
+                                <option value="salary_desc">Зарплата (по убыванию)</option>
+                                <option value="salary_asc">Зарплата (по возрастанию)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Резюме <span class="tip" title="Оставьте пустым — система выберет первое опубликованное резюме автоматически">?</span></label>
+                            <select id="resume-id-select" data-param="resume_id">
+                                <option value="">Автовыбор (первое опубликованное)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Требуемый опыт</label>
+                            <select data-param="experience">
+                                <option value="">Любой опыт</option>
+                                <option value="noExperience">Без опыта</option>
+                                <option value="between1And3">От 1 до 3 лет</option>
+                                <option value="between3And6">От 3 до 6 лет</option>
+                                <option value="moreThan6">Более 6 лет</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>График работы</label>
+                            <select data-param="schedule">
+                                <option value="">Любой</option>
+                                <option value="fullDay">Полный день</option>
+                                <option value="shift">Сменный</option>
+                                <option value="flexible">Гибкий</option>
+                                <option value="remote">Удалённая работа</option>
+                                <option value="flyInFlyOut">Вахта</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Зарплата от <span class="tip" title="Фильтрует вакансии по указанной минимальной зарплате">?</span></label>
+                            <div class="flex gap-2">
+                                <input type="number" data-param="salary" placeholder="200 000" class="flex-1">
+                                <select data-param="currency" style="width:80px">
+                                    <option value="">RUB</option>
+                                    <option value="RUR">RUR</option>
+                                    <option value="USD">USD</option>
+                                    <option value="EUR">EUR</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Вакансии за последние (дней) <span class="tip" title="Показывать вакансии, опубликованные не ранее чем N дней назад">?</span></label>
+                            <input type="number" data-param="period" placeholder="30">
+                        </div>
+                    </div>
+
+                    <!-- Занятость (чекбоксы) -->
+                    <div class="mt-4">
+                        <label class="form-label-sm mb-2">Тип занятости <span class="text-gray-400 font-normal">(можно выбрать несколько)</span></label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-item"><input type="checkbox" data-multi-param="employment" value="full"> Полная занятость</label>
+                            <label class="checkbox-item"><input type="checkbox" data-multi-param="employment" value="part"> Частичная занятость</label>
+                            <label class="checkbox-item"><input type="checkbox" data-multi-param="employment" value="project"> Проектная работа</label>
+                            <label class="checkbox-item"><input type="checkbox" data-multi-param="employment" value="volunteer"> Волонтёрство</label>
+                            <label class="checkbox-item"><input type="checkbox" data-multi-param="employment" value="probation"> Стажировка</label>
+                        </div>
+                    </div>
+
+                    <!-- Поля поиска (чекбоксы) -->
+                    <div class="mt-4">
+                        <label class="form-label-sm mb-2">Искать в полях <span class="text-gray-400 font-normal">(по умолчанию — во всех)</span></label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-item"><input type="checkbox" data-multi-param="search_field" value="name"> Название вакансии</label>
+                            <label class="checkbox-item"><input type="checkbox" data-multi-param="search_field" value="company_name"> Название компании</label>
+                            <label class="checkbox-item"><input type="checkbox" data-multi-param="search_field" value="description"> Описание вакансии</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Регион и категории -->
+                <div class="card">
+                    <h3 class="section-title">Регион и категории</h3>
+                    <p class="text-xs text-gray-400 mb-3">Выберите из справочника или введите несколько значений. Данные загружаются с hh.ru.</p>
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label>Регион / Город</label>
+                            <div class="lookup-field" id="area-lookup" data-param-name="area">
+                                <input type="text" class="lookup-search" placeholder="Поиск: Москва, Санкт-Петербург...">
+                                <div class="lookup-tags" id="area-tags"></div>
+                                <div class="lookup-dropdown hidden" id="area-dropdown"></div>
+                            </div>
+                            <input type="hidden" data-param="area" data-type="json-array">
+                        </div>
+                        <div class="form-group">
+                            <label>Профессиональная роль</label>
+                            <div class="lookup-field" id="role-lookup" data-param-name="professional_role">
+                                <input type="text" class="lookup-search" placeholder="Поиск: Программист, Аналитик...">
+                                <div class="lookup-tags" id="role-tags"></div>
+                                <div class="lookup-dropdown hidden" id="role-dropdown"></div>
+                            </div>
+                            <input type="hidden" data-param="professional_role" data-type="json-array">
+                        </div>
+                        <div class="form-group">
+                            <label>Отрасль компании</label>
+                            <div class="lookup-field" id="industry-lookup" data-param-name="industry">
+                                <input type="text" class="lookup-search" placeholder="Поиск: IT, Финансы...">
+                                <div class="lookup-tags" id="industry-tags"></div>
+                                <div class="lookup-dropdown hidden" id="industry-dropdown"></div>
+                            </div>
+                            <input type="hidden" data-param="industry" data-type="json-array">
+                        </div>
+                        <div class="form-group">
+                            <label>Метро <span class="tip" title="ID станций метро для вашего города. Например, для Москвы: 1.1 (Сокольническая линия). Найти ID: hh.ru/metro">?</span></label>
+                            <textarea data-param="metro" data-multi="true" rows="2" placeholder="Введите ID станций метро по одному на строку&#10;Например: 1.1"></textarea>
+                            <span class="field-hint"><a href="https://hh.ru/metro" target="_blank" rel="noopener">Справочник станций метро ↗</a></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Фильтры работодателей -->
+                <div class="card">
+                    <h3 class="section-title">Фильтры работодателей</h3>
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label>Только эти работодатели <span class="tip" title="ID работодателя — число в URL страницы компании на hh.ru&#10;Например: hh.ru/employer/1455 → ID: 1455">?</span></label>
+                            <textarea data-param="employer_id" data-multi="true" rows="2" placeholder="ID работодателей, по одному на строку&#10;Например: 1455"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Исключить работодателей <span class="tip" title="Вакансии от этих работодателей будут пропущены">?</span></label>
+                            <textarea data-param="excluded_employer_id" data-multi="true" rows="2" placeholder="ID работодателей для исключения"></textarea>
+                        </div>
+                        <div class="form-group md:col-span-2">
+                            <label>Фильтр-исключение по тексту <span class="tip" title="Вакансии, в названии или описании которых встречаются эти слова, будут пропущены. Поддерживается regex: junior|стажир|bitrix">?</span></label>
+                            <div id="excluded-filter-tags" class="tag-input-wrap" onclick="this.querySelector('input').focus()">
+                                <input type="text" class="tag-input-field" placeholder="Введите слово и нажмите Enter (например: junior, стажёр, bitrix)">
+                            </div>
+                            <input type="hidden" data-param="excluded_filter">
+                            <span class="field-hint">Каждый тег — отдельное слово или паттерн. Поиск регистронезависимый.</span>
+                        </div>
+                        <div class="form-group">
+                            <label>Метки вакансий <span class="tip" title="not_from_agency — не от рекрутинговых агентств&#10;accredited_it — только аккредитованные IT-компании">?</span></label>
+                            <div class="checkbox-group">
+                                <label class="checkbox-item"><input type="checkbox" data-multi-param="label" value="not_from_agency"> Не от агентств</label>
+                                <label class="checkbox-item"><input type="checkbox" data-multi-param="label" value="accredited_it"> Аккредитованные IT</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI настройки -->
+                <div class="card">
+                    <div class="flex items-start justify-between mb-3">
+                        <h3 class="section-title mb-0">Искусственный интеллект</h3>
+                        <button type="button" onclick="navigate('settings')" class="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1">
+                            &#9881;&#65039; Настроить API ключ
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-400 mb-4">
+                        AI-функции требуют настройки API-ключа в разделе <strong>Настройки → openai_cover_letter / openai_vacancy_filter</strong>.
+                        Поддерживаются OpenAI, OpenRouter, Ollama и другие совместимые провайдеры.
+                    </p>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label>AI-фильтр вакансий <span class="tip" title="heavy: модель читает полный текст каждой вакансии и решает, откликаться ли (точнее, но медленнее и дороже)&#10;light: модель анализирует только заголовок и ключевые слова (быстро, дёшево, менее точно)">?</span></label>
+                            <select data-param="ai_filter">
+                                <option value="">Отключён</option>
+                                <option value="heavy">Heavy — полный анализ текста</option>
+                                <option value="light">Light — анализ заголовка</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Системный промпт для фильтра</label>
+                            <textarea data-param="system_prompt" rows="2" placeholder="Ты помогаешь находить подходящие вакансии..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Промпт для сопроводительного письма</label>
+                            <textarea data-param="message_prompt" rows="2" placeholder="Напиши сопроводительное письмо..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Поведение -->
+                <div class="card">
+                    <h3 class="section-title">Параметры запуска</h3>
+                    <div class="form-grid-3 mb-4">
+                        <div class="form-group">
+                            <label>Страниц обработать <span class="tip" title="Максимальное количество страниц поиска. 1 страница = per_page вакансий">?</span></label>
+                            <input type="number" data-param="total_pages" placeholder="20 (по умолчанию)">
+                        </div>
+                        <div class="form-group">
+                            <label>Вакансий на страницу</label>
+                            <input type="number" data-param="per_page" placeholder="100 (максимум)">
+                        </div>
+                        <div class="form-group">
+                            <label>Лимит откликов за запуск <span class="tip" title="Остановить после N успешных откликов. Полезно для контроля расходов или тестирования">?</span></label>
+                            <input type="number" data-param="max_responses" placeholder="Без лимита">
+                        </div>
+                        <div class="form-group">
+                            <label>Задержка между запросами (сек) <span class="tip" title="Пауза между запросами к API hh.ru. Увеличьте при блокировках. Рекомендуется ≥ 0.5">?</span></label>
+                            <input type="number" step="0.1" data-param="api_delay" placeholder="0.5">
+                        </div>
+                        <div class="form-group">
+                            <label>Лимит AI-запросов (в минуту) <span class="tip" title="Ограничение скорости запросов к AI API. Настройте под тариф вашего провайдера">?</span></label>
+                            <input type="number" data-param="ai_rate_limit" placeholder="40">
+                        </div>
+                    </div>
+
+                    <div class="checkbox-group flex-wrap gap-x-6 gap-y-2">
+                        <label class="checkbox-item"><input type="checkbox" data-param="use_ai"> Использовать AI для писем</label>
+                        <label class="checkbox-item"><input type="checkbox" data-param="force_message"> <span>Всегда отправлять письмо <span class="tip" title="Отправлять сопроводительное письмо даже если вакансия его не требует">?</span></span></label>
+                        <label class="checkbox-item"><input type="checkbox" data-param="only_with_salary"> Только с указанной зарплатой</label>
+                        <label class="checkbox-item"><input type="checkbox" data-param="no_magic"> <span>Точный поиск <span class="tip" title="Отключает авторазбор запроса hh.ru (синонимы, морфология). Поиск строго по введённым словам">?</span></span></label>
+                        <label class="checkbox-item"><input type="checkbox" data-param="skip_tests"> Пропускать вакансии с тестами</label>
+                        <label class="checkbox-item"><input type="checkbox" data-param="send_email"> Отправлять email работодателю</label>
+                        <label class="checkbox-item"><input type="checkbox" data-param="dry_run"> <span>Пробный запуск (dry run) <span class="tip" title="Имитирует поиск без реальных откликов. Удобно для проверки фильтров">?</span></span></label>
+                    </div>
+                </div>
+
+                <!-- Гео (скрытая секция) -->
+                <details class="card">
+                    <summary class="section-title cursor-pointer select-none">&#128205; Гео-фильтры <span class="text-gray-400 font-normal text-xs ml-1">(ограничение по координатам)</span></summary>
+                    <p class="text-xs text-gray-400 mt-2 mb-3">Ограничить поиск прямоугольником на карте. Координаты в формате WGS84 (десятичные градусы).</p>
+                    <div class="form-grid-3">
+                        <div class="form-group"><label>Верхняя широта</label><input type="number" step="any" data-param="top_lat" placeholder="56.0"></div>
+                        <div class="form-group"><label>Нижняя широта</label><input type="number" step="any" data-param="bottom_lat" placeholder="55.0"></div>
+                        <div class="form-group"><label>Левая долгота</label><input type="number" step="any" data-param="left_lng" placeholder="37.0"></div>
+                        <div class="form-group"><label>Правая долгота</label><input type="number" step="any" data-param="right_lng" placeholder="38.0"></div>
+                        <div class="form-group"><label>Точка сортировки (lat)</label><input type="number" step="any" data-param="sort_point_lat"></div>
+                        <div class="form-group"><label>Точка сортировки (lng)</label><input type="number" step="any" data-param="sort_point_lng"></div>
+                    </div>
+                </details>
+
+                <!-- Прогресс -->
+                <div id="progress-section" class="card hidden">
+                    <h3 class="section-title">Прогресс выполнения</h3>
+                    <div class="progress-bar mb-2">
+                        <div id="progress-fill" class="progress-bar-fill" style="width:0%"></div>
+                    </div>
+                    <div id="progress-text" class="text-xs text-gray-500 mb-2"></div>
+                    <div id="progress-log" class="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs font-mono max-h-64 overflow-y-auto"></div>
+                </div>
+
+                <!-- Кнопки запуска -->
+                <div class="flex gap-3 pb-2">
+                    <button type="button" id="btn-start" onclick="startApply()" class="btn-primary">
+                        &#9654; Запустить поиск и отклики
+                    </button>
+                    <button type="button" id="btn-stop" onclick="cancelApply()" class="btn-danger hidden">
+                        &#9632; Остановить
+                    </button>
+                </div>
+
+            </form>
+        </div>
+
+        <!-- ===== Резюме ===== -->
+        <div id="resumes" class="section p-6">
+            <h2 class="page-title">Мои резюме</h2>
+            <div id="resumes-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="card text-center text-gray-400 text-sm col-span-2">Загрузка...</div>
+            </div>
+        </div>
+
+        <!-- ===== Отклики ===== -->
+        <div id="negotiations" class="section p-6">
+            <div class="flex items-center justify-between mb-5">
+                <h2 class="page-title mb-0">Отклики</h2>
+                <div class="flex items-center gap-3">
+                    <select id="neg-status-filter" onchange="loadNegotiations()" class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:border-blue-400">
+                        <option value="">Все статусы</option>
+                        <option value="active" selected>Активные</option>
+                        <option value="response">Получен ответ</option>
+                        <option value="invitation">Приглашение</option>
+                        <option value="discard">Отказ</option>
+                    </select>
+                    <button onclick="refreshNegotiations()" class="btn-sm btn-secondary">&#8635; Синхронизировать с hh.ru</button>
+                </div>
+            </div>
+            <div class="card p-0 overflow-hidden">
+                <table class="data-table w-full">
+                    <thead><tr><th>Дата</th><th>Вакансия</th><th>Работодатель</th><th>Статус</th></tr></thead>
+                    <tbody id="negotiations-tbody">
+                        <tr><td colspan="4" class="text-center py-8 text-gray-400 text-sm">Загрузка...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ===== Статистика ===== -->
+        <div id="statistics" class="section p-6">
+            <h2 class="page-title">Статистика</h2>
+            <div id="stats-cards" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div class="card">
+                    <h3 class="section-title">Пропущено по причинам</h3>
+                    <div id="stats-skipped-bars"></div>
+                </div>
+                <div class="card">
+                    <h3 class="section-title">Активность за 30 дней</h3>
+                    <div id="stats-daily-table" class="overflow-y-auto" style="max-height:18rem;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Настройки ===== -->
+        <div id="settings" class="section p-6">
+            <h2 class="page-title">Настройки</h2>
+            <div id="config-fields" class="max-w-3xl space-y-5">
+
+                <!-- AI для сопроводительных писем -->
+                <fieldset class="config-section">
+                    <legend>AI для сопроводительных писем</legend>
+                    <p class="field-hint mb-3">
+                        Поддерживается любой <strong>OpenAI-совместимый API</strong>: OpenAI, OpenRouter, Ollama, Mistral и другие.
+                        Укажите эндпоинт и API ключ вашего провайдера.
+                    </p>
+                    <div class="form-grid-2">
+                        <div class="form-group md:col-span-2">
+                            <label>API ключ <span class="tip" data-tip="Ключ от вашего AI-провайдера.&#10;OpenAI: sk-...&#10;OpenRouter: sk-or-...&#10;Ollama: любое значение (например «ollama»)&#10;Оставьте пустым — текущий ключ не изменится.">?</span></label>
+                            <input type="password" data-config-key="openai_cover_letter.api_key" data-config-secret="true"
+                                   autocomplete="new-password" placeholder="Введите новый ключ (пустое поле — не менять)">
+                        </div>
+                        <div class="form-group">
+                            <label>Эндпоинт API <span class="tip" data-tip="URL API провайдера:&#10;OpenAI: https://api.openai.com/v1&#10;OpenRouter: https://openrouter.ai/api/v1&#10;Ollama: http://localhost:11434/v1">?</span></label>
+                            <input type="text" data-config-key="openai_cover_letter.base_url"
+                                   placeholder="https://api.openai.com/v1">
+                        </div>
+                        <div class="form-group">
+                            <label>Модель <span class="tip" data-tip="Название модели у провайдера.&#10;Примеры: gpt-4o-mini, gpt-4o, claude-3-haiku,&#10;mistralai/mistral-7b-instruct">?</span></label>
+                            <input type="text" data-config-key="openai_cover_letter.model"
+                                   placeholder="gpt-4o-mini">
+                        </div>
+                    </div>
+                </fieldset>
+
+                <!-- AI для фильтрации вакансий -->
+                <fieldset class="config-section">
+                    <legend>AI для фильтрации вакансий</legend>
+                    <p class="field-hint mb-3">
+                        Используется в режиме «AI-фильтр» на вкладке Поиск вакансий. Можно использовать тот же провайдер, что и для писем.
+                    </p>
+                    <div class="form-grid-2">
+                        <div class="form-group md:col-span-2">
+                            <label>API ключ <span class="tip" data-tip="Оставьте пустым — текущий ключ не изменится.">?</span></label>
+                            <input type="password" data-config-key="openai_vacancy_filter.api_key" data-config-secret="true"
+                                   autocomplete="new-password" placeholder="Введите новый ключ (пустое поле — не менять)">
+                        </div>
+                        <div class="form-group">
+                            <label>Эндпоинт API</label>
+                            <input type="text" data-config-key="openai_vacancy_filter.base_url"
+                                   placeholder="https://api.openai.com/v1">
+                        </div>
+                        <div class="form-group">
+                            <label>Модель</label>
+                            <input type="text" data-config-key="openai_vacancy_filter.model"
+                                   placeholder="gpt-4o-mini">
+                        </div>
+                    </div>
+                </fieldset>
+
+                <!-- Прокси -->
+                <fieldset class="config-section">
+                    <legend>Прокси</legend>
+                    <div class="form-group">
+                        <label>URL прокси <span class="tip" data-tip="Прокси для запросов к hh.ru.&#10;Форматы:&#10;socks5://user:pass@host:1080&#10;http://user:pass@host:8080&#10;Оставьте пустым — не использовать прокси.">?</span></label>
+                        <input type="text" data-config-key="proxy_url" data-config-secret="true"
+                               placeholder="socks5://user:pass@host:1080">
+                    </div>
+                </fieldset>
+
+                <!-- SMTP -->
+                <fieldset class="config-section">
+                    <legend>Отправка писем (SMTP)</legend>
+                    <p class="field-hint mb-3">Нужно если включена опция «Отправлять email работодателю».</p>
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label>Хост</label>
+                            <input type="text" data-config-key="smtp.host" placeholder="smtp.gmail.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Порт</label>
+                            <input type="number" data-config-key="smtp.port" placeholder="587">
+                        </div>
+                        <div class="form-group">
+                            <label>Пользователь</label>
+                            <input type="text" data-config-key="smtp.user" placeholder="you@gmail.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Пароль <span class="tip" data-tip="Оставьте пустым — текущий пароль не изменится.">?</span></label>
+                            <input type="password" data-config-key="smtp.password" data-config-secret="true"
+                                   autocomplete="new-password" placeholder="Введите новый пароль (пустое — не менять)">
+                        </div>
+                        <div class="form-group col-span-2">
+                            <div class="checkbox-group">
+                                <label class="checkbox-item">
+                                    <input type="checkbox" data-config-key="smtp.ssl" data-config-type="boolean">
+                                    <span>SSL <span class="tip" data-tip="Включить SSL/TLS соединение (обычно порт 465)">?</span></span>
+                                </label>
+                                <label class="checkbox-item">
+                                    <input type="checkbox" data-config-key="smtp.starttls" data-config-type="boolean">
+                                    <span>STARTTLS <span class="tip" data-tip="Включить STARTTLS (обычно порт 587, рекомендуется)">?</span></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </fieldset>
+
+                <button onclick="saveConfig()" class="btn-primary">Сохранить изменения</button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
