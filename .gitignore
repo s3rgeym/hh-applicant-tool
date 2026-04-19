@@ -73,18 +73,6 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# VS Code
-.vscode/
-
-# Docker
-docker/
-
-# ZED
-.zed/
-
-# Vim
-.vim/
-
 # Содержимое config кроме .gitkeep игнорируется
 /config/*
 !/config/.gitkeep
