@@ -7,7 +7,7 @@ class HHOnlyCookieJar(MozillaCookieJar):
 
     def set_cookie(self, cookie: Cookie):
         # Регулярное выражение для проверки доменов hh.ru, hh.kz, hh.uz и т.д.
-        pattern = r"(\.|^)hh\.(ru|kz|uz|ua|by|net|com)[.]?$"
+        pattern = r"(\.|^)hh\.(ru|kz|uz|by|net|com)[.]?$"
 
         if re.search(pattern, cookie.domain):
             super().set_cookie(cookie)
