@@ -3,7 +3,7 @@
 > [!NOTE]
 > Ищу почасовую или проектную [@feedback_s3rgeym_bot](https://t.me/feedback_s3rgeym_bot) (Python, Vue.js, DevOps). Не пишите туда с вопросами по утилите. Для них есть канал!!!
 
-> [!NOTICE]
+> [!IMPORTANT]
 > Прежде чем задавать долбоебские вопросы, прочитай весь текст ниже.
 
 > [!WARNING]
