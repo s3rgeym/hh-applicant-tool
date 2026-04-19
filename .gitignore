@@ -97,3 +97,4 @@ CLAUDE.md
 .serena/
 .codex/
 uv.lock
+poetry.lock
