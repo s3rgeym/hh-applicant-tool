@@ -711,11 +711,17 @@ class Operation(BaseOperation):
         seen_employers = set()
 
         for resume in resumes:
-            self._apply_resume(
+            limit_reached = self._apply_resume(
                 resume=resume,
                 user=me,
                 seen_employers=seen_employers,
             )
+            if limit_reached:
+                logger.warning(
+                    "Лимит откликов hh.ru исчерпан. Пропускаю оставшиеся резюме."
+                )
+                print("⛔ Лимит откликов hh.ru исчерпан. Попробуйте позже.")
+                break
 
         # Синхронизация откликов
         # for neg in self.tool.get_negotiations():
@@ -731,13 +737,15 @@ class Operation(BaseOperation):
         resume: datatypes.Resume,
         user: datatypes.User,
         seen_employers: set[str],
-    ) -> None:
+    ) -> bool:
         logger.info(
             "Начинаю рассылку откликов для резюме: %s (%s)",
             resume["alternate_url"],
             resume["title"],
         )
         print("🚀 Начинаю рассылку откликов для резюме:", resume["title"])
+        applied_count = 0
+        limit_reached = False
 
         placeholders = {
             "first_name": user.get("first_name") or "",
@@ -1004,6 +1012,7 @@ class Operation(BaseOperation):
                                 letter=letter,
                             )
                             if result.get("success") == "true":
+                                applied_count += 1
                                 print(
                                     "📨 Отправили отклик на вакансию с тестом",
                                     vacancy["alternate_url"],
@@ -1013,7 +1022,12 @@ class Operation(BaseOperation):
 
                                 if err == "negotiations-limit-exceeded":
                                     do_apply = False
-                                    logger.warning("Достигли лимита на отклики")
+                                    limit_reached = True
+                                    logger.warning(
+                                        "Достигли лимита на отклики (отправлено в этой сессии: %d)",
+                                        applied_count,
+                                    )
+                                    break
                                 else:
                                     logger.error(
                                         f"Произошла ошибка при отклике на вакансию с тестом: {vacancy['alternate_url']} - {err}"
@@ -1036,6 +1050,7 @@ class Operation(BaseOperation):
                                 delay=random.uniform(1, 3),
                             )
                             assert res == {}
+                            applied_count += 1
                             print(
                                 "📨 Отправили отклик на вакансию",
                                 vacancy["alternate_url"],
@@ -1059,6 +1074,7 @@ class Operation(BaseOperation):
                                         delay=random.uniform(1, 3),
                                     )
                                     assert res == {}
+                                    applied_count += 1
                                     print(
                                         "📨 Отправили отклик на вакансию после капчи",
                                         vacancy["alternate_url"],
@@ -1104,18 +1120,27 @@ class Operation(BaseOperation):
                             logger.error(f"Ошибка отправки письма: {ex}")
             except LimitExceeded:
                 do_apply = False
-                logger.warning("Достигли лимита на отклики")
+                limit_reached = True
+                logger.warning(
+                    "Достигли лимита на отклики (отправлено в этой сессии: %d)",
+                    applied_count,
+                )
+                break
             except ApiError as ex:
                 logger.warning(ex)
             except (BadResponse, AIError) as ex:
                 logger.error(ex)
 
         logger.info(
-            "Закончили рассылку откликов для резюме: %s (%s)",
+            "Закончили рассылку откликов для резюме: %s (%s). Отправлено: %d",
             resume["alternate_url"],
             resume["title"],
+            applied_count,
         )
-        print("✅️ Закончили рассылку откликов для резюме:", resume["title"])
+        print(
+            f"✅️ Закончили рассылку для резюме: {resume['title']}. Отправлено: {applied_count}"
+        )
+        return limit_reached
 
     def _send_email(self, to: str, subject: str, body: str) -> None:
         cfg = self.tool.config.get("smtp", {})

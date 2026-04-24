@@ -80,16 +80,20 @@ class Api:
         self._window = None
         self._presets = PresetsManager(tool.storage.settings)
         self._cancel_event: threading.Event | None = None
+        self._is_running: bool = False
 
     def set_window(self, window) -> None:
         self._window = window
 
     def _send_progress(self, current: int, total: int, message: str = "") -> None:
         if self._window:
-            safe_msg = json.dumps(message)
-            self._window.evaluate_js(
-                f"updateProgress({current}, {total}, {safe_msg})"
-            )
+            try:
+                safe_msg = json.dumps(message)
+                self._window.evaluate_js(
+                    f"updateProgress({current}, {total}, {safe_msg})"
+                )
+            except Exception:
+                pass
 
     def get_status(self) -> dict[str, Any]:
         try:
@@ -244,6 +248,10 @@ class Api:
             return {}
 
     def apply_vacancies(self, params: dict[str, Any]) -> dict[str, Any]:
+        if self._is_running:
+            return {"status": "error", "message": "Операция уже выполняется"}
+        self._is_running = True
+
         self._presets.save_last_used(params)
 
         cancel_event = threading.Event()
@@ -263,6 +271,14 @@ class Api:
 
         try:
             from ..operations.apply_vacancies import Namespace, Operation
+
+            params = dict(params)
+            api_delay = params.pop("api_delay", None)
+            if api_delay is not None:
+                try:
+                    self._tool.api_client.delay = float(api_delay)
+                except (ValueError, TypeError):
+                    pass
 
             argv = self._params_to_argv(params)
             op = Operation()
@@ -293,10 +309,12 @@ class Api:
         finally:
             pkg_logger.removeHandler(handler)
             self._cancel_event = None
+            self._is_running = False
 
     def cancel_apply(self) -> None:
-        if self._cancel_event is not None:
-            self._cancel_event.set()
+        event = self._cancel_event
+        if event is not None:
+            event.set()
 
     @staticmethod
     def _params_to_argv(params: dict[str, Any]) -> list[str]:
@@ -311,7 +329,13 @@ class Api:
                 argv.append(flag)
             elif isinstance(value, list):
                 argv.append(flag)
-                argv.extend(str(item) for item in value)
+                for item in value:
+                    if isinstance(item, dict):
+                        argv.append(str(item.get("id", "")))
+                    else:
+                        argv.append(str(item))
+            elif isinstance(value, float) and value == int(value):
+                argv.extend([flag, str(int(value))])
             else:
                 argv.extend([flag, str(value)])
         return argv
