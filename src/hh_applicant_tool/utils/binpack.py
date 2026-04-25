@@ -3,12 +3,20 @@
 # и ключи любого типа в Map
 from __future__ import annotations
 
-import gzip
 import io
 import struct
-import zlib
 from datetime import datetime
 from typing import Any, Callable, Final
+
+try:
+    import gzip
+except ImportError:
+    gzip = None
+
+try:
+    import zlib
+except ImportError:
+    zlib = None
 
 # ---- Constants ----
 
@@ -51,13 +59,13 @@ def gzip_decompress(data: bytes) -> bytes:
 
 
 COMPRESSORS: dict[int, Callable[[bytes], bytes]] = {
-    COMP_ZLIB: zlib.compress,
+    COMP_ZLIB: lambda d: zlib.compress(d),
     COMP_GZIP: gzip_compress,
     COMP_NONE: lambda d: d,
 }
 
 DECOMPRESSORS: dict[int, Callable[[bytes], bytes]] = {
-    COMP_ZLIB: zlib.decompress,
+    COMP_ZLIB: lambda d: zlib.decompress(d),
     COMP_GZIP: gzip_decompress,
     COMP_NONE: lambda d: d,
 }
