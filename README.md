@@ -1004,7 +1004,7 @@ hh-applicant-tool settings disable_version_check true
 ## Связанные проекты
 
 - [Приложение под Android](https://github.com/s3rgeym/hh-resume-automate)
-- [Простенький отклик только рассылающий отклики](https://github.com/s3rgeym/hh-auto-apply)
+- [Простенький скрипт только рассылающий отклики](https://github.com/s3rgeym/hh-auto-apply)
 
 ---
 
