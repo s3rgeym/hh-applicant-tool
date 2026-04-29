@@ -31,15 +31,32 @@
         <!-- ===== Главная ===== -->
         <div id="dashboard" class="section active p-6">
             <h2 class="page-title">Главная</h2>
-            <div class="card max-w-sm">
+            <div class="card max-w-md">
                 <div class="flex items-center gap-3 mb-4">
                     <span id="status-dot" class="status-dot offline"></span>
-                    <div>
+                    <div class="flex-1">
                         <div id="status-text" class="text-sm font-semibold">Проверка...</div>
                         <div id="user-name" class="text-xs text-gray-500">—</div>
                     </div>
                 </div>
-                <p class="text-xs text-gray-400">Для работы необходима авторизация через hh.ru.<br>Запустите <code class="bg-gray-100 px-1 rounded">hh-applicant-tool authorize</code> в терминале.</p>
+                <div id="auth-error" class="text-xs text-red-500 mb-3 hidden"></div>
+                <div id="auth-hint" class="text-xs text-gray-500 mb-3">
+                    Авторизация через hh.ru открывается в окне браузера. После входа окно закроется автоматически.
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button id="btn-login" type="button" onclick="startLogin()" class="btn-primary hidden">
+                        Войти через hh.ru
+                    </button>
+                    <button id="btn-relogin" type="button" onclick="startLogin()" class="btn-secondary hidden">
+                        Сменить аккаунт
+                    </button>
+                    <button id="btn-logout" type="button" onclick="logout()" class="btn-danger hidden">
+                        Выйти
+                    </button>
+                    <button id="btn-refresh-status" type="button" onclick="loadDashboard()" class="btn-secondary hidden">
+                        Проверить ещё раз
+                    </button>
+                </div>
             </div>
         </div>
 
