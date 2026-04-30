@@ -27,25 +27,153 @@ function showToast(message, type = 'info') {
     setTimeout(() => toast.classList.remove('show'), 3500);
 }
 
+let _authInProgress = false;
+
+function _setAuthButtons({ authorized, authRunning }) {
+    const btnLogin = document.getElementById('btn-login');
+    const btnRelogin = document.getElementById('btn-relogin');
+    const btnLogout = document.getElementById('btn-logout');
+    const btnRefresh = document.getElementById('btn-refresh-status');
+
+    [btnLogin, btnRelogin, btnLogout, btnRefresh].forEach(b => b && b.classList.add('hidden'));
+    if (authRunning) {
+        if (btnRefresh) btnRefresh.classList.remove('hidden');
+        return;
+    }
+    if (authorized) {
+        if (btnRelogin) btnRelogin.classList.remove('hidden');
+        if (btnLogout) btnLogout.classList.remove('hidden');
+    } else {
+        if (btnLogin) btnLogin.classList.remove('hidden');
+    }
+}
+
+function _renderAuthError(reason, errMsg) {
+    const errEl = document.getElementById('auth-error');
+    if (!errEl) return;
+    if (!reason || reason === 'no_token') {
+        errEl.classList.add('hidden');
+        errEl.textContent = '';
+        return;
+    }
+    let text = '';
+    if (reason === 'token_invalid') {
+        text = 'Сохранённый токен недействителен и был удалён. Войдите заново.';
+    } else if (reason === 'error') {
+        text = 'Ошибка проверки авторизации: ' + (errMsg || 'неизвестная');
+    }
+    if (text) {
+        errEl.textContent = text;
+        errEl.classList.remove('hidden');
+    } else {
+        errEl.classList.add('hidden');
+    }
+}
+
 async function loadDashboard() {
+    const dot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const userName = document.getElementById('user-name');
+
     try {
         const status = await pywebview.api.get_status();
-        const dot = document.getElementById('status-dot');
-        const statusText = document.getElementById('status-text');
-        const userName = document.getElementById('user-name');
+        _authInProgress = !!status.auth_running;
+
+        if (status.auth_running) {
+            dot.className = 'status-dot offline';
+            statusText.textContent = 'Авторизация...';
+            userName.textContent = 'Войдите в окне браузера';
+            _renderAuthError(null);
+            _setAuthButtons({ authorized: false, authRunning: true });
+            return;
+        }
 
         if (status.authorized) {
             dot.className = 'status-dot online';
             statusText.textContent = 'Авторизован';
             const u = status.user;
             userName.textContent = [u.last_name, u.first_name].filter(Boolean).join(' ') || 'Пользователь';
+            _renderAuthError(null);
+            _setAuthButtons({ authorized: true, authRunning: false });
         } else {
             dot.className = 'status-dot offline';
             statusText.textContent = 'Не авторизован';
-            userName.textContent = 'Запустите authorize в терминале';
+            userName.textContent = 'Войдите через hh.ru';
+            _renderAuthError(status.reason, status.error);
+            _setAuthButtons({ authorized: false, authRunning: false });
         }
     } catch (e) {
         console.error('loadDashboard error:', e);
+        if (statusText) statusText.textContent = 'Не удалось проверить статус';
+        _setAuthButtons({ authorized: false, authRunning: false });
+    }
+}
+
+async function startLogin() {
+    if (_authInProgress) {
+        showToast('Авторизация уже выполняется', 'info');
+        return;
+    }
+    _authInProgress = true;
+    _setAuthButtons({ authorized: false, authRunning: true });
+    const statusText = document.getElementById('status-text');
+    const userName = document.getElementById('user-name');
+    if (statusText) statusText.textContent = 'Запуск браузера...';
+    if (userName) userName.textContent = 'Войдите в hh.ru в открывшемся окне';
+
+    try {
+        const result = await pywebview.api.start_login();
+        if (result.status !== 'started') {
+            _authInProgress = false;
+            showToast(result.message || 'Не удалось запустить авторизацию', 'error');
+            const errEl = document.getElementById('auth-error');
+            if (errEl && result.message) {
+                errEl.textContent = result.message;
+                errEl.classList.remove('hidden');
+            }
+            await loadDashboard();
+        }
+    } catch (e) {
+        _authInProgress = false;
+        showToast('Ошибка запуска авторизации', 'error');
+        await loadDashboard();
+    }
+}
+
+async function logout() {
+    if (!confirm('Выйти из аккаунта? Токен будет удалён.')) return;
+    try {
+        await pywebview.api.logout();
+        showToast('Вы вышли из аккаунта', 'info');
+    } catch (e) {
+        showToast('Ошибка выхода', 'error');
+    }
+    await loadDashboard();
+    await loadResumes();
+}
+
+function onAuthEvent(event, message) {
+    if (event === 'started') {
+        _authInProgress = true;
+        const statusText = document.getElementById('status-text');
+        const userName = document.getElementById('user-name');
+        if (statusText) statusText.textContent = 'Авторизация...';
+        if (userName) userName.textContent = message || 'Войдите в hh.ru в открывшемся окне';
+        _setAuthButtons({ authorized: false, authRunning: true });
+    } else if (event === 'done') {
+        _authInProgress = false;
+        showToast(message || 'Авторизация прошла успешно', 'success');
+        loadDashboard();
+        loadResumes();
+    } else if (event === 'error') {
+        _authInProgress = false;
+        showToast(message || 'Ошибка авторизации', 'error');
+        const errEl = document.getElementById('auth-error');
+        if (errEl) {
+            errEl.textContent = message || 'Ошибка авторизации';
+            errEl.classList.remove('hidden');
+        }
+        loadDashboard();
     }
 }
 

@@ -81,6 +81,8 @@ class Api:
         self._presets = PresetsManager(tool.storage.settings)
         self._cancel_event: threading.Event | None = None
         self._is_running: bool = False
+        self._auth_running: bool = False
+        self._auth_thread: threading.Thread | None = None
 
     def set_window(self, window) -> None:
         self._window = window
@@ -95,19 +97,124 @@ class Api:
             except Exception:
                 pass
 
+    def _send_auth_event(self, event: str, message: str = "") -> None:
+        if self._window:
+            try:
+                safe_event = json.dumps(event)
+                safe_msg = json.dumps(message)
+                self._window.evaluate_js(
+                    f"onAuthEvent({safe_event}, {safe_msg})"
+                )
+            except Exception:
+                pass
+
+    def _is_invalid_grant(self, exc: BaseException) -> bool:
+        msg = str(exc).lower()
+        return "invalid_grant" in msg or "token has already been refreshed" in msg
+
+    def _clear_token(self) -> None:
+        try:
+            self._tool.config.save(token={})
+        except Exception as e:
+            logger.warning("clear_token config error: %s", e)
+        try:
+            client = self._tool.api_client
+            client.access_token = None
+            client.refresh_token = None
+            client.access_expires_at = 0
+        except Exception as e:
+            logger.warning("clear_token client error: %s", e)
+
     def get_status(self) -> dict[str, Any]:
+        if self._auth_running:
+            return {"authorized": False, "user": None, "auth_running": True}
+        client = self._tool.api_client
+        if not client.access_token and not client.refresh_token:
+            return {"authorized": False, "user": None, "reason": "no_token"}
         try:
             user = self._tool.get_me()
             return {"authorized": True, "user": user}
         except Exception as e:
             logger.warning("get_status error: %s", e)
-            return {"authorized": False, "user": None}
+            reason = "error"
+            if self._is_invalid_grant(e):
+                self._clear_token()
+                reason = "token_invalid"
+            return {
+                "authorized": False,
+                "user": None,
+                "reason": reason,
+                "error": str(e),
+            }
+
+    def start_login(self) -> dict[str, Any]:
+        if self._auth_running:
+            return {"status": "error", "message": "Авторизация уже выполняется"}
+        try:
+            import playwright  # noqa: F401
+        except ImportError:
+            return {
+                "status": "error",
+                "message": (
+                    "Не установлен Playwright. Выполните в терминале:\n\n"
+                    "  pip install 'hh-applicant-tool[playwright]'\n"
+                    "  playwright install chromium"
+                ),
+            }
+
+        self._auth_running = True
+        self._clear_token()
+        self._send_auth_event("started", "Запуск браузера для входа на hh.ru...")
+
+        def _worker() -> None:
+            event = "error"
+            message = "Ошибка авторизации"
+            try:
+                from ..operations.authorize import Operation as AuthOp
+
+                op = AuthOp()
+                parser = argparse.ArgumentParser()
+                op.setup_parser(parser)
+                args = parser.parse_args(["--no-headless", "--manual"])
+                op.run(self._tool, args)
+
+                if self._tool.api_client.access_token:
+                    self._tool.save_token()
+                    event = "done"
+                    message = "Авторизация прошла успешно"
+                else:
+                    message = (
+                        "Авторизация не завершена. Окно браузера было закрыто."
+                    )
+            except Exception as e:
+                logger.error("start_login worker error: %s", e)
+                detail = str(e) or e.__class__.__name__
+                message = f"Ошибка авторизации: {detail}"
+            finally:
+                self._auth_running = False
+                self._send_auth_event(event, message)
+
+        thread = threading.Thread(target=_worker, daemon=True)
+        self._auth_thread = thread
+        thread.start()
+        return {"status": "started"}
+
+    def logout(self) -> dict[str, Any]:
+        self._clear_token()
+        return {"status": "ok"}
 
     def get_resumes(self) -> list[dict]:
+        client = self._tool.api_client
+        if not client.access_token and not client.refresh_token:
+            return []
         try:
             return self._tool.get_resumes()
         except Exception as e:
-            logger.error("get_resumes error: %s", e)
+            if self._is_invalid_grant(e):
+                self._clear_token()
+                logger.warning("get_resumes invalid_grant: cleared token")
+            else:
+                logger.error("get_resumes error: %s", e)
             return []
 
     def get_config(self) -> dict[str, Any]:
