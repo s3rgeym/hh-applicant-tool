@@ -156,6 +156,7 @@ class ChatOpenAI:
 
         raise OpenAIError("OpenAI request failed after retries")
 
+    # Этому методу тут не место. Мы решаем капчу hh.ru, а тут методы для OpenAI
     def solve_captcha(self, image_data: bytes) -> str:
         image_base64 = base64.b64encode(image_data).decode("utf-8")
 
