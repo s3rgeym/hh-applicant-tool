@@ -45,8 +45,8 @@ COPY --chmod=755 crontab startup.sh .
 # он начинает новую сессию, где тот же $CONFIG_DIR пуст
 CMD printenv | grep -E 'CONFIG_DIR|HH_PROFILE_ID' >> /etc/environment && \
     chown -R docker:docker ./config && \
-    dos2unix ./crontab && \
-    crontab -u docker ./crontab && \
+    dos2unix -n ./crontab /tmp/crontab && \
+    crontab -u docker /tmp/crontab && \
     cron && \
     tail -f /var/log/cron.log
 
