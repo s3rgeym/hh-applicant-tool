@@ -6,7 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - .:/app
+      - .:/app:ro
+      - ./config:/app/config:rw
       # Пробрасываем таймзону хоста
       - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
