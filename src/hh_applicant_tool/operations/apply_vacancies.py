@@ -17,7 +17,6 @@ from urllib.parse import urlparse
 
 import requests
 
-from .. import utils
 from ..ai.base import AIError
 from ..api import BadResponse, Redirect, datatypes
 from ..api.datatypes import PaginatedItems, SearchVacancy
@@ -789,7 +788,10 @@ class Operation(BaseOperation):
                 self.vacancy_filter_ai.rate_limit = self.args.ai_rate_limit
 
         for vacancy in self._get_vacancies(resume_id=resume["id"]):
-            if getattr(self, '_cancel_event', None) and self._cancel_event.is_set():
+            if (
+                getattr(self, "_cancel_event", None)
+                and self._cancel_event.is_set()
+            ):
                 logger.info("Операция отменена пользователем")
                 break
             try:
@@ -1156,19 +1158,16 @@ class Operation(BaseOperation):
     def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData:
         """Парсит тесты"""
         r = self.tool.session.get(response_url)
-
         tests_marker = ',"vacancyTests":'
-        start_tests = r.text.find(tests_marker)
-        end_tests = r.text.find(',"counters":', start_tests)
 
-        if -1 in (start_tests, end_tests):
+        if -1 == (tests_start_pos := r.text.find(tests_marker)):
             raise ValueError("tests not found.")
 
         try:
-            return utils.json.loads(
-                r.text[start_tests + len(tests_marker) : end_tests],
-                strict=False,
+            res, _ = self.json_decoder.raw_decode(
+                r.text, tests_start_pos + len(tests_marker)
             )
+            return res
         except json.JSONDecodeError as ex:
             raise ValueError("Не могу распарсить vacancyTests.") from ex
 
