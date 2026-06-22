@@ -33,7 +33,10 @@ class Operation(BaseOperation):
 
     # Селекторы
     SEL_LOGIN_INPUT = 'input[data-qa="login-input-username"]'
-    SEL_EXPAND_PASSWORD = 'button[data-qa="expand-login-by_password"]'
+    SEL_EXPAND_PASSWORD = (
+        'button[data-qa="expand-login-by_password"], '
+        'button[data-qa="account-login-submit-by-password"]'
+    )
     SEL_PASSWORD_INPUT = 'input[data-qa="login-input-password"]'
     SEL_CODE_CONTAINER = 'div[data-qa="account-login-code-input"]'
     SEL_PIN_CODE_INPUT = 'input[data-qa="magritte-pincode-input-field"]'
