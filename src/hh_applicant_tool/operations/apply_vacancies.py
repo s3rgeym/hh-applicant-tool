@@ -1104,14 +1104,13 @@ class Operation(BaseOperation):
                         mail_subject = rand_text(
                             self.tool.config.get("apply_mail_subject")
                             or "{Отклик|Резюме} на вакансию %(vacancy_name)s"
-                        )
+                        ) % message_placeholders
                         mail_body = unescape_string(
                             rand_text(
                                 self.tool.config.get("apply_mail_body")
                                 or "{Здравствуйте|Добрый день}, {прошу рассмотреть|пожалуйста рассмотрите} мое резюме %(resume_url)s на вакансию %(vacancy_name)s."
-                                % message_placeholders
                             )
-                        )
+                        ) % message_placeholders
                         try:
                             self._send_email(mail_to, mail_subject, mail_body)
                             print(
