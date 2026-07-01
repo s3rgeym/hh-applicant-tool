@@ -46,6 +46,7 @@ COPY --chmod=755 crontab startup.sh .
 CMD printenv | grep -E 'CONFIG_DIR|HH_PROFILE_ID' >> /etc/environment && \
     chown -R docker:docker ./config && \
     dos2unix -n ./crontab /tmp/crontab && \
+    dos2unix -n ./apply.sh /tmp/apply.sh && \
     crontab -u docker /tmp/crontab && \
     cron && \
     tail -f /var/log/cron.log

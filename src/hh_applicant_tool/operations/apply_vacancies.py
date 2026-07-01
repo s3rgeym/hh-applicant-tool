@@ -52,6 +52,7 @@ class Namespace(BaseNamespace):
     order_by: str
     search: str
     schedule: str
+    work_format: list[str] | None
     dry_run: bool
     # Пошли доп фильтры, которых не было
     experience: str
@@ -211,6 +212,11 @@ class Operation(BaseOperation):
             type=str,
         )
         api_search_filters.add_argument(
+            "--work-format",
+            nargs="+",
+            help="Формат работы (REMOTE, HYBRID, ON_SITE, FIELD_WORK)",
+        )
+        api_search_filters.add_argument(
             "--employment", nargs="+", help="Тип занятости"
         )
         api_search_filters.add_argument(
@@ -344,6 +350,7 @@ class Operation(BaseOperation):
         self.right_lng = args.right_lng
         self.salary = args.salary
         self.schedule = args.schedule
+        self.work_format = args.work_format
         self.search = args.search
         self.search_field = args.search_field
         self.sort_point_lat = args.sort_point_lat
@@ -1364,6 +1371,8 @@ class Operation(BaseOperation):
             params["text"] = self.search
         if self.schedule:
             params["schedule"] = self.schedule
+        if self.work_format:
+            params["work_format"] = list(self.work_format)
         if self.experience:
             params["experience"] = self.experience
         if self.currency:
@@ -1476,9 +1485,18 @@ class Operation(BaseOperation):
         r = self.tool.session.get("https://hh.ru/vacancy/" + vacancy["id"])
         r.raise_for_status()
 
-        description, _ = self.json_decoder.raw_decode(
-            re.search(r'"description": (.*)', r.text).group(1)
-        )
+        # На странице вакансии поле description иногда встречается в двух
+        # вариантах верстки: `"description": "..."` и `"description":"..."`
+        # (без пробела после двоеточия) — учитываем оба.
+        description_match = re.search(r'"description":\s*(.*)', r.text)
+        if not description_match:
+            logger.warning(
+                "Не удалось найти описание вакансии на странице: %s",
+                vacancy["alternate_url"],
+            )
+            return False
+
+        description, _ = self.json_decoder.raw_decode(description_match.group(1))
         description = strip_tags(description)
         logger.debug(description[:2047])
         return bool(excluded_pat.search(description))
