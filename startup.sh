@@ -7,6 +7,8 @@ echo "[$(date)] Running startup tasks..."
 # Выполняем цепочку
 /usr/local/bin/python -m hh_applicant_tool refresh-token
 /usr/local/bin/python -m hh_applicant_tool update-resumes
-/usr/local/bin/python -m hh_applicant_tool apply-vacancies
+# Раскомментируй, если нужно сразу рассылать отклики при старте контейнера
+# Вынесено в отдельный скрипт, т.к. аргументы запуска не влезают в строку crontab
+# /bin/bash /tmp/apply.sh
 
 echo "[$(date)] Startup tasks finished."
