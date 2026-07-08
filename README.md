@@ -1,6 +1,9 @@
 # HH Applicant Tool
 
 > [!NOTE]
+> [Группа поддержки в Телеграме (для всех моих утилит и просто для общения)](https://t.me/s3rgeym_chat)
+
+> [!NOTE]
 > Ищу почасовую или проектную [@feedback_s3rgeym_bot](https://t.me/feedback_s3rgeym_bot) (Python, Vue.js, DevOps). Не пишите туда с вопросами по утилите. Для них есть канал!!!
 
 > [!IMPORTANT]
