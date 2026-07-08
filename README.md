@@ -1,5 +1,4 @@
 # HH Applicant Tool
-
 > [!IMPORTANT]
 > [Группа поддержки в Телеграме (для всех моих утилит и просто для общения)](https://t.me/s3rgeym_chat)
 
