@@ -33,7 +33,7 @@ class Operation(BaseOperation):
 
     # Селекторы
     SEL_LOGIN_INPUT = 'input[data-qa="login-input-username"]'
-    SEL_EXPAND_PASSWORD = 'button[data-qa="expand-login-by_password"]'
+    SEL_EXPAND_PASSWORD = 'button[data-qa="account-login-submit-by-password"]'
     SEL_PASSWORD_INPUT = 'input[data-qa="login-input-password"]'
     SEL_CODE_CONTAINER = 'div[data-qa="account-login-code-input"]'
     SEL_PIN_CODE_INPUT = 'input[data-qa="magritte-pincode-input-field"]'
@@ -152,7 +152,7 @@ class Operation(BaseOperation):
                 )
                 await page.goto(
                     api_client.oauth_client.authorize_url,
-                    timeout=30000,
+                    timeout=60000,
                     wait_until="load",
                 )
 
