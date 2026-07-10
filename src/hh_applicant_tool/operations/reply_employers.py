@@ -164,10 +164,11 @@ class Operation(BaseOperation):
                 # except RepositoryError as e:
                 #     logger.exception(e)
 
+                if "resume" not in negotiation:
+                    continue
+
                 if not (
-                    resume := resume_map.get(
-                        negotiation.get("resume", {}).get("id")
-                    )
+                    resume := resume_map.get(negotiation["resume"].get("id"))
                 ):
                     continue
 
