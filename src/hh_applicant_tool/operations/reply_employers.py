@@ -104,7 +104,8 @@ class Operation(BaseOperation):
     def run(self, tool: HHApplicantTool, args: Namespace) -> None:
         self.tool = tool
         self.api_client = tool.api_client
-        self.resume_id = tool.first_resume_id()
+        #self.resume_id = tool.first_resume_id() #вместо id первого резюме берем id из аргументов
+        self.resume_id = args.resume_id
         self.reply_message = args.reply_message or tool.config.get(
             "reply_message"
         )
@@ -129,7 +130,7 @@ class Operation(BaseOperation):
         resumes = self.tool.get_resumes()
         resumes = (
             list(filter(lambda x: x["id"] == self.resume_id, resumes))
-            if self.resume_id
+            if self.resume_id is not None # добавляем проверку на пустоту
             else resumes
         )
         resumes = list(
