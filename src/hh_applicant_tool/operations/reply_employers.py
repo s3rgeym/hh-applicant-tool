@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import random
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -10,7 +11,7 @@ from ..ai.base import AIError
 from ..api import ApiError, datatypes
 from ..main import BaseNamespace, BaseOperation
 from ..utils.date import parse_api_datetime
-from ..utils.string import rand_text
+from ..utils.string import rand_text, unescape_string
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -38,6 +39,7 @@ class Namespace(BaseNamespace):
     system_prompt: str
     message_prompt: str
     period: int
+    only_bots: bool
 
 
 class Operation(BaseOperation):
@@ -100,6 +102,19 @@ class Operation(BaseOperation):
             help="Промпт для генерации сообщения",
             default="Напиши короткий ответ работодателю на основе истории переписки.",
         )
+        parser.add_argument(
+            "--only-bots",
+            "--bots-only",
+            help=(
+                "Автоматически отвечать только на сообщения от ботов/автоматических "
+                "систем работодателя (определяется через AI по тексту сообщения — "
+                "HH.ru не передаёт признак бота в API). Сообщения, похожие на "
+                "написанные живым человеком, пропускаются без отправки — на них "
+                "стоит ответить самостоятельно."
+            ),
+            default=False,
+            action=argparse.BooleanOptionalAction,
+        )
 
     def run(self, tool: HHApplicantTool, args: Namespace) -> None:
         self.tool = tool
@@ -120,9 +135,77 @@ class Operation(BaseOperation):
             else None
         )
         self.period = args.period
+        self.only_bots = args.only_bots
 
         logger.debug(f"{self.reply_message = }")
         return self.reply_employers()
+
+    def _clean_ai_message(self, message: str) -> str:
+        message = message.strip()
+        message = re.sub(r"^```\w*\n?|\n?```$", "", message).strip()
+        if len(message) >= 2 and message[0] in "«\"" and message[-1] in "»\"":
+            message = message[1:-1].strip()
+        return message
+
+    # HH.ru не передаёт в API признак того, что сообщение отправлено ботом
+    # (author содержит только participant_type: employer/applicant) — даже
+    # сообщения, которые сами представляются AI-ассистентом рекрутера,
+    # выглядят в API идентично сообщениям живого человека. Если бот сам
+    # называет себя в тексте ("Бот", "чат-бот", конкретное имя сервиса и
+    # т.п.) — ловим это без траты запроса к AI; иначе оцениваем через AI.
+    _BOT_TEXT_MARKERS_RE = re.compile(
+        r"\bбот\b|чат-?бот|ai[-\s]?ассистент|автоматическ\w*\s+"
+        r"(систем\w*|ассистент\w*|помощник\w*)|робот[-\s]?помощник|"
+        r"гигарекрутер|giga\s*recruiter",
+        re.IGNORECASE,
+    )
+
+    def _is_bot_message(
+        self, vacancy_name: str, message_history: list[str]
+    ) -> bool:
+        if not message_history:
+            return False
+
+        history_text = "\n".join(message_history)
+
+        if self._BOT_TEXT_MARKERS_RE.search(history_text):
+            return True
+
+        if not self.cover_letter_ai:
+            return False
+
+        # Передаём именно историю переписки, а не только последнее сообщение:
+        # изолированная реплика вроде "Когда вы готовы выйти на работу?" сама
+        # по себе неотличима от бота, но в контексте развёрнутого диалога с
+        # уточняющими вопросами по конкретным деталям резюме — явный признак
+        # живого человека.
+        prompt = (
+            "Определи по истории переписки: работодатель в этом чате HeadHunter — "
+            "это автоматическая система/бот (скриптовый опросник, авто-ассистент "
+            "рекрутера, шаблонные сообщения без учёта конкретных предыдущих ответов "
+            "соискателя) или живой человек лично? Если работодатель реагирует по "
+            "существу на конкретные детали из предыдущих ответов соискателя — это "
+            "признак живого человека, а не бота.\n\n"
+            f"Вакансия: {vacancy_name}\n"
+            f"История переписки:\n{history_text}\n\n"
+            'Ответь строго JSON без пояснений: {"is_bot": true} или {"is_bot": false}.'
+        )
+        try:
+            response = self.cover_letter_ai.complete(prompt).strip()
+        except AIError as ex:
+            logger.warning(f"Ошибка классификации бот/человек: {ex}")
+            return False
+
+        response = re.sub(r"^```\w*\n?|\n?```$", "", response).strip()
+        match = re.search(
+            r'"is_bot"\s*:\s*(true|false)', response, re.IGNORECASE
+        )
+        if not match:
+            logger.warning(
+                f"Не удалось распарсить классификацию бот/человек: {response!r}"
+            )
+            return False
+        return match.group(1).lower() == "true"
 
     def reply_employers(self):
         blacklist = set(self.tool.get_blacklisted())
@@ -255,9 +338,11 @@ class Operation(BaseOperation):
                     last_message["author"]["participant_type"] == "employer"
                 )
 
-                if is_employer_message or not negotiation.get(
-                    "viewed_by_opponent"
-                ):
+                # Раньше здесь также стояло "or not negotiation.get('viewed_by_opponent')",
+                # из-за чего бот слал повторное сообщение в каждый непрочитанный
+                # работодателем чат при каждом запуске — пока сообщение оставалось
+                # непрочитанным, оно дублировалось на каждом прогоне cron.
+                if is_employer_message:
                     send_message = ""
                     if self.reply_message:
                         send_message = (
@@ -265,6 +350,21 @@ class Operation(BaseOperation):
                         )
                         logger.debug(f"Template message: {send_message}")
                     elif self.cover_letter_ai:
+                        if self.only_bots and not self._is_bot_message(
+                            placeholders["vacancy_name"],
+                            message_history[-10:],
+                        ):
+                            logger.info(
+                                "Похоже на сообщение от человека, пропускаем "
+                                "автоответ: %s",
+                                vacancy["alternate_url"],
+                            )
+                            print(
+                                "👤 Похоже на сообщение от живого человека, "
+                                "ответьте вручную:",
+                                vacancy["alternate_url"],
+                            )
+                            continue
                         try:
                             ai_query = (
                                 f"Вакансия: {placeholders['vacancy_name']}\n"
@@ -272,13 +372,33 @@ class Operation(BaseOperation):
                                 + "\n".join(message_history[-10:])
                                 + f"\n\nИнструкция: {self.message_prompt}"
                             )
-                            send_message = self.cover_letter_ai.complete(
-                                ai_query
+                            send_message = self._clean_ai_message(
+                                unescape_string(
+                                    self.cover_letter_ai.complete(ai_query)
+                                )
                             )
                             logger.debug(f"AI message: {send_message}")
                         except AIError as ex:
                             logger.warning(
                                 f"Ошибка OpenAI для чата {nid}: {ex}"
+                            )
+                            continue
+
+                        # Промпт просит AI вернуть "ПРОПУСТИТЬ", если сообщение
+                        # работодателя — типовое уведомление, не требующее
+                        # содержательного ответа (иначе AI придумывает лишние
+                        # развёрнутые ответы на шаблонные "мы рассмотрим ваше
+                        # резюме" и т.п.).
+                        if not send_message or re.fullmatch(
+                            r"пропустить|skip", send_message, re.IGNORECASE
+                        ):
+                            logger.info(
+                                "AI решил, что ответ не требуется: %s",
+                                vacancy["alternate_url"],
+                            )
+                            print(
+                                "⏭️  Шаблонное сообщение, ответ не требуется:",
+                                vacancy["alternate_url"],
                             )
                             continue
                     else:
