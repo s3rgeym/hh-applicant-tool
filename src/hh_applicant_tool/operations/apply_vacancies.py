@@ -133,7 +133,15 @@ class Operation(BaseOperation):
             "--system-prompt",
             "--ai-system",
             help="Системный промпт для AI генерации сопроводительных писем",
-            default="Напиши сопроводительное письмо для отклика на эту вакансию. Не используй placeholder'ы, твой ответ будет отправлен без обработки.",  # noqa: E501
+            default=(
+                "Напиши сопроводительное письмо для отклика на эту вакансию. "
+                "Определи язык, на котором написана вакансия (по её названию и описанию), "
+                "и пиши письмо на этом же языке. "
+                "Начни письмо с приветствия, но не указывай и не подписывай своё имя — это не нужно. "
+                "Не используй placeholder'ы. Разбивай текст на абзацы обычными переносами строк "
+                "(пустая строка между абзацами), не используй экранированные последовательности вроде \\n. "
+                "Твой ответ будет отправлен без обработки."
+            ),
         )
         parser.add_argument(
             "--message-prompt",
@@ -358,11 +366,28 @@ class Operation(BaseOperation):
         self.ai_filter = args.ai_filter
         self.vacancy_filter_ai = None
         self._resume_analysis_cache: dict[tuple[str | None, str], str] = {}
+        self._full_vacancy_cache: dict[str, dict | None] = {}
 
         self._apply_vacancies()
 
     def _get_full_resume(self, resume_id: str) -> dict:
         return self.api_client.get(f"/resumes/{resume_id}")
+
+    def _get_full_vacancy(self, vacancy_id: str | int) -> dict | None:
+        vacancy_id = str(vacancy_id)
+        if vacancy_id in self._full_vacancy_cache:
+            return self._full_vacancy_cache[vacancy_id]
+
+        try:
+            full_vacancy = self.api_client.get(f"/vacancies/{vacancy_id}")
+        except Exception as e:
+            logger.warning(
+                "Не удалось получить полную вакансию %s: %s", vacancy_id, e
+            )
+            full_vacancy = None
+
+        self._full_vacancy_cache[vacancy_id] = full_vacancy
+        return full_vacancy
 
     def _analyze_resume_heavy(self, resume: dict) -> str:
         resume_id = resume.get("id")
@@ -562,7 +587,7 @@ class Operation(BaseOperation):
     def _is_vacancy_suitable_heavy(self, vacancy: dict) -> bool:
         full_vacancy = None
         if vacancy.get("id"):
-            full_vacancy = self.api_client.get(f"/vacancies/{vacancy['id']}")
+            full_vacancy = self._get_full_vacancy(vacancy["id"])
 
         vacancy_info = self._build_vacancy_context(
             vacancy,
@@ -977,17 +1002,26 @@ class Operation(BaseOperation):
                     "response_letter_required"
                 ):
                     if self.cover_letter_ai:
-                        msg = self.message_prompt + "\n\n"
-                        msg += (
-                            "Название вакансии: "
-                            + message_placeholders["vacancy_name"]
+                        full_vacancy = (
+                            self._get_full_vacancy(vacancy["id"])
+                            if vacancy.get("id")
+                            else None
                         )
+                        vacancy_info = self._build_vacancy_context(
+                            vacancy,
+                            full_vacancy=full_vacancy,
+                            include_full=True,
+                        )
+                        msg = self.message_prompt + "\n\n"
+                        msg += vacancy_info + "\n"
                         msg += (
                             "Мое резюме: "
                             + message_placeholders["resume_title"]
                         )
                         logger.debug("prompt: %s", msg)
-                        letter = self.cover_letter_ai.complete(msg)
+                        letter = self._clean_ai_letter(
+                            unescape_string(self.cover_letter_ai.complete(msg))
+                        )
                     else:
                         letter = (
                             rand_text(self.cover_letter) % message_placeholders
@@ -1446,6 +1480,23 @@ class Operation(BaseOperation):
 
             if page >= res["pages"] - 1:
                 return
+
+    def _clean_ai_letter(self, letter: str) -> str:
+        # AI иногда добавляет служебное вступление вроде «Вот сопроводительное
+        # письмо для вакансии X:» перед самим текстом письма, хотя в промпте
+        # явно сказано отправлять ответ без обработки — обрезаем такие фразы,
+        # т.к. letter уходит рекрутеру как есть (--force-message).
+        letter = letter.strip()
+        letter = re.sub(r"^```\w*\n?|\n?```$", "", letter).strip()
+        letter = re.sub(
+            r"^[^\n]{0,150}сопроводительн\w*\s+письм\w*[^\n]{0,150}:\s*\n+",
+            "",
+            letter,
+            flags=re.IGNORECASE,
+        ).strip()
+        if len(letter) >= 2 and letter[0] in "«\"" and letter[-1] in "»\"":
+            letter = letter[1:-1].strip()
+        return letter
 
     def _is_excluded(self, vacancy: SearchVacancy) -> bool:
         if not self.excluded_filter:
