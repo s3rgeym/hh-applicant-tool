@@ -148,6 +148,42 @@ class Operation(BaseOperation):
             message = message[1:-1].strip()
         return message
 
+    # Сообщения, которые требуют, чтобы соискатель САМ что-то сделал (заполнить
+    # форму/анкету, пройти тест/ассесмент, перейти по внешней ссылке на тестовую
+    # платформу и т.п.), нельзя обрабатывать автоответом: бот не может выполнить
+    # это действие, а формальное «спасибо, заполню» скрывает сообщение из очереди
+    # ручной обработки и берёт на себя обязательства от лица живого соискателя.
+    # Такие чаты пропускаем и явно показываем — на них нужно ответить вручную.
+    _MANUAL_ACTION_RE = re.compile(
+        r"тестов\w*\s+задани\w*|пробн\w*\s+задани\w*|\bтест[-\s]?задани\w*|"
+        r"\bанкет\w*|\bопросник\w*|\bассес+мент\w*|"
+        r"google\s*форм\w*|гугл[-\s]?форм\w*|"
+        r"заполни\w*[^.\n]{0,30}?(?:форм\w*|анкет\w*)|"
+        r"пройди\w*[^.\n]{0,30}?(?:тест\w*|ассес+мент\w*|опрос\w*)|"
+        r"\bassessment\b|\bquestionnaire\b|google\s*form|"
+        r"fill\s+(?:out\s+)?(?:the\s+)?form|test\s+task|take[-\s]?home|"
+        r"forms\.gle|docs\.google\.com/forms|forms\.office\.com|"
+        r"forms\.yandex|typeform|surveymonkey|forms\.app",
+        re.IGNORECASE,
+    )
+    _ANY_LINK_RE = re.compile(r"https?://\S+", re.IGNORECASE)
+    # Ссылки на сам hh.ru (в т.ч. на вакансию/отклик) — не внешнее действие.
+    _HH_HOST_RE = re.compile(r"hh\.ru|headhunter|hhcdn", re.IGNORECASE)
+
+    def _requires_manual_action(self, text: str) -> str | None:
+        """Причина, по которой на сообщение нужно ответить вручную, либо None."""
+        if not text:
+            return None
+        if m := self._MANUAL_ACTION_RE.search(text):
+            return f"похоже на форму/тест/задание ({m.group(0)!r})"
+        # Любая внешняя (не hh.ru) ссылка — сигнал, что работодатель просит
+        # куда-то перейти и что-то сделать (форма, тест-платформа, календарь).
+        for lm in self._ANY_LINK_RE.finditer(text):
+            url = lm.group(0)
+            if not self._HH_HOST_RE.search(url):
+                return f"внешняя ссылка ({url})"
+        return None
+
     # HH.ru не передаёт в API признак того, что сообщение отправлено ботом
     # (author содержит только participant_type: employer/applicant) — даже
     # сообщения, которые сами представляются AI-ассистентом рекрутера,
@@ -348,6 +384,28 @@ class Operation(BaseOperation):
                 # работодателем чат при каждом запуске — пока сообщение оставалось
                 # непрочитанным, оно дублировалось на каждом прогоне cron.
                 if is_employer_message:
+                    # Не автоотвечаем на сообщения, требующие личного действия
+                    # соискателя (форма/тест/ассесмент/внешняя ссылка) — их
+                    # пропускаем и показываем, чтобы ответить вручную. Проверка
+                    # только для автоматических режимов (шаблон/AI); в интерактиве
+                    # соискатель и так видит сообщение и решает сам.
+                    if self.reply_message or self.cover_letter_ai:
+                        manual_reason = self._requires_manual_action(
+                            last_message.get("text") or ""
+                        )
+                        if manual_reason:
+                            logger.info(
+                                "Требуется личное действие соискателя (%s), "
+                                "пропускаем автоответ: %s",
+                                manual_reason,
+                                vacancy["alternate_url"],
+                            )
+                            print(
+                                "⚠️  ОТВЕТЬТЕ ВРУЧНУЮ —",
+                                manual_reason + ":",
+                                vacancy["alternate_url"],
+                            )
+                            continue
                     send_message = ""
                     if self.reply_message:
                         send_message = (
