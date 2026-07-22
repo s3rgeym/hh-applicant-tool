@@ -243,6 +243,7 @@
                     <p class="text-xs text-gray-400 mb-4">
                         AI-функции требуют настройки API-ключа в разделе <strong>Настройки → openai_cover_letter / openai_vacancy_filter</strong>.
                         Поддерживаются OpenAI, OpenRouter, Ollama и другие совместимые провайдеры.
+                        Инструкция для ответов на тесты задаётся в <strong>Настройки → AI для тестов вакансий</strong>.
                     </p>
                     <div class="form-grid-3">
                         <div class="form-group">
@@ -295,6 +296,7 @@
                         <label class="checkbox-item"><input type="checkbox" data-param="force_message"> <span>Всегда отправлять письмо <span class="tip" title="Отправлять сопроводительное письмо даже если вакансия его не требует">?</span></span></label>
                         <label class="checkbox-item"><input type="checkbox" data-param="only_with_salary"> Только с указанной зарплатой</label>
                         <label class="checkbox-item"><input type="checkbox" data-param="no_magic"> <span>Точный поиск <span class="tip" title="Отключает авторазбор запроса hh.ru (синонимы, морфология). Поиск строго по введённым словам">?</span></span></label>
+                        <label class="checkbox-item"><input type="checkbox" data-param="only_with_tests"> Только вакансии с тестами</label>
                         <label class="checkbox-item"><input type="checkbox" data-param="skip_tests"> Пропускать вакансии с тестами</label>
                         <label class="checkbox-item"><input type="checkbox" data-param="send_email"> Отправлять email работодателю</label>
                         <label class="checkbox-item"><input type="checkbox" data-param="dry_run"> <span>Пробный запуск (dry run) <span class="tip" title="Имитирует поиск без реальных откликов. Удобно для проверки фильтров">?</span></span></label>
@@ -440,6 +442,19 @@
                             <input type="text" data-config-key="openai_vacancy_filter.model"
                                    placeholder="gpt-4o-mini">
                         </div>
+                    </div>
+                </fieldset>
+
+                <!-- AI для тестов вакансий -->
+                <fieldset class="config-section">
+                    <legend>AI для тестов вакансий</legend>
+                    <p class="field-hint mb-3">
+                        Используется при откликах с включённой опцией «Использовать AI», когда вакансия содержит тест. Здесь можно описать ваши условия, чтобы модель выбирала ответы под них.
+                    </p>
+                    <div class="form-group">
+                        <label>Инструкция для ответов на тесты <span class="tip" data-tip="Опишите желаемый формат работы, город, релокацию, стек, ограничения по тестовым заданиям и другие условия.">?</span></label>
+                        <textarea data-config-key="vacancy_test_ai_prompt" rows="6"
+                                  placeholder="Например: интересна Python backend разработка, удалёнка или гибрид только в Казани, не готов к переезду, не готов к неоплачиваемым большим тестовым заданиям..."></textarea>
                     </div>
                 </fieldset>
 

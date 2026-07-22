@@ -299,7 +299,7 @@ class Api:
 
             count = 0
             for item in self._tool.get_negotiations(status):
-                model = NegotiationModel.from_dict(item)
+                model = NegotiationModel.from_api(item)
                 self._tool.storage.negotiations.save(model)
                 count += 1
             return {"status": "ok", "count": count}

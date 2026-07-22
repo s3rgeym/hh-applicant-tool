@@ -3,13 +3,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import html
-import json
 import logging
 import random
 import re
 import time
 from datetime import datetime
 from email.message import EmailMessage
+from html.parser import HTMLParser
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Literal
@@ -23,7 +23,6 @@ from ..api.datatypes import PaginatedItems, SearchVacancy
 from ..api.errors import ApiError, CaptchaRequired, LimitExceeded
 from ..main import BaseNamespace, BaseOperation
 from ..storage.repositories.errors import RepositoryError
-from ..utils.datatypes import VacancyTestsData
 from ..utils.json import JSONDecoder
 from ..utils.string import (
     bool2str,
@@ -37,6 +36,181 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__package__)
+
+
+class VacancyResponseFormParser(HTMLParser):
+    """Парсер актуальной HTML-формы отклика HH.
+
+    HH больше не обязан отдавать данные тестов в JS-поле vacancyTests. Поэтому
+    берём источник правды ниже уровнем — реальные поля формы, которые браузер
+    отправляет при отклике.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.inputs: list[dict[str, Any]] = []
+        self.textareas: list[dict[str, str]] = []
+        self.selects: list[dict[str, Any]] = []
+        self.questions: list[str] = []
+
+        self._label_stack: list[dict[str, Any]] = []
+        self._textarea: dict[str, Any] | None = None
+        self._select: dict[str, Any] | None = None
+        self._option: dict[str, Any] | None = None
+        self._question_depth = 0
+        self._question_parts: list[str] = []
+        self._current_question = ""
+
+    _VOID_TAGS = {
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
+    }
+
+    @staticmethod
+    def _clean_text(text: str) -> str:
+        return re.sub(r"\s+", " ", text).strip()
+
+    @staticmethod
+    def _attrs(attrs: list[tuple[str, str | None]]) -> dict[str, str]:
+        return {k.lower(): v or "" for k, v in attrs}
+
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        attrs_dict = self._attrs(attrs)
+
+        if self._question_depth and tag not in self._VOID_TAGS:
+            self._question_depth += 1
+        elif attrs_dict.get("data-qa") == "task-question":
+            self._question_depth = 1
+            self._question_parts = []
+
+        if tag == "label":
+            self._label_stack.append({"text": [], "input_indexes": []})
+            return
+
+        if tag == "input":
+            item = {
+                "type": attrs_dict.get("type", "text").lower(),
+                "name": attrs_dict.get("name", ""),
+                "value": attrs_dict.get("value", ""),
+                "checked": "checked" in attrs_dict,
+                "label": "",
+                "question": self._current_question,
+            }
+            self.inputs.append(item)
+            if self._label_stack:
+                self._label_stack[-1]["input_indexes"].append(
+                    len(self.inputs) - 1
+                )
+            return
+
+        if tag == "textarea":
+            self._textarea = {
+                "name": attrs_dict.get("name", ""),
+                "value": "",
+                "parts": [],
+                "question": self._current_question,
+            }
+            return
+
+        if tag == "select":
+            self._select = {
+                "name": attrs_dict.get("name", ""),
+                "options": [],
+                "question": self._current_question,
+            }
+            return
+
+        if tag == "option" and self._select is not None:
+            self._option = {
+                "value": attrs_dict.get("value", ""),
+                "text": [],
+                "selected": "selected" in attrs_dict,
+            }
+
+    def handle_startendtag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        self.handle_starttag(tag, attrs)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "label" and self._label_stack:
+            label = self._label_stack.pop()
+            label_text = self._clean_text(" ".join(label["text"]))
+            for input_index in label["input_indexes"]:
+                self.inputs[input_index]["label"] = label_text
+
+        if tag == "textarea" and self._textarea is not None:
+            self._textarea["value"] = self._clean_text(
+                " ".join(self._textarea.pop("parts"))
+            )
+            self.textareas.append(self._textarea)
+            self._textarea = None
+
+        if tag == "option" and self._select is not None and self._option:
+            self._option["text"] = self._clean_text(
+                " ".join(self._option["text"])
+            )
+            self._select["options"].append(self._option)
+            self._option = None
+
+        if tag == "select" and self._select is not None:
+            self.selects.append(self._select)
+            self._select = None
+
+        if self._question_depth:
+            self._question_depth -= 1
+            if self._question_depth == 0:
+                question = self._clean_text(" ".join(self._question_parts))
+                if question:
+                    self.questions.append(question)
+                    self._current_question = question
+                self._question_parts = []
+
+    def handle_data(self, data: str) -> None:
+        if self._label_stack:
+            self._label_stack[-1]["text"].append(data)
+        if self._textarea is not None:
+            self._textarea["parts"].append(data)
+        if self._option is not None:
+            self._option["text"].append(data)
+        if self._question_depth:
+            self._question_parts.append(data)
+
+    def hidden_payload(self) -> dict[str, str]:
+        return {
+            item["name"]: item["value"]
+            for item in self.inputs
+            if item["name"] and item["type"] == "hidden"
+        }
+
+    def choice_groups(self) -> dict[str, list[dict[str, Any]]]:
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for item in self.inputs:
+            if item["name"] and item["type"] in {"radio", "checkbox"}:
+                groups.setdefault(item["name"], []).append(item)
+        return groups
+
+    def text_inputs(self) -> list[dict[str, Any]]:
+        return [
+            item
+            for item in self.inputs
+            if item["name"]
+            and item["type"] in {"text", "search", "email", "url", "tel"}
+        ]
 
 
 class Namespace(BaseNamespace):
@@ -83,6 +257,7 @@ class Namespace(BaseNamespace):
     max_responses: int
     send_email: bool
     skip_tests: bool
+    only_with_tests: bool
 
 
 class Operation(BaseOperation):
@@ -162,6 +337,11 @@ class Operation(BaseOperation):
         parser.add_argument(
             "--skip-tests",
             help="Пропускать тесты при откликах вместо",
+            action=argparse.BooleanOptionalAction,
+        )
+        parser.add_argument(
+            "--only-with-tests",
+            help="Откликаться только на вакансии с тестами",
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
@@ -478,7 +658,6 @@ class Operation(BaseOperation):
     def _ask_ai_suitability(
         self, prompt: str, vacancy_name: str, log_suffix: str = ""
     ) -> bool:
-
         MAX_RETRIES = 3
 
         if not self.vacancy_filter_ai:
@@ -846,6 +1025,13 @@ class Operation(BaseOperation):
                     )
                     continue
 
+                if self.args.only_with_tests and not vacancy.get("has_test"):
+                    logger.debug(
+                        "Пропускаем вакансию без теста: %s",
+                        vacancy["alternate_url"],
+                    )
+                    continue
+
                 if vacancy.get("has_test") and self.args.skip_tests:
                     logger.debug(
                         "Пропускаю вакансию с тестом %s",
@@ -1101,16 +1287,22 @@ class Operation(BaseOperation):
                             if isinstance(mail_to, list)
                             else mail_to
                         )
-                        mail_subject = rand_text(
-                            self.tool.config.get("apply_mail_subject")
-                            or "{Отклик|Резюме} на вакансию %(vacancy_name)s"
-                        ) % message_placeholders
-                        mail_body = unescape_string(
+                        mail_subject = (
                             rand_text(
-                                self.tool.config.get("apply_mail_body")
-                                or "{Здравствуйте|Добрый день}, {прошу рассмотреть|пожалуйста рассмотрите} мое резюме %(resume_url)s на вакансию %(vacancy_name)s."
+                                self.tool.config.get("apply_mail_subject")
+                                or "{Отклик|Резюме} на вакансию %(vacancy_name)s"
                             )
-                        ) % message_placeholders
+                            % message_placeholders
+                        )
+                        mail_body = (
+                            unescape_string(
+                                rand_text(
+                                    self.tool.config.get("apply_mail_body")
+                                    or "{Здравствуйте|Добрый день}, {прошу рассмотреть|пожалуйста рассмотрите} мое резюме %(resume_url)s на вакансию %(vacancy_name)s."
+                                )
+                            )
+                            % message_placeholders
+                        )
                         try:
                             self._send_email(mail_to, mail_subject, mail_body)
                             print(
@@ -1154,22 +1346,6 @@ class Operation(BaseOperation):
 
     json_decoder = JSONDecoder()
 
-    def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData:
-        """Парсит тесты"""
-        r = self.tool.session.get(response_url)
-        tests_marker = ',"vacancyTests":'
-
-        if -1 == (tests_start_pos := r.text.find(tests_marker)):
-            raise ValueError("tests not found.")
-
-        try:
-            res, _ = self.json_decoder.raw_decode(
-                r.text, tests_start_pos + len(tests_marker)
-            )
-            return res
-        except json.JSONDecodeError as ex:
-            raise ValueError("Не могу распарсить vacancyTests.") from ex
-
     def _solve_vacancy_test(
         self,
         vacancy_id: str | int,
@@ -1179,23 +1355,20 @@ class Operation(BaseOperation):
         """Загружает тест, ждет паузу и отправляет отклик."""
         response_url = f"https://hh.ru/applicant/vacancy_response?vacancyId={vacancy_id}&startedWithQuestion=false&hhtmFrom=vacancy"
 
-        # Загружаем данные теста и токен
-        tests_data = self._get_vacancy_tests(response_url)
+        r = self.tool.session.get(response_url)
+        r.raise_for_status()
 
-        try:
-            test_data = tests_data[str(vacancy_id)]
-        except KeyError as ex:
-            raise ValueError("Отсутствуют данные теста для вакансии.") from ex
+        form = VacancyResponseFormParser()
+        form.feed(r.text)
 
-        logger.debug(f"{test_data = }")
+        payload: dict[str, Any] = form.hidden_payload()
+        xsrf_token = payload.get("_xsrf")
+        if not xsrf_token:
+            raise ValueError("Не найден _xsrf в HTML-форме отклика.")
 
-        payload: dict[str, Any] = {
-            "_xsrf": self.tool.xsrf_token,
-            "uidPk": test_data["uidPk"],
-            "guid": test_data["guid"],
-            "startTime": test_data["startTime"],
-            "testRequired": test_data["required"],
-            "vacancy_id": vacancy_id,
+        payload |= {
+            "_xsrf": xsrf_token,
+            "vacancy_id": str(vacancy_id),
             "resume_hash": resume_hash,
             "ignore_postponed": "true",
             "incomplete": "false",
@@ -1206,65 +1379,108 @@ class Operation(BaseOperation):
             "letter": letter,
         }
 
-        for task in test_data["tasks"]:
-            field_name = f"task_{task['id']}"
-            solutions = task.get("candidateSolutions") or []
-            question = (task.get("description") or "").strip()
+        question = "\n".join(form.questions)
+        answered_fields: set[str] = set()
 
-            if solutions:
-                if self.cover_letter_ai:
-                    options = "\n".join(
-                        [
-                            f"{s['id']}: {strip_tags(s['text'])}"
-                            for s in solutions
-                        ]
-                    )
-                    prompt = (
-                        f"Вопрос: {question}\n"
-                        f"Варианты:\n{options}\n"
-                        f"Выбери ID правильного ответа. Пришли только ID."
-                    )
-                    ai_answer = self.cover_letter_ai.complete(prompt).strip()
-                    # Ищем ID в ответе AI на случай лишнего текста
-                    match = re.search(r"\d+", ai_answer)
-                    selected_id = (
-                        match.group(0) if match else solutions[0]["id"]
-                    )
-                    payload[field_name] = selected_id
-                else:
-                    yes_solution = next(
-                        filter(lambda x: x["text"].lower() == "да", solutions),
-                        None,
-                    )
+        self._log_test_message("🧩 Найден тест для вакансии: %s", response_url)
+        if form.questions:
+            self._log_test_message(
+                "❓ Найдено вопросов теста: %d", len(form.questions)
+            )
 
-                    payload[field_name] = (
-                        yes_solution["id"]
-                        if yes_solution
-                        # По статистике правильный ответ в большинстве случаев
-                        # находится посередине
-                        else solutions[len(solutions) // 2]["id"]
-                    )
+        for field_name, solutions in form.choice_groups().items():
+            field_question = (
+                solutions[0].get("question") or question
+                if solutions
+                else question
+            )
+            if field_question:
+                self._log_test_message("❓ Вопрос: %s", field_question)
+
+            selected = self._select_test_solution(
+                field_name, field_question, solutions
+            )
+            if not selected:
+                continue
+
+            if selected["type"] == "checkbox":
+                payload[field_name] = [selected["value"]]
             else:
-                # Рандомные эмоджи
-                # payload[f"{field_name}_text"] = "".join(
-                #     chr(random.randint(0x1F300, 0x1F64F))
-                #     for _ in range(random.randint(3, 15))
-                # )
+                payload[field_name] = selected["value"]
+            answered_fields.add(field_name)
+            answer_label = selected.get("label") or selected.get("value")
+            self._log_test_message(
+                "✅ Ответ на %s: %s", field_name, answer_label
+            )
 
-                if "://" in question:
-                    answer = rand_text(
-                        "{{Простите|Извините}, но я не перехожу по {внешним|сторонним} ссылкам, так как {опасаюсь взлома|не хочу {быть взломанным|подхватить вирус|чтобы у меня {со|с банковского} счета украли деньги}}.|У меня нет времени на заполнение анкет и гуглодоков}"
+            if self._is_custom_answer(answer_label):
+                custom_field_name = f"{field_name}_text"
+                if custom_field_name not in payload:
+                    payload[custom_field_name] = (
+                        self._answer_test_text_question(field_question)
                     )
-                elif self.cover_letter_ai:
-                    prompt = f"Дай краткий и профессиональный ответ на вопрос: {question}"
-                    answer = self.cover_letter_ai.complete(prompt)
-                # Тупоеблые любят вопросы с ответами да/нет, где ответ да является правильным в большинстве случаев.
-                else:
-                    answer = "Да"
+                    answered_fields.add(custom_field_name)
+                    self._log_test_message(
+                        "✅ Свой вариант для %s: %s",
+                        custom_field_name,
+                        payload[custom_field_name],
+                    )
 
-                payload[f"{field_name}_text"] = answer
+        for textarea in form.textareas:
+            field_name = textarea["name"]
+            if not field_name or field_name in payload:
+                continue
+            answer = self._answer_test_text_question(
+                textarea.get("question") or question
+            )
+            payload[field_name] = answer
+            answered_fields.add(field_name)
+            self._log_test_message(
+                "✅ Текстовый ответ на %s: %s", field_name, answer
+            )
 
-        logger.debug(f"{payload = }")
+        for text_input in form.text_inputs():
+            field_name = text_input["name"]
+            if not field_name or field_name in payload:
+                continue
+            answer = self._answer_test_text_question(
+                text_input.get("question") or question
+            )
+            payload[field_name] = answer
+            answered_fields.add(field_name)
+            self._log_test_message(
+                "✅ Текстовый ответ на %s: %s", field_name, answer
+            )
+
+        for select in form.selects:
+            field_name = select["name"]
+            if not field_name or field_name in payload:
+                continue
+            options = [
+                option
+                for option in select["options"]
+                if option["value"] or option["text"]
+            ]
+            if not options:
+                continue
+            selected = next(
+                (option for option in options if option["selected"]),
+                options[len(options) // 2],
+            )
+            payload[field_name] = selected["value"]
+            answered_fields.add(field_name)
+            answer_label = selected.get("text") or selected.get("value")
+            self._log_test_message(
+                "✅ Ответ на %s: %s", field_name, answer_label
+            )
+
+        if not answered_fields:
+            raise ValueError(
+                "Не найдены поля теста в HTML-форме отклика. "
+                "HH изменил разметку или вернул не форму теста."
+            )
+
+        logger.debug("Поля теста заполнены: %s", sorted(answered_fields))
 
         # Ожидание перед отправкой (float)
         time.sleep(random.uniform(2.0, 3.0))
@@ -1279,7 +1495,7 @@ class Operation(BaseOperation):
                 "X-Hhtmfrom": "vacancy",
                 "X-Hhtmsource": "vacancy_response",
                 "X-Requested-With": "XMLHttpRequest",
-                "X-Xsrftoken": self.tool.xsrf_token,
+                "X-Xsrftoken": xsrf_token,
             },
         )
 
@@ -1294,6 +1510,135 @@ class Operation(BaseOperation):
         # logger.debug(data)
 
         return data
+
+    @staticmethod
+    def _log_test_message(message: str, *args: Any) -> None:
+        text = message % args if args else message
+        print(text)
+        logger.info(text)
+
+    def _select_test_solution(
+        self,
+        field_name: str,
+        question: str,
+        solutions: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        if not solutions:
+            return None
+
+        if getattr(self, "cover_letter_ai", None):
+            options = "\n".join(
+                f"{idx}: {solution.get('label') or solution.get('value')}"
+                for idx, solution in enumerate(solutions, 1)
+            )
+            user_instruction = self._vacancy_test_ai_instruction()
+            prompt = (
+                "Ты выбираешь ответ в тесте вакансии.\n"
+                "Контекст ниже описывает кандидата и его предпочтения; "
+                "это НЕ текст ответа работодателю.\n\n"
+                "Контекст кандидата:\n"
+                f"{user_instruction}\n\n"
+                f"Вопрос: {question}\n"
+                f"Поле формы: {field_name}\n"
+                f"Варианты:\n{options}\n"
+                "Правила выбора:\n"
+                "- верни только номер варианта, без пояснений;\n"
+                "- если вопрос спрашивает ожидания/пожелания — выбирай "
+                "вариант, наиболее выгодный и уверенный для кандидата;\n"
+                "- не путай прошлые места работы кандидата с его ожиданиями "
+                "от новой работы.\n"
+                f"Выбери номер ответа, который лучше всего соответствует "
+                f"моим условиям. Пришли только номер."
+            )
+            ai_answer = self.cover_letter_ai.complete(prompt).strip()
+            match = re.search(r"\d+", ai_answer)
+            if match:
+                selected_index = int(match.group(0)) - 1
+                if 0 <= selected_index < len(solutions):
+                    return solutions[selected_index]
+
+        yes_solution = next(
+            (
+                solution
+                for solution in solutions
+                if self._is_positive_answer(
+                    solution.get("label") or solution.get("value") or ""
+                )
+            ),
+            None,
+        )
+        if yes_solution:
+            return yes_solution
+
+        non_custom_solutions = [
+            solution
+            for solution in solutions
+            if not self._is_custom_answer(
+                solution.get("label") or solution.get("value") or ""
+            )
+        ]
+        if non_custom_solutions:
+            return non_custom_solutions[len(non_custom_solutions) // 2]
+
+        return solutions[len(solutions) // 2]
+
+    def _vacancy_test_ai_instruction(self) -> str:
+        return (
+            self.tool.config.get("vacancy_test_ai_prompt")
+            or "Ты отвечаешь на тесты вакансий от моего имени. "
+            "Отвечай честно, не выдумывай факты обо мне и выбирай вариант, "
+            "который лучше всего соответствует условиям кандидата."
+        )
+
+    @staticmethod
+    def _is_positive_answer(text: str) -> bool:
+        normalized = re.sub(r"\s+", " ", strip_tags(text)).strip().lower()
+        return normalized in {
+            "да",
+            "yes",
+            "готов",
+            "готова",
+            "согласен",
+            "согласна",
+            "подходит",
+        }
+
+    @staticmethod
+    def _is_custom_answer(text: str | None) -> bool:
+        normalized = re.sub(r"\s+", " ", strip_tags(text or "")).strip().lower()
+        return normalized in {
+            "свой вариант",
+            "другое",
+            "другой вариант",
+            "иное",
+            "other",
+            "other option",
+        }
+
+    def _answer_test_text_question(self, question: str) -> str:
+        if "://" in question:
+            return rand_text(
+                "{{Простите|Извините}, но я не перехожу по {внешним|сторонним} ссылкам, так как {опасаюсь взлома|не хочу {быть взломанным|подхватить вирус|чтобы у меня {со|с банковского} счета украли деньги}}.|У меня нет времени на заполнение анкет и гуглодоков}"
+            )
+
+        if getattr(self, "cover_letter_ai", None):
+            prompt = (
+                "Ты отвечаешь на один текстовый вопрос в тесте вакансии.\n"
+                "Контекст ниже описывает кандидата и его предпочтения; "
+                "это НЕ готовый ответ и НЕ список ожиданий от новой работы.\n\n"
+                "Контекст кандидата:\n"
+                f"{self._vacancy_test_ai_instruction()}\n\n"
+                f"Вопрос: {question}\n"
+                "Сформулируй ответ строго на этот вопрос.\n"
+                "Требования к ответу:\n"
+                "- не сильно длинным, если в вопросе это не указано;\n"
+                "- от первого лица;\n"
+                "- уверенно и профессионально;\n"
+                "Ответ:"
+            )
+            return self.cover_letter_ai.complete(prompt)
+
+        return self.tool.config.get("vacancy_test_answer") or "Да"
 
     def _parse_site(self, url: str) -> dict[str, Any]:
         with self.tool.session.get(url, timeout=10) as r:
