@@ -52,6 +52,7 @@ class Namespace(BaseNamespace):
     order_by: str
     search: str
     schedule: str
+    work_format: list[str] | None
     dry_run: bool
     # Пошли доп фильтры, которых не было
     experience: str
@@ -211,6 +212,11 @@ class Operation(BaseOperation):
             type=str,
         )
         api_search_filters.add_argument(
+            "--work-format",
+            nargs="+",
+            help="Формат работы (REMOTE, HYBRID, ON_SITE, FIELD_WORK)",
+        )
+        api_search_filters.add_argument(
             "--employment", nargs="+", help="Тип занятости"
         )
         api_search_filters.add_argument(
@@ -344,6 +350,7 @@ class Operation(BaseOperation):
         self.right_lng = args.right_lng
         self.salary = args.salary
         self.schedule = args.schedule
+        self.work_format = args.work_format
         self.search = args.search
         self.search_field = args.search_field
         self.sort_point_lat = args.sort_point_lat
@@ -1000,6 +1007,8 @@ class Operation(BaseOperation):
                     vacancy["alternate_url"],
                 )
 
+                test_handled = False
+
                 if vacancy.get("has_test"):
                     logger.debug(
                         "Решаем тест: %s",
@@ -1013,6 +1022,7 @@ class Operation(BaseOperation):
                                 resume_hash=resume["id"],
                                 letter=letter,
                             )
+                            test_handled = True
                             if result.get("success") == "true":
                                 applied_count += 1
                                 print(
@@ -1034,11 +1044,23 @@ class Operation(BaseOperation):
                                     logger.error(
                                         f"Произошла ошибка при отклике на вакансию с тестом: {vacancy['alternate_url']} - {err}"
                                     )
+                        else:
+                            test_handled = True
+                    except ValueError as ex:
+                        if str(ex) == "tests not found.":
+                            logger.warning(
+                                "Не удалось получить тест (%s), пробую откликнуться как на обычную вакансию: %s",
+                                ex,
+                                vacancy["alternate_url"],
+                            )
+                        else:
+                            logger.error(f"Произошла непредвиденная ошибка: {ex}")
+                            continue
                     except Exception as ex:
                         logger.error(f"Произошла непредвиденная ошибка: {ex}")
                         continue
 
-                else:
+                if not test_handled:
                     params = {
                         "resume_id": resume["id"],
                         "vacancy_id": vacancy_id,
@@ -1157,14 +1179,17 @@ class Operation(BaseOperation):
     def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData:
         """Парсит тесты"""
         r = self.tool.session.get(response_url)
+        # hh.ru теперь отдает этот блок с HTML-заэкранированными кавычками
+        # (внутри HTML-атрибута), поэтому сначала разэкранируем всю страницу
+        text = html.unescape(r.text)
         tests_marker = ',"vacancyTests":'
 
-        if -1 == (tests_start_pos := r.text.find(tests_marker)):
+        if -1 == (tests_start_pos := text.find(tests_marker)):
             raise ValueError("tests not found.")
 
         try:
             res, _ = self.json_decoder.raw_decode(
-                r.text, tests_start_pos + len(tests_marker)
+                text, tests_start_pos + len(tests_marker)
             )
             return res
         except json.JSONDecodeError as ex:
@@ -1364,6 +1389,8 @@ class Operation(BaseOperation):
             params["text"] = self.search
         if self.schedule:
             params["schedule"] = self.schedule
+        if self.work_format:
+            params["work_format"] = list(self.work_format)
         if self.experience:
             params["experience"] = self.experience
         if self.currency:
@@ -1476,9 +1503,18 @@ class Operation(BaseOperation):
         r = self.tool.session.get("https://hh.ru/vacancy/" + vacancy["id"])
         r.raise_for_status()
 
-        description, _ = self.json_decoder.raw_decode(
-            re.search(r'"description": (.*)', r.text).group(1)
-        )
+        # На странице вакансии поле description иногда встречается в двух
+        # вариантах верстки: `"description": "..."` и `"description":"..."`
+        # (без пробела после двоеточия) — учитываем оба.
+        description_match = re.search(r'"description":\s*(.*)', r.text)
+        if not description_match:
+            logger.warning(
+                "Не удалось найти описание вакансии на странице: %s",
+                vacancy["alternate_url"],
+            )
+            return False
+
+        description, _ = self.json_decoder.raw_decode(description_match.group(1))
         description = strip_tags(description)
         logger.debug(description[:2047])
         return bool(excluded_pat.search(description))

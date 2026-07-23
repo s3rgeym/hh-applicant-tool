@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import logging
 import os
 import smtplib
@@ -184,7 +185,6 @@ class HHApplicantTool(MegaTool):
         log_label: str,
     ) -> requests.Session:
         session = requests.Session()
-        session.verify = False
 
         if proxies:
             logger.info("Use proxies for %s: %r", log_label, proxies)
@@ -385,6 +385,9 @@ class HHApplicantTool(MegaTool):
 
     # TODO: вынести в миксин какой
     def _extract_xsrf_token(self, content: str) -> str:
+        # hh.ru отдает этот блок с HTML-заэкранированными кавычками
+        # (внутри HTML-атрибута), поэтому сначала разэкранируем всю страницу
+        content = html.unescape(content)
         xsrf_token_marker = ',"xsrfToken":"'
         s1 = content.find(xsrf_token_marker)
         if s1 == -1:
