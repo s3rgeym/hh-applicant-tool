@@ -185,7 +185,6 @@ class HHApplicantTool(MegaTool):
         log_label: str,
     ) -> requests.Session:
         session = requests.Session()
-        session.verify = False
 
         if proxies:
             logger.info("Use proxies for %s: %r", log_label, proxies)
