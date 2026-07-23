@@ -1000,6 +1000,8 @@ class Operation(BaseOperation):
                     vacancy["alternate_url"],
                 )
 
+                test_handled = False
+
                 if vacancy.get("has_test"):
                     logger.debug(
                         "Решаем тест: %s",
@@ -1013,6 +1015,7 @@ class Operation(BaseOperation):
                                 resume_hash=resume["id"],
                                 letter=letter,
                             )
+                            test_handled = True
                             if result.get("success") == "true":
                                 applied_count += 1
                                 print(
@@ -1034,11 +1037,23 @@ class Operation(BaseOperation):
                                     logger.error(
                                         f"Произошла ошибка при отклике на вакансию с тестом: {vacancy['alternate_url']} - {err}"
                                     )
+                        else:
+                            test_handled = True
+                    except ValueError as ex:
+                        if str(ex) == "tests not found.":
+                            logger.warning(
+                                "Не удалось получить тест (%s), пробую откликнуться как на обычную вакансию: %s",
+                                ex,
+                                vacancy["alternate_url"],
+                            )
+                        else:
+                            logger.error(f"Произошла непредвиденная ошибка: {ex}")
+                            continue
                     except Exception as ex:
                         logger.error(f"Произошла непредвиденная ошибка: {ex}")
                         continue
 
-                else:
+                if not test_handled:
                     params = {
                         "resume_id": resume["id"],
                         "vacancy_id": vacancy_id,
@@ -1157,14 +1172,17 @@ class Operation(BaseOperation):
     def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData:
         """Парсит тесты"""
         r = self.tool.session.get(response_url)
+        # hh.ru теперь отдает этот блок с HTML-заэкранированными кавычками
+        # (внутри HTML-атрибута), поэтому сначала разэкранируем всю страницу
+        text = html.unescape(r.text)
         tests_marker = ',"vacancyTests":'
 
-        if -1 == (tests_start_pos := r.text.find(tests_marker)):
+        if -1 == (tests_start_pos := text.find(tests_marker)):
             raise ValueError("tests not found.")
 
         try:
             res, _ = self.json_decoder.raw_decode(
-                r.text, tests_start_pos + len(tests_marker)
+                text, tests_start_pos + len(tests_marker)
             )
             return res
         except json.JSONDecodeError as ex:
