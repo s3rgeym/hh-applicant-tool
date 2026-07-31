@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import smtplib
@@ -301,6 +302,13 @@ class HHApplicantTool(MegaTool):
 
             if page + 1 >= r.get("pages", 0):
                 break
+
+    def parse_redirect_config(self, response: requests.Response) -> dict[str, Any]:
+        data, _ = json.decoder.JSONDecoder().raw_decode(response.text[response.text.find('{"redirectConfig":'):])
+        return data
+
+    def get_redirect_config(self, url: str) -> dict[str, Any]:
+        return self.parse_redirect_config(self.session.get(url))
 
     # TODO: добавить еще методов или те удалить?
 
