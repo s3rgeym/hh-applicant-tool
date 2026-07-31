@@ -24,6 +24,7 @@ from ..api.errors import ApiError, CaptchaRequired, LimitExceeded
 from ..main import BaseNamespace, BaseOperation
 from ..storage.repositories.errors import RepositoryError
 from ..utils.datatypes import VacancyTestsData
+from ..utils.find import find_key
 from ..utils.json import JSONDecoder
 from ..utils.string import (
     bool2str,
@@ -1156,20 +1157,9 @@ class Operation(BaseOperation):
 
     def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData:
         """Парсит тесты"""
-        r = self.tool.session.get(response_url)
-        tests_marker = ',"vacancyTests":'
-
-        if -1 == (tests_start_pos := r.text.find(tests_marker)):
-            raise ValueError("tests not found.")
-
-        try:
-            res, _ = self.json_decoder.raw_decode(
-                r.text, tests_start_pos + len(tests_marker)
-            )
-            return res
-        except json.JSONDecodeError as ex:
-            raise ValueError("Не могу распарсить vacancyTests.") from ex
-
+        res = self.tool.get_redirect_config(response_url)
+        return find_key(res, "vacancyTests")
+        
     def _solve_vacancy_test(
         self,
         vacancy_id: str | int,
