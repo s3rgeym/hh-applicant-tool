@@ -305,6 +305,7 @@ class HHApplicantTool(MegaTool):
 
     def parse_redirect_config(self, response: requests.Response) -> dict[str, Any]:
         data, _ = json.decoder.JSONDecoder().raw_decode(response.text[response.text.find('{"redirectConfig":'):])
+        assert "redirectConfig" in data
         return data
 
     def get_redirect_config(self, url: str) -> dict[str, Any]:
