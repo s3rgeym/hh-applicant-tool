@@ -406,9 +406,9 @@
                                    autocomplete="new-password" placeholder="Введите новый ключ (пустое поле — не менять)">
                         </div>
                         <div class="form-group">
-                            <label>Эндпоинт API <span class="tip" data-tip="URL API провайдера:&#10;OpenAI: https://api.openai.com/v1&#10;OpenRouter: https://openrouter.ai/api/v1&#10;Ollama: http://localhost:11434/v1">?</span></label>
+                            <label>Эндпоинт API <span class="tip" data-tip="Полный URL, обязательно заканчивается на /chat/completions:&#10;OpenAI: https://api.openai.com/v1/chat/completions&#10;OpenRouter: https://openrouter.ai/api/v1/chat/completions&#10;Ollama: http://localhost:11434/v1/chat/completions">?</span></label>
                             <input type="text" data-config-key="openai_cover_letter.base_url"
-                                   placeholder="https://api.openai.com/v1">
+                                   placeholder="https://api.openai.com/v1/chat/completions">
                         </div>
                         <div class="form-group">
                             <label>Модель <span class="tip" data-tip="Название модели у провайдера.&#10;Примеры: gpt-4o-mini, gpt-4o, claude-3-haiku,&#10;mistralai/mistral-7b-instruct">?</span></label>
@@ -433,7 +433,7 @@
                         <div class="form-group">
                             <label>Эндпоинт API</label>
                             <input type="text" data-config-key="openai_vacancy_filter.base_url"
-                                   placeholder="https://api.openai.com/v1">
+                                   placeholder="https://api.openai.com/v1/chat/completions">
                         </div>
                         <div class="form-group">
                             <label>Модель</label>
