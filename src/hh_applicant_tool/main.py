@@ -5,6 +5,7 @@ import html
 import json
 import logging
 import os
+import re
 import signal
 import smtplib
 import sqlite3
@@ -399,22 +400,39 @@ class HHApplicantTool(MegaTool):
         )
 
     # TODO: вынести в миксин какой
+    def _cookie_value(self, name: str) -> str | None:
+        """Значение cookie по имени из jar на базе {CookieJar} (нет get_dict)."""
+        return next(
+            (c.value for c in self.session.cookies if c.name == name),
+            None,
+        )
+
     def _extract_xsrf_token(self, content: str) -> str:
         # hh.ru отдает этот блок с HTML-заэкранированными кавычками
         # (внутри HTML-атрибута), поэтому сначала разэкранируем всю страницу
         content = html.unescape(content)
-        xsrf_token_marker = ',"xsrfToken":"'
-        s1 = content.find(xsrf_token_marker)
-        if s1 == -1:
+        tokens = re.findall(r',"xsrfToken":"([^"]+)"', content)
+        if not tokens:
             raise ValueError("xsrf token not found")
-        s1 += len(xsrf_token_marker)
-        s2 = content.find('"', s1)
-        if s2 == -1:
-            raise ValueError("malformed xsrf token")
-        return content[s1:s2]
+
+        # На странице hh.ru может быть несколько xsrfToken. Первый из них —
+        # случайное значение, которое ротируется при каждой загрузке и НЕ
+        # соответствует cookie `_xsrf`, из-за чего POST на
+        # /applicant/vacancy_response/popup возвращал 403 (CSRF mismatch).
+        # Сервер сверяет токен именно с cookie `_xsrf`, поэтому отдаем
+        # совпадающее значение, а не первое вхождение.
+        cookie_xsrf = self._cookie_value("_xsrf")
+        if cookie_xsrf and cookie_xsrf in tokens:
+            return cookie_xsrf
+        return tokens[0]
 
     def _get_xsrf_token(self, url: str | None = None) -> str:
-        """Возвращает XSRF-токен, который выдается на сессию"""
+        """Возвращает XSRF-токен, который выдается на сессию."""
+        # Токен, который сервер реально валидирует, лежит в cookie `_xsrf`.
+        # Если cookie уже есть — используем его и не делаем лишний GET.
+        cookie_xsrf = self._cookie_value("_xsrf")
+        if cookie_xsrf:
+            return cookie_xsrf
         r = self.session.get(url or "https://hh.ru/")
         return self._extract_xsrf_token(r.text)
 
