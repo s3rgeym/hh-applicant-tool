@@ -173,7 +173,7 @@ class Operation(BaseOperation):
         parser.add_argument(
             "--max-responses",
             type=int,
-            help="Пропускать отклик на вакансии с более чем N откликов (не реализован)",
+            help="Отправить не более N откликов (по умолчанию без ограничения)",
         )
         parser.add_argument(
             "--dry-run",
@@ -794,6 +794,12 @@ class Operation(BaseOperation):
                 and self._cancel_event.is_set()
             ):
                 logger.info("Операция отменена пользователем")
+                break
+            if self.max_responses and applied_count >= self.max_responses:
+                logger.info(
+                    "Достигнут лимит откликов --max-responses (%d). Останавливаюсь.",
+                    self.max_responses,
+                )
                 break
             try:
                 employer = vacancy.get("employer", {})

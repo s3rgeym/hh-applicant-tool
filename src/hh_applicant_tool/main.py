@@ -4,10 +4,13 @@ import argparse
 import json
 import logging
 import os
+import signal
 import smtplib
 import sqlite3
 import sys
+import threading
 from collections.abc import Sequence
+from contextlib import contextmanager
 from functools import cached_property
 from http.cookiejar import MozillaCookieJar
 from importlib import import_module
@@ -463,51 +466,100 @@ class HHApplicantTool(MegaTool):
         utils.setup_terminal()
 
         try:
-            if self.operation_run:
-                try:
-                    return self.operation_run(self, args)
-                except KeyboardInterrupt:
-                    logger.warning("Выполнение прервано пользователем!")
-                except api.errors.CaptchaRequired as ex:
-                    logger.error(f"Требуется ввод капчи: {ex.captcha_url}")
-                except api.errors.InternalServerError:
-                    logger.error(
-                        "Сервер HH.RU не смог обработать запрос из-за высокой"
-                        " нагрузки или по иной причине"
-                    )
-                except api.errors.Forbidden:
-                    logger.error("Требуется авторизация")
-                except ValueError as ex:
-                    logger.error(ex)
-                except sqlite3.Error as ex:
-                    logger.exception(ex)
-
-                    script_name = sys.argv[0].split(os.sep)[-1]
-
-                    logger.warning(
-                        f"Возможно база данных повреждена, попробуйте выполнить команду:\n\n"  # noqa: E501
-                        f"  {script_name} migrate-db"
-                    )
-                except Exception as e:
-                    logger.exception(e)
-                finally:
-                    # Токен мог автоматически обновиться
-                    if self.save_token():
-                        logger.info("Токен был сохранен после обновления.")
-
-                    try:
-                        self.save_cookies()
-                    except Exception as ex:
-                        logger.error(f"Не удалось сохранить cookies: {ex}")
-                return 1
-            self._parser.print_help(file=sys.stderr)
-            return 2
+            with self._graceful_sigint(args):
+                if not self.operation_run:
+                    self._parser.print_help(file=sys.stderr)
+                    return 2
+                return self._run_operation(args)
         finally:
+            self._check_system_safe()
+
+    @contextmanager
+    def _graceful_sigint(self, args: BaseNamespace):
+        """Мягкое прерывание по Ctrl+C (SIGINT).
+
+        Первое нажатие останавливает операцию между шагами (через
+        `_cancel_event`), второе — принудительно завершает процесс с кодом 130.
+        Ручной обработчик нужен, чтобы KeyboardInterrupt не превращался в дамп
+        стека внутри сетевого вызова проверки версии в `finally` (там ловится
+        только `Exception`).
+        """
+        cancel_event = threading.Event()
+        op_instance = (
+            getattr(self.operation_run, "__self__", None)
+            if self.operation_run
+            else None
+        )
+        if op_instance is not None:
+            op_instance._cancel_event = cancel_event
+        args._cancel_event = cancel_event
+
+        sigint_count = [0]
+
+        def _handle_sigint(signum, frame):
+            sigint_count[0] += 1
+            if sigint_count[0] == 1:
+                cancel_event.set()
+                logger.warning(
+                    "Выполнение прервано пользователем! Останавливаюсь после текущего шага. "
+                    "Нажмите ещё раз для принудительного завершения."
+                )
+            else:
+                sys.exit(130)
+
+        previous_handler = signal.signal(signal.SIGINT, _handle_sigint)
+        try:
+            yield
+        finally:
+            signal.signal(signal.SIGINT, previous_handler)
+
+    def _run_operation(self, args: BaseNamespace) -> None | int:
+        """Запускает выбранную операцию и превращает исключения в сообщения."""
+        try:
+            return self.operation_run(self, args)
+        except KeyboardInterrupt:
+            logger.warning("Выполнение прервано пользователем!")
+        except api.errors.CaptchaRequired as ex:
+            logger.error(f"Требуется ввод капчи: {ex.captcha_url}")
+        except api.errors.InternalServerError:
+            logger.error(
+                "Сервер HH.RU не смог обработать запрос из-за высокой"
+                " нагрузки или по иной причине"
+            )
+        except api.errors.Forbidden:
+            logger.error("Требуется авторизация")
+        except ValueError as ex:
+            logger.error(ex)
+        except sqlite3.Error as ex:
+            logger.exception(ex)
+
+            script_name = sys.argv[0].split(os.sep)[-1]
+
+            logger.warning(
+                f"Возможно база данных повреждена, попробуйте выполнить команду:\n\n"  # noqa: E501
+                f"  {script_name} migrate-db"
+            )
+        except Exception as e:
+            logger.exception(e)
+        finally:
+            # Токен мог автоматически обновиться
+            if self.save_token():
+                logger.info("Токен был сохранен после обновления.")
+
             try:
-                self._check_system()
-            except Exception:
-                pass
-                # raise
+                self.save_cookies()
+            except Exception as ex:
+                logger.error(f"Не удалось сохранить cookies: {ex}")
+        return 1
+
+    def _check_system_safe(self) -> None:
+        """Проверка обновлений, никогда не ломающая выход из программы."""
+        try:
+            self._check_system()
+        except KeyboardInterrupt:
+            logger.warning("Выполнение прервано пользователем!")
+        except Exception:
+            pass
 
     def _assign_args(self, args: BaseNamespace) -> None:
         for name, value in vars(args).items():
