@@ -37,6 +37,8 @@ RUN pip install --no-cache-dir -e '.[playwright,pillow]' && \
     touch /var/log/cron.log && chown docker:docker /var/log/cron.log && \
     mkdir -p ./config && chown -R docker:docker ./config
 
+RUN playwright install --with-deps chromium   
+
 # Копируем остальное (эти файлы мешают кешированию последующих слоев)
 COPY --chmod=755 crontab startup.sh .
 

@@ -3,8 +3,10 @@ services:
     container_name: hh_applicant_tool
     image: hh_applicant_tool:latest
     build:
+      network: host      # <--- Для сборки (docker compose build)
       context: .
       dockerfile: Dockerfile
+    network_mode: "host"
     volumes:
       - .:/app:ro
       - ./config:/app/config:rw
