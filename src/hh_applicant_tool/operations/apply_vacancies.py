@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import html
-import json
 import logging
 import random
 import re
@@ -29,6 +28,7 @@ from ..utils.json import JSONDecoder
 from ..utils.string import (
     bool2str,
     rand_text,
+    shorten,
     strip_tags,
     unescape_string,
 )
@@ -38,6 +38,58 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__package__)
+
+
+_ERROR_DETAIL_KEYS = ("errors", "error", "message", "reason")
+_ERROR_SUMMARY_LIMIT = 240
+
+
+def _first_error_detail(data: Any) -> str | None:
+    """Достаёт одно короткое строковое описание ошибки из ответа.
+
+    Намеренно не пытается покрыть все возможные форматы ошибок hh.ru —
+    API меняется. Берётся первое подходящее значение, иначе None.
+    """
+    if not isinstance(data, dict):
+        return None
+
+    for key in _ERROR_DETAIL_KEYS:
+        value = data.get(key)
+        if isinstance(value, list) and value:
+            value = value[0]
+        if isinstance(value, dict):
+            for sub in ("message", "reason", "code", "type"):
+                if value.get(sub):
+                    return str(value[sub])
+            continue
+        if value:
+            return str(value)
+    return None
+
+
+def _format_error_summary(result: Any) -> str:
+    """Формирует короткое, понятное человеку описание ошибки отклика.
+
+    Устойчиво к изменениям API hh.ru: опирается на простые и стабильные вещи —
+    HTTP-статус, наличие известных полей-описаний и форму тела. Вывод
+    обрезается, чтобы в терминал никогда не попала «простыня».
+    """
+    status = result.get("_http_status") if isinstance(result, dict) else None
+    prefix = f"HTTP {status}: " if status is not None else ""
+
+    detail = _first_error_detail(result)
+    if detail:
+        return shorten(prefix + detail, _ERROR_SUMMARY_LIMIT)
+
+    if isinstance(result, dict) and (
+        "css_links" in result or "inline_script" in result
+    ):
+        return shorten(
+            prefix + "вместо ответа вернулась страница сайта hh.ru",
+            _ERROR_SUMMARY_LIMIT,
+        )
+
+    return shorten(prefix + "нет данных об ошибке", _ERROR_SUMMARY_LIMIT)
 
 
 class Namespace(BaseNamespace):
@@ -1037,7 +1089,11 @@ class Operation(BaseOperation):
                                     vacancy["alternate_url"],
                                 )
                             else:
-                                err = result.get("error")
+                                err = (
+                                    result.get("error")
+                                    if isinstance(result, dict)
+                                    else None
+                                )
 
                                 if err == "negotiations-limit-exceeded":
                                     do_apply = False
@@ -1048,8 +1104,18 @@ class Operation(BaseOperation):
                                     )
                                     break
                                 else:
+                                    logger.debug(
+                                        "Отклик с тестом не удался (%s): status=%s, body_keys=%s",
+                                        vacancy["alternate_url"],
+                                        result.get("_http_status")
+                                        if isinstance(result, dict)
+                                        else None,
+                                        list(result)
+                                        if isinstance(result, dict)
+                                        else type(result).__name__,
+                                    )
                                     logger.error(
-                                        f"Произошла ошибка при отклике на вакансию с тестом: {vacancy['alternate_url']} - {err}"
+                                        f"Произошла ошибка при отклике на вакансию с тестом: {vacancy['alternate_url']} - {_format_error_summary(result)}"
                                     )
                         else:
                             test_handled = True
@@ -1308,8 +1374,30 @@ class Operation(BaseOperation):
             response.status_code,
         )
 
-        data = response.json()
-        # logger.debug(data)
+        try:
+            data = response.json()
+        except (ValueError, requests.exceptions.JSONDecodeError) as ex:
+            logger.warning(
+                "Ответ на отклик с тестом не является JSON (status=%s, url=%s, content-type=%s): %s",
+                response.status_code,
+                response.url,
+                response.headers.get("Content-Type"),
+                shorten(response.text, 1000),
+            )
+            raise ValueError(
+                "Эндпоинт отклика на тест вернул не-JSON ответ "
+                "(возможно, перенаправление на капчу или форму)."
+            ) from ex
+
+        if isinstance(data, dict):
+            data["_http_status"] = response.status_code
+
+        logger.debug(
+            "Ответ на отклик с тестом: status=%s, url=%s, body_keys=%s",
+            response.status_code,
+            response.url,
+            list(data) if isinstance(data, dict) else type(data).__name__,
+        )
 
         return data
 
