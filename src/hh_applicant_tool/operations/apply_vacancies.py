@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import html
-import json
 import logging
 import random
 import re
@@ -29,6 +28,7 @@ from ..utils.json import JSONDecoder
 from ..utils.string import (
     bool2str,
     rand_text,
+    shorten,
     strip_tags,
     unescape_string,
 )
@@ -1037,7 +1037,11 @@ class Operation(BaseOperation):
                                     vacancy["alternate_url"],
                                 )
                             else:
-                                err = result.get("error")
+                                err = (
+                                    result.get("error")
+                                    if isinstance(result, dict)
+                                    else None
+                                )
 
                                 if err == "negotiations-limit-exceeded":
                                     do_apply = False
@@ -1048,8 +1052,16 @@ class Operation(BaseOperation):
                                     )
                                     break
                                 else:
+                                    status = (
+                                        result.get("_http_status")
+                                        if isinstance(result, dict)
+                                        else None
+                                    )
                                     logger.error(
-                                        f"Произошла ошибка при отклике на вакансию с тестом: {vacancy['alternate_url']} - {err}"
+                                        "Произошла ошибка при отклике на вакансию с тестом: %s (HTTP %s), result: %s",
+                                        vacancy["alternate_url"],
+                                        status if status is not None else "?",
+                                        shorten(str(result), 300),
                                     )
                         else:
                             test_handled = True
@@ -1308,8 +1320,22 @@ class Operation(BaseOperation):
             response.status_code,
         )
 
-        data = response.json()
-        # logger.debug(data)
+        try:
+            data = response.json()
+        except (ValueError, requests.exceptions.JSONDecodeError) as ex:
+            logger.warning(
+                "Ответ на отклик с тестом не является JSON (status=%s, %s), result: %s",
+                response.status_code,
+                response.url,
+                shorten(response.text, 300),
+            )
+            raise ValueError(
+                "Эндпоинт отклика на тест вернул не-JSON ответ "
+                "(возможно, перенаправление на капчу или форму)."
+            ) from ex
+
+        if isinstance(data, dict):
+            data["_http_status"] = response.status_code
 
         return data
 
