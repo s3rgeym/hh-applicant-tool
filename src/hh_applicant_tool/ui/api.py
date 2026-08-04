@@ -295,12 +295,9 @@ class Api:
 
     def refresh_negotiations(self, status: str = "active") -> dict:
         try:
-            from ..storage.models.negotiation import NegotiationModel
-
             count = 0
             for item in self._tool.get_negotiations(status):
-                model = NegotiationModel.from_dict(item)
-                self._tool.storage.negotiations.save(model)
+                self._tool.storage.negotiations.save(item)
                 count += 1
             return {"status": "ok", "count": count}
         except Exception as e:

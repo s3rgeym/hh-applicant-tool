@@ -294,3 +294,163 @@ class TestApplyVacancies:
         """apply_vacancies всегда возвращает dict с ключом status."""
         result = api.apply_vacancies({"search": "test", "dry_run": True})
         assert "status" in result
+
+
+class TestRefreshNegotiations:
+    """Синхронизация откликов с hh.ru через refresh_negotiations."""
+
+    def test_saves_api_items_to_db(self, api, mock_tool):
+        """Отклики hh.ru (raw dict'ы) сохраняются в БД, возвращается count.
+
+        Структура item'ов повторяет ответ hh.ru /negotiations
+        (api.datatypes.Negotiation): NegotiationModel.from_api берёт id, chat_id,
+        state.id, vacancy.id, vacancy.employer.id, resume.id.
+        """
+        item1 = {
+            "id": "1234567890",
+            "state": {"id": "active", "name": "Активный"},
+            "created_at": "2026-08-02T10:00:00+03:00",
+            "updated_at": "2026-08-02T12:00:00+03:00",
+            "resume": {
+                "id": "res1",
+                "title": "Python Developer",
+                "url": "https://hh.ru/resume/res1",
+                "alternate_url": "https://hh.ru/resume/res1",
+            },
+            "viewed_by_opponent": False,
+            "has_updates": False,
+            "messages_url": "https://hh.ru/messages/1234567890",
+            "url": "https://hh.ru/negotiations/1234567890",
+            "counters": {"messages": 1, "unread_messages": 0},
+            "chat_states": {"response_reminder_state": {"allowed": False}},
+            "source": "https://hh.ru/vacancy/111",
+            "chat_id": 987654321,
+            "messaging_status": "ok",
+            "decline_allowed": True,
+            "read": True,
+            "has_new_messages": False,
+            "applicant_question_state": False,
+            "hidden": False,
+            "vacancy": {
+                "id": "111",
+                "premium": False,
+                "name": "Python разработчик",
+                "department": None,
+                "has_test": False,
+                "response_letter_required": False,
+                "area": {"id": "1", "name": "Москва"},
+                "salary": None,
+                "salary_range": None,
+                "type": {"id": "open", "name": "Открытая"},
+                "address": None,
+                "response_url": None,
+                "sort_point_distance": None,
+                "published_at": "2026-07-30T10:00:00+03:00",
+                "created_at": "2026-07-30T10:00:00+03:00",
+                "archived": False,
+                "apply_alternate_url": (
+                    "https://hh.ru/applicant/vacancy_response?vacancyId=111"
+                ),
+                "show_contacts": False,
+                "benefits": [],
+                "insider_interview": None,
+                "url": "https://hh.ru/vacancy/111",
+                "alternate_url": "https://hh.ru/vacancy/111",
+                "professional_roles": [{"id": "96", "name": "Программист"}],
+                "employer": {
+                    "id": "777",
+                    "name": "ООО Ромашка",
+                    "url": "https://hh.ru/employer/777",
+                    "alternate_url": "https://hh.ru/employer/777",
+                    "logo_urls": None,
+                    "vacancies_url": "https://hh.ru/employer/777/vacancies",
+                    "accredited_it_employer": False,
+                    "trusted": False,
+                },
+                "show_logo_in_search": None,
+            },
+            "tags": [],
+        }
+        item2 = {
+            "id": "2233445566",
+            "state": {"id": "invitation", "name": "Приглашение"},
+            "created_at": "2026-08-01T10:00:00+03:00",
+            "updated_at": "2026-08-01T11:00:00+03:00",
+            "resume": {
+                "id": "res2",
+                "title": "Go Developer",
+                "url": "https://hh.ru/resume/res2",
+                "alternate_url": "https://hh.ru/resume/res2",
+            },
+            "viewed_by_opponent": True,
+            "has_updates": True,
+            "messages_url": "https://hh.ru/messages/2233445566",
+            "url": "https://hh.ru/negotiations/2233445566",
+            "counters": {"messages": 3, "unread_messages": 1},
+            "chat_states": {"response_reminder_state": {"allowed": True}},
+            "source": "https://hh.ru/vacancy/222",
+            "chat_id": 1122334455,
+            "messaging_status": "ok",
+            "decline_allowed": False,
+            "read": False,
+            "has_new_messages": True,
+            "applicant_question_state": False,
+            "hidden": False,
+            "vacancy": {
+                "id": "222",
+                "premium": True,
+                "name": "Go разработчик",
+                "department": None,
+                "has_test": True,
+                "response_letter_required": False,
+                "area": {"id": "2", "name": "Санкт-Петербург"},
+                "salary": {
+                    "from": 200000,
+                    "to": 300000,
+                    "currency": "RUR",
+                    "gross": True,
+                },
+                "salary_range": None,
+                "type": {"id": "open", "name": "Открытая"},
+                "address": None,
+                "response_url": None,
+                "sort_point_distance": None,
+                "published_at": "2026-07-29T10:00:00+03:00",
+                "created_at": "2026-07-29T10:00:00+03:00",
+                "archived": False,
+                "apply_alternate_url": (
+                    "https://hh.ru/applicant/vacancy_response?vacancyId=222"
+                ),
+                "show_contacts": False,
+                "benefits": [],
+                "insider_interview": None,
+                "url": "https://hh.ru/vacancy/222",
+                "alternate_url": "https://hh.ru/vacancy/222",
+                "professional_roles": [{"id": "96", "name": "Программист"}],
+                "employer": {
+                    "id": "888",
+                    "name": "ООО ТехноГо",
+                    "url": "https://hh.ru/employer/888",
+                    "alternate_url": "https://hh.ru/employer/888",
+                    "logo_urls": None,
+                    "vacancies_url": "https://hh.ru/employer/888/vacancies",
+                    "accredited_it_employer": True,
+                    "trusted": True,
+                },
+                "show_logo_in_search": None,
+            },
+            "tags": [],
+        }
+        mock_tool.get_negotiations.return_value = [item1, item2]
+
+        result = api.refresh_negotiations()
+
+        assert result == {"status": "ok", "count": 2}
+        rows = api.get_negotiations_from_db()
+        assert len(rows) == 2
+        # Порядок из get_negotiations_from_db: ORDER BY created_at DESC,
+        # у item1 created_at позже — он первый
+        assert rows[0]["state"] == "active"
+        assert rows[0]["vacancy_id"] == int(item1["vacancy"]["id"])
+        assert rows[1]["state"] == "invitation"
+        assert rows[1]["vacancy_id"] == int(item2["vacancy"]["id"])
