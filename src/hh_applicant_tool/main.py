@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import logging
 import os
@@ -188,7 +189,6 @@ class HHApplicantTool(MegaTool):
         log_label: str,
     ) -> requests.Session:
         session = requests.Session()
-        session.verify = False
 
         if proxies:
             logger.info("Use proxies for %s: %r", log_label, proxies)
@@ -307,7 +307,10 @@ class HHApplicantTool(MegaTool):
                 break
 
     def parse_redirect_config(self, response: requests.Response) -> dict[str, Any]:
-        data, _ = json.decoder.JSONDecoder().raw_decode(response.text[response.text.find('{"redirectConfig":'):])
+        # hh.ru отдает этот блок с HTML-заэкранированными кавычками
+        # (внутри HTML-атрибута), поэтому сначала разэкранируем всю страницу
+        text = html.unescape(response.text)
+        data, _ = json.decoder.JSONDecoder().raw_decode(text[text.find('{"redirectConfig":'):])
         assert "redirectConfig" in data
         return data
 
@@ -397,6 +400,9 @@ class HHApplicantTool(MegaTool):
 
     # TODO: вынести в миксин какой
     def _extract_xsrf_token(self, content: str) -> str:
+        # hh.ru отдает этот блок с HTML-заэкранированными кавычками
+        # (внутри HTML-атрибута), поэтому сначала разэкранируем всю страницу
+        content = html.unescape(content)
         xsrf_token_marker = ',"xsrfToken":"'
         s1 = content.find(xsrf_token_marker)
         if s1 == -1:
