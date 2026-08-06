@@ -991,16 +991,33 @@ class Operation(BaseOperation):
                     "response_letter_required"
                 ):
                     if self.cover_letter_ai:
-                        msg = self.message_prompt + "\n\n"
+                        msg = self.message_prompt + "\n"
+                        ## добавляем переменные в контекст AI запроса ##
                         msg += (
-                            "Название вакансии: "
-                            + message_placeholders["vacancy_name"]
+                            "[ВАКАНСИЯ] "
+                            + "Название: "
+                            + message_placeholders["vacancy_name"] + ", "
+                            + "Работодатель: "
+                            + message_placeholders["employer_name"] + "; "
                         )
                         msg += (
-                            "Мое резюме: "
-                            + message_placeholders["resume_title"]
+                            "[РЕЗЮМЕ] "
+                            + "Название: "
+                            + message_placeholders["resume_title"] + ", "
+                            + "Ссылка на резюме: "
+                            + message_placeholders["resume_url"] + ", "    
                         )
-                        logger.debug("prompt: %s", msg)
+                        msg += (
+                            "Имя: "
+                            + message_placeholders["first_name"] + ", "
+                            + "Фамилия: "
+                            + message_placeholders["last_name"] + ", "
+                            + "Телефон: "
+                            + message_placeholders["phone"] + ", "
+                            + "Почта: "
+                            + message_placeholders["email"]
+                        )
+                        ## logger.debug("prompt: %s", msg) ## убираем отладку
                         letter = self.cover_letter_ai.complete(msg)
                     else:
                         letter = (
@@ -1198,6 +1215,8 @@ class Operation(BaseOperation):
     def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData:
         """Парсит тесты"""
         res = self.tool.get_redirect_config(response_url)
+        if not res:
+            return None ## добавлена обработка пустого ответа ##        
         return find_key(res, "vacancyTests")
 
     def _solve_vacancy_test(
@@ -1211,13 +1230,16 @@ class Operation(BaseOperation):
 
         # Загружаем данные теста и токен
         tests_data = self._get_vacancy_tests(response_url)
+        ## Проверяем, что вернулся не пустой массив ##
+        if not tests_data:
+            raise ValueError(f"Данные тестов не найдены. Обновите cookies, сделав login/logout.")
 
-        try:
-            test_data = tests_data[str(vacancy_id)]
-        except KeyError as ex:
-            raise ValueError("Отсутствуют данные теста для вакансии.") from ex
-
-        logger.debug(f"{test_data = }")
+        ## Гарантированная инициализация и проверки ##
+        test_data = None
+        test_data = tests_data.get(str(vacancy_id))
+        if not test_data:
+            raise ValueError(f"Пустые данные теста вакансии vacancy_id={vacancy_id}")
+        ## logger.debug(f"{test_data = }") ## убираем отладку
 
         payload: dict[str, Any] = {
             "_xsrf": self.tool.xsrf_token,
@@ -1288,6 +1310,8 @@ class Operation(BaseOperation):
                 elif self.cover_letter_ai:
                     prompt = f"Дай краткий и профессиональный ответ на вопрос: {question}"
                     answer = self.cover_letter_ai.complete(prompt)
+                    ## добавляем ответ AI на вопрос теста##
+                    logger.debug("AI ответ= %r", answer)
                 # Тупоеблые любят вопросы с ответами да/нет, где ответ да является правильным в большинстве случаев.
                 else:
                     answer = "Да"
