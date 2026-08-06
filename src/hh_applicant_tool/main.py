@@ -44,6 +44,10 @@ logger = logging.getLogger(__package__)
 OPERATIONS = "operations"
 
 
+class Error(Exception):
+    pass
+
+
 class BaseOperation:
     def setup_parser(self, parser: argparse.ArgumentParser) -> None: ...
 
@@ -307,16 +311,18 @@ class HHApplicantTool(MegaTool):
             if page + 1 >= r.get("pages", 0):
                 break
 
-    def parse_redirect_config(self, response: requests.Response) -> dict[str, Any]:
+    def parse_redirect_config(self, response: requests.Response, check_auth: bool = True) -> dict[str, Any]:
         # hh.ru отдает этот блок с HTML-заэкранированными кавычками
         # (внутри HTML-атрибута), поэтому сначала разэкранируем всю страницу
         text = html.unescape(response.text)
         data, _ = json.decoder.JSONDecoder().raw_decode(text[text.find('{"redirectConfig":'):])
         assert "redirectConfig" in data
+        if data.get("anonymousUserType"):
+            raise Error("Авторизация истекла требуется новая!")
         return data
 
-    def get_redirect_config(self, url: str) -> dict[str, Any]:
-        return self.parse_redirect_config(self.session.get(url))
+    def get_redirect_config(self, url: str, check_auth: bool = True) -> dict[str, Any]:
+        return self.parse_redirect_config(self.session.get(url), check_auth)
 
     # TODO: добавить еще методов или те удалить?
 
@@ -552,7 +558,7 @@ class HHApplicantTool(MegaTool):
             )
         except api.errors.Forbidden:
             logger.error("Требуется авторизация")
-        except ValueError as ex:
+        except (Error, ValueError) as ex:
             logger.error(ex)
         except sqlite3.Error as ex:
             logger.exception(ex)
