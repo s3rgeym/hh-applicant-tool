@@ -31,6 +31,8 @@ from .constants import (
     CONFIG_FILENAME,
     COOKIES_FILENAME,
     DATABASE_FILENAME,
+    DEFAULT_OPENAI_CONNECT_TIMEOUT,
+    DEFAULT_OPENAI_TIMEOUT,
     DESKTOP_USER_AGENT,
     LOG_FILENAME,
 )
@@ -67,6 +69,8 @@ class BaseNamespace(argparse.Namespace):
     user_agent: str
     proxy_url: str
     openai_proxy_url: str
+    openai_timeout: float
+    openai_connect_timeout: float
     operation_run: Callable[[HHApplicantTool, BaseNamespace], None | int] | None
 
 
@@ -130,6 +134,18 @@ class HHApplicantTool(MegaTool):
             "--ai-proxy",
             dest="openai_proxy_url",
             help="Отдельный прокси, используемый только для OpenAI чата",
+        )
+        parser.add_argument(
+            "--openai-timeout",
+            "--ai-timeout",
+            type=float,
+            help="Таймаут запроса к OpenAI в секундах: соединение и чтение ответа",
+        )
+        parser.add_argument(
+            "--openai-connect-timeout",
+            "--ai-connect-timeout",
+            type=float,
+            help="Таймаут соединения с OpenAI в секундах",
         )
         subparsers = parser.add_subparsers(help="commands")
         package_dir = Path(__file__).resolve().parent / OPERATIONS
@@ -394,6 +410,8 @@ class HHApplicantTool(MegaTool):
                 config_section,
             )
     
+        openai_config = self.config.get("openai", {})
+
         return ai.ChatOpenAI(
             api_key=api_key,
             model=model,
@@ -402,6 +420,18 @@ class HHApplicantTool(MegaTool):
             system_prompt=system_prompt,
             base_url=base_url,
             rate_limit=c.get("rate_limit", 40),
+            timeout=(
+                self.openai_timeout
+                or c.get("timeout")
+                or openai_config.get("timeout")
+                or DEFAULT_OPENAI_TIMEOUT
+            ),
+            connect_timeout=(
+                self.openai_connect_timeout
+                or c.get("connect_timeout")
+                or openai_config.get("connect_timeout")
+                or DEFAULT_OPENAI_CONNECT_TIMEOUT
+            ),
             session=self.openai_session,
         )
 

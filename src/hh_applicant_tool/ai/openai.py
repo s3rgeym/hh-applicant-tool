@@ -6,7 +6,12 @@ from email.utils import parsedate_to_datetime
 from threading import Lock
 
 import requests
+from urllib3.util import Timeout
 
+from ..constants import (
+    DEFAULT_OPENAI_CONNECT_TIMEOUT,
+    DEFAULT_OPENAI_TIMEOUT,
+)
 from .base import AIError
 
 logger = logging.getLogger(__package__)
@@ -24,7 +29,10 @@ class ChatOpenAI:
 
     base_url: str
     system_prompt: str | None = None
-    timeout: float = 15.0
+    # Общий таймаут на весь запрос
+    timeout: float = DEFAULT_OPENAI_TIMEOUT
+    # Отдельный таймаут только на установку соединения
+    connect_timeout: float = DEFAULT_OPENAI_CONNECT_TIMEOUT
 
     # Параметры для retry логики
     max_retries: int = 5
@@ -72,7 +80,11 @@ class ChatOpenAI:
                     self.base_url,
                     json=payload,
                     headers=self._default_headers(),
-                    timeout=self.timeout,
+                    # Ожидание ответа урезается на время, потраченное
+                    # на соединение
+                    timeout=Timeout(
+                        connect=self.connect_timeout, total=self.timeout
+                    ),
                 )
             finally:
                 self._previous_request_time = time.monotonic()

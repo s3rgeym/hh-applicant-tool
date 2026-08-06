@@ -12,3 +12,8 @@ DESKTOP_USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/147.0.0.0 Safari/537.36"
 )
+# Общий таймаут запроса к OpenAI: соединение + чтение ответа
+DEFAULT_OPENAI_TIMEOUT = 30.0
+# Отдельно на установку соединения, чтобы недоступный сервер не съедал
+# весь таймаут
+DEFAULT_OPENAI_CONNECT_TIMEOUT = 5.0
