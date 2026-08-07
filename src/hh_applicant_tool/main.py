@@ -333,7 +333,7 @@ class HHApplicantTool(MegaTool):
         if config.startswith('{&#34;'):
            config = html.unescape(config)
         config = json.loads(config)
-        assert "redirectConfig" in config:
+        assert "redirectConfig" in config
         if check_auth and config.get("anonymousUserType"):
             raise Error("Авторизация истекла требуется новая!")
         return config
