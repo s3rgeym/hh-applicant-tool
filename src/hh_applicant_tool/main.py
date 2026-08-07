@@ -328,14 +328,15 @@ class HHApplicantTool(MegaTool):
                 break
 
     def parse_redirect_config(self, response: requests.Response, check_auth: bool = True) -> dict[str, Any]:
-        # hh.ru отдает этот блок с HTML-заэкранированными кавычками
-        # (внутри HTML-атрибута), поэтому сначала разэкранируем всю страницу
-        text = html.unescape(response.text)
-        data, _ = json.decoder.JSONDecoder().raw_decode(text[text.find('{"redirectConfig":'):])
-        assert "redirectConfig" in data
-        if data.get("anonymousUserType"):
+        config = response.text.split('id="HH-Lux-InitialState1">')[1].split('</template>')[0]
+        # Теперь кавычки всегда превращаются в сущности?
+        if config.startswith('{&#34;'):
+           config = html.unescape(config)
+        config = json.loads(config)
+        assert "redirectConfig" in config:
+        if check_auth and config.get("anonymousUserType"):
             raise Error("Авторизация истекла требуется новая!")
-        return data
+        return config
 
     def get_redirect_config(self, url: str, check_auth: bool = True) -> dict[str, Any]:
         return self.parse_redirect_config(self.session.get(url), check_auth)
