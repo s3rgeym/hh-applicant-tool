@@ -326,16 +326,34 @@ class HHApplicantTool(MegaTool):
 
             if page + 1 >= r.get("pages", 0):
                 break
-
+                
+    def _is_authenticated(self, config: dict[str, Any]) -> bool:
+        account = config.get('account') or {}
+        if not account:
+            return False
+        # Если пользователь неавторизован содержит поля типа firstName, lastName и тд со значением None (все поля)
+        return any(v is not None for v in account.values())
+    
     def parse_redirect_config(self, response: requests.Response, check_auth: bool = True) -> dict[str, Any]:
+        if response.status_code != 200:
+            raise Error(f"Неожиданный код ответа: {response.status_code} {response.url}")
+        
         config = response.text.split('id="HH-Lux-InitialState1">')[1].split('</template>')[0]
         # Теперь кавычки всегда превращаются в сущности?
         if config.startswith('{&#34;'):
            config = html.unescape(config)
+            
+        # import tуmpfile
+        # with tempfile.NamedTemporaryFile('w', delete=False, prefix='hh_config_', suffix='.json', dir='.', encoding='utf-8') as tmp_file:
+        #     tmp_file.write(config)
+        #     file_path = tmp_file.name
+        
         config = json.loads(config)
+        
         assert "redirectConfig" in config
-        if check_auth and config.get("anonymousUserType"):
+        if check_auth and not self._is_authenticated(config):
             raise Error("Авторизация истекла требуется новая!")
+            
         return config
 
     def get_redirect_config(self, url: str, check_auth: bool = True) -> dict[str, Any]:
