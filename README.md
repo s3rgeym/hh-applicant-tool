@@ -1,4 +1,12 @@
 # HH Applicant Tool
+
+![Publish to PyPI](https://github.com/s3rgeym/hh-applicant-tool/actions/workflows/publish.yml/badge.svg)
+[![PyPi Version](https://img.shields.io/pypi/v/hh-applicant-tool)]()
+[![Python Versions](https://img.shields.io/pypi/pyversions/hh-applicant-tool.svg)]()
+[![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/s3rgeym/hh-applicant-tool)]()
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/hh-applicant-tool)]()
+[![Total Downloads](https://static.pepy.tech/badge/hh-applicant-tool)]()
+
 > [!IMPORTANT]
 > [Группа поддержки в Телеграме (для всех моих утилит и просто для общения)](https://t.me/s3rgeym_chat)
 
@@ -17,12 +25,6 @@
 > [!WARNING]
 > Нет НЕЙРОХУЙНЕ! Прекратите слать код, который сами не понимаете. Мне лень просматривать высеры нейродурака, поэтому скопилось приличное количество нейрошлака... В 2026 программисты умерли, остались лишь операторы промптов
 
-![Publish to PyPI](https://github.com/s3rgeym/hh-applicant-tool/actions/workflows/publish.yml/badge.svg)
-[![PyPi Version](https://img.shields.io/pypi/v/hh-applicant-tool)]()
-[![Python Versions](https://img.shields.io/pypi/pyversions/hh-applicant-tool.svg)]()
-[![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/s3rgeym/hh-applicant-tool)]()
-[![PyPI - Downloads](https://img.shields.io/pypi/dm/hh-applicant-tool)]()
-[![Total Downloads](https://static.pepy.tech/badge/hh-applicant-tool)]()
 
 <div align="center">
   <img src="https://github.com/user-attachments/assets/29d91490-2c83-4e3f-a573-c7a6182a4044" width="500">
