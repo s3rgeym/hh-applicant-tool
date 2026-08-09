@@ -337,19 +337,24 @@ class HHApplicantTool(MegaTool):
     def parse_redirect_config(self, response: requests.Response, check_auth: bool = True) -> dict[str, Any]:
         if response.status_code != 200:
             raise Error(f"Неожиданный код ответа: {response.status_code} {response.url}")
+
+        try:
+            raw_config = response.text.split('id="HH-Lux-InitialState">')[1].split('</template>')[0]
+        except IndexError:
+            raise Error(f"Template with config not found on {response.url}")
         
-        config = response.text.split('id="HH-Lux-InitialState1">')[1].split('</template>')[0]
         # Теперь кавычки всегда превращаются в сущности?
-        if config.startswith('{&#34;'):
-           config = html.unescape(config)
+        if raw_config.startswith('{&#34;'):
+           raw_config = html.unescape(raw_config)
             
-        # import tуmpfile
+        # import tempfile
         # with tempfile.NamedTemporaryFile('w', delete=False, prefix='hh_config_', suffix='.json', dir='.', encoding='utf-8') as tmp_file:
-        #     tmp_file.write(config)
+        #     tmp_file.write(raw_config)
         #     file_path = tmp_file.name
+        #     print(file_path)
         
-        config = json.loads(config)
-        
+        config = json.loads(raw_config)
+        assert type(config) is dict
         assert "redirectConfig" in config
         if check_auth and not self._is_authenticated(config):
             raise Error("Авторизация истекла требуется новая!")
