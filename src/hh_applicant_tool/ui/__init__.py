@@ -41,6 +41,7 @@ def create_window(tool: HHApplicantTool, *, debug: bool = False) -> None:
         height=750,
         min_size=(800, 500),
         on_top=True,
+        text_select=True,
     )
     api.set_window(window)
     webview.start(bring_to_front, debug=debug, http_server=True)

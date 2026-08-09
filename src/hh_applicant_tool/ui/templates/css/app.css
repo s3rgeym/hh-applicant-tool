@@ -313,6 +313,18 @@
     transition: width 0.3s ease;
 }
 
+#progress-log {
+    user-select: text;
+    -webkit-user-select: text;
+}
+#progress-log a {
+    color: #2563eb;
+    text-decoration: none;
+}
+#progress-log a:hover {
+    text-decoration: underline;
+}
+
 /* ===== Спиннер ===== */
 .spinner {
     width: 1rem;
