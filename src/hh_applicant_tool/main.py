@@ -337,23 +337,35 @@ class HHApplicantTool(MegaTool):
     def parse_redirect_config(self, response: requests.Response, check_auth: bool = True) -> dict[str, Any]:
         if response.status_code != 200:
             raise Error(f"Неожиданный код ответа: {response.status_code} {response.url}")
-        
-        config = response.text.split('id="HH-Lux-InitialState1">')[1].split('</template>')[0]
-        # Теперь кавычки всегда превращаются в сущности?
-        if config.startswith('{&#34;'):
-           config = html.unescape(config)
-            
-        # import tуmpfile
-        # with tempfile.NamedTemporaryFile('w', delete=False, prefix='hh_config_', suffix='.json', dir='.', encoding='utf-8') as tmp_file:
-        #     tmp_file.write(config)
-        #     file_path = tmp_file.name
-        
+
+        text = response.text
+
+        # HH периодически меняет разметку initial-state блока.
+        # Раньше: <template id="HH-Lux-InitialState1">, теперь:
+        # <template style="display:none" id="HH-Lux-InitialState">{...}</template>.
+        # Ищем блок устойчиво к порядку атрибутов и варианту id.
+        match = re.search(
+            r'<template[^>]*id="HH-Lux-InitialState\d?"[^>]*>(.*?)</template>',
+            text,
+            re.S,
+        )
+        if not match:
+            raise Error(
+                f"Блок HH-Lux-InitialState не найден в теле ответа. "
+                f"url={response.url} status={response.status_code} "
+                f"content_type={response.headers.get('Content-Type')} "
+                f"body_len={len(text)} has_redirectConfig={'redirectConfig' in text} "
+                f"snippet={text[:300]!r}"
+            )
+
+        # Содержимое initial-state закодировано HTML-сущностями (&#34; и т.п.)
+        config = html.unescape(match.group(1))
         config = json.loads(config)
-        
+
         assert "redirectConfig" in config
         if check_auth and not self._is_authenticated(config):
             raise Error("Авторизация истекла требуется новая!")
-            
+
         return config
 
     def get_redirect_config(self, url: str, check_auth: bool = True) -> dict[str, Any]:
