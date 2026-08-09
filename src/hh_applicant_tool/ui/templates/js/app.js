@@ -505,17 +505,31 @@ function updateProgress(current, total, message) {
 
     if (bar && total > 0) bar.style.width = Math.round((current / total) * 100) + '%';
     if (text) {
-        text.textContent = total > 0
-            ? `${current} / ${total}` + (message ? ' — ' + message : '')
-            : message || '';
+        text.innerHTML = total > 0
+            ? `${current} / ${total}` + (message ? ' — ' + linkifyUrls(message) : '')
+            : linkifyUrls(message || '');
     }
     if (log && message) {
         const line = document.createElement('div');
-        line.textContent = message;
+        line.className = 'progress-line';
+        line.innerHTML = linkifyUrls(message);
         log.appendChild(line);
         while (log.children.length > 300) log.removeChild(log.firstChild);
         log.scrollTop = log.scrollHeight;
     }
+}
+
+function linkifyUrls(text) {
+    const URL_RE = /(https?:\/\/[^\s<>"']+)/gi;
+    return String(text).split(URL_RE).map(part => {
+        if (/^https?:\/\/[^\s<>"']+$/i.test(part)) {
+            const clean = part.replace(/[.,;:!?]+$/, '');
+            const href = escapeHtml(clean);
+            const suffix = escapeHtml(part.slice(clean.length));
+            return `<a href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>${suffix}`;
+        }
+        return escapeHtml(part);
+    }).join('');
 }
 
 function resetProgress() {
