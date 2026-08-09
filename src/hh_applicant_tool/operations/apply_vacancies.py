@@ -1212,11 +1212,9 @@ class Operation(BaseOperation):
 
     json_decoder = JSONDecoder()
 
-    def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData:
+    def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData | None:
         """Парсит тесты"""
-        res = self.tool.get_redirect_config(response_url)
-        if not res:
-            return None ## добавлена обработка пустого ответа ##        
+        res = self.tool.get_redirect_config(response_url)  
         return find_key(res, "vacancyTests")
 
     def _solve_vacancy_test(
@@ -1228,18 +1226,13 @@ class Operation(BaseOperation):
         """Загружает тест, ждет паузу и отправляет отклик."""
         response_url = f"https://hh.ru/applicant/vacancy_response?vacancyId={vacancy_id}&startedWithQuestion=false&hhtmFrom=vacancy"
 
-        # Загружаем данные теста и токен
-        tests_data = self._get_vacancy_tests(response_url)
-        ## Проверяем, что вернулся не пустой массив ##
-        if not tests_data:
-            raise ValueError(f"Данные тестов не найдены. Обновите cookies, сделав login/logout.")
+        if not (tests_data := self._get_vacancy_tests(response_url)):
+            raise ValueError(f"Данные тестов не найдены на {response_url}.")
 
-        ## Гарантированная инициализация и проверки ##
-        test_data = None
-        test_data = tests_data.get(str(vacancy_id))
-        if not test_data:
+        if not (test_data := tests_data.get(str(vacancy_id))):
             raise ValueError(f"Пустые данные теста вакансии vacancy_id={vacancy_id}")
-        ## logger.debug(f"{test_data = }") ## убираем отладку
+        
+        logger.debug(f"{test_data = }")
 
         payload: dict[str, Any] = {
             "_xsrf": self.tool.xsrf_token,
