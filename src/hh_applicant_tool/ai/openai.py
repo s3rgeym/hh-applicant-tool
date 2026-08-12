@@ -119,6 +119,7 @@ class ChatOpenAI:
 
         # Логирование запроса к AI при DEBUG уровне
         if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("AI системный промпт: %s", self.system_prompt)
             logger.debug("AI запрос: %s", message)
 
         payload = {
