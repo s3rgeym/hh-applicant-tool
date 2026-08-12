@@ -46,8 +46,9 @@ class Namespace(BaseNamespace):
     ignore_employers: Path | None
     force_message: bool
     use_ai: bool
-    ai_filter: Literal["heavy", "light"] | None
+    ai_filter: Literal["heavy", "light", "custom"] | None
     ai_rate_limit: int
+    ai_filter_prompt: str | None
     system_prompt: str
     message_prompt: str
     order_by: str
@@ -121,8 +122,8 @@ class Operation(BaseOperation):
         )
         parser.add_argument(
             "--ai-filter",
-            help="Использовать AI для фильтрации вакансий. Режимы: heavy - полный анализ вакансии и резюме, light - быстрый анализ по названию и навыкам",
-            choices=["heavy", "light"],
+            help="Использовать AI для фильтрации вакансий. Режимы: heavy - полный анализ вакансии и резюме, light - быстрый анализ по названию и навыкам, custom - свой системный промпт (--ai-filter-prompt)",
+            choices=["heavy", "light", "custom"],
             default=None,
         )
         parser.add_argument(
@@ -130,6 +131,11 @@ class Operation(BaseOperation):
             help="Лимит запросов к AI в минуту для фильтрации",
             type=int,
             default=40,
+        )
+        parser.add_argument(
+            "--ai-filter-prompt",
+            help="Системный промпт для AI-фильтра (используется только в режиме custom)",
+            default=None,
         )
         parser.add_argument(
             "--system-prompt",
@@ -364,6 +370,7 @@ class Operation(BaseOperation):
             else None
         )
         self.ai_filter = args.ai_filter
+        self.ai_filter_prompt = args.ai_filter_prompt
         self.vacancy_filter_ai = None
         self._resume_analysis_cache: dict[tuple[str | None, str], str] = {}
 
@@ -567,7 +574,9 @@ class Operation(BaseOperation):
         return None
 
     # КТО ЭТО ПРОЧИТАЛ ТОТ ПИД@РАС
-    def _is_vacancy_suitable_heavy(self, vacancy: dict) -> bool:
+    def _is_vacancy_suitable_heavy(
+        self, vacancy: dict, log_suffix: str = "(heavy)"
+    ) -> bool:
         full_vacancy = None
         if vacancy.get("id"):
             full_vacancy = self.api_client.get(f"/vacancies/{vacancy['id']}")
@@ -579,7 +588,7 @@ class Operation(BaseOperation):
         )
         prompt = f"Вакансия: {vacancy_info}"
         return self._ask_ai_suitability(
-            prompt, vacancy.get("name", ""), "(heavy)"
+            prompt, vacancy.get("name", ""), log_suffix
         )
 
     def _is_vacancy_suitable_light(self, vacancy: dict) -> bool:
@@ -769,22 +778,38 @@ class Operation(BaseOperation):
         site_emails = {}
 
         if self.ai_filter:
-            if self.ai_filter == "heavy":
-                system_prompt = self._build_filter_system_prompt_heavy(
-                    self._analyze_resume_heavy(resume)
-                )
+            if self.ai_filter in ("heavy", "custom"):
+                resume_analysis = self._analyze_resume_heavy(resume)
             elif self.ai_filter == "light":
-                system_prompt = self._build_filter_system_prompt_light(
-                    self._analyze_resume_light(resume)
-                )
+                resume_analysis = self._analyze_resume_light(resume)
             else:
                 raise ValueError(
                     f"Неизвестный режим AI фильтра: {self.ai_filter}"
                 )
 
+            if self.ai_filter == "custom":
+                if not self.ai_filter_prompt:
+                    raise ValueError(
+                        "Режим 'custom' требует --ai-filter-prompt"
+                    )
+                # Кастомный промпт заменяет только инструкции. Анализ резюме
+                # добавляем блоком "Кандидат" в конец (как во встроенных).
+                system_prompt = (
+                    f"{self.ai_filter_prompt}\n\nКандидат:\n{resume_analysis}"
+                )
+            elif self.ai_filter == "heavy":
+                system_prompt = self._build_filter_system_prompt_heavy(
+                    resume_analysis
+                )
+            else:
+                system_prompt = self._build_filter_system_prompt_light(
+                    resume_analysis
+                )
+
             logger.debug(
-                "AI системный промпт (%s): %s",
+                "AI системный промпт (%s, custom=%s): %s",
                 self.ai_filter,
+                bool(self.ai_filter_prompt),
                 system_prompt,
             )
 
@@ -907,14 +932,12 @@ class Operation(BaseOperation):
                         )
                         continue
 
-                    if self.ai_filter == "heavy":
-                        is_suitable = self._is_vacancy_suitable_heavy(vacancy)
-                    elif self.ai_filter == "light":
-                        is_suitable = self._is_vacancy_suitable_light(vacancy)
-                    else:
-                        raise ValueError(
-                            f"Неизвестный режим AI фильтра: {self.ai_filter}"
+                    if self.ai_filter in ("heavy", "custom"):
+                        is_suitable = self._is_vacancy_suitable_heavy(
+                            vacancy, "(custom)" if self.ai_filter == "custom" else "(heavy)"
                         )
+                    else:
+                        is_suitable = self._is_vacancy_suitable_light(vacancy)
 
                     if not is_suitable:
                         logger.info(
