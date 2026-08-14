@@ -795,7 +795,10 @@ class Operation(BaseOperation):
                 # Кастомный промпт заменяет только инструкции. Анализ резюме
                 # добавляем блоком "Кандидат" в конец (как во встроенных).
                 system_prompt = (
-                    f"{self.ai_filter_prompt}\n\nКандидат:\n{resume_analysis}"
+                    f"{self.ai_filter_prompt}\n\nКандидат:\n{resume_analysis}\n\n"
+                    "Не пиши объяснения.\n"
+                    'Ответ строго JSON:\n'
+                    '{{"suitable": true}} или {{"suitable": false}}'
                 )
             elif self.ai_filter == "heavy":
                 system_prompt = self._build_filter_system_prompt_heavy(
