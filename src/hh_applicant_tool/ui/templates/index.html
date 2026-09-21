@@ -22,6 +22,23 @@
             <a class="sidebar-link" data-section="statistics" onclick="navigate('statistics')">&#128202; Статистика</a>
             <a class="sidebar-link" data-section="settings" onclick="navigate('settings')">&#9881;&#65039; Настройки</a>
         </nav>
+        <div class="p-3 border-t border-gray-100">
+            <div class="text-xs font-semibold text-gray-500 mb-2">Аккаунт HH</div>
+            <select id="profile-select" onchange="switchProfile(this.value)"
+                    class="w-full text-sm border border-gray-300 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-blue-400">
+                <option value=".">Основной</option>
+            </select>
+            <div class="flex gap-2 mt-2">
+                <button type="button" onclick="createProfile()" class="btn-sm btn-secondary flex-1">
+                    + Добавить
+                </button>
+                <button id="btn-delete-profile" type="button" onclick="deleteCurrentProfile()"
+                        class="btn-sm btn-danger" title="Удалить текущий профиль">
+                    Удалить
+                </button>
+            </div>
+            <div id="profile-state" class="text-xs text-gray-400 mt-2">Загрузка профилей...</div>
+        </div>
         <div class="px-4 py-3 border-t border-gray-100 text-xs text-gray-400">v UI</div>
     </aside>
 
@@ -32,6 +49,9 @@
         <div id="dashboard" class="section active p-6">
             <h2 class="page-title">Главная</h2>
             <div class="card max-w-md">
+                <div class="text-xs text-gray-400 mb-3">
+                    Профиль: <span id="dashboard-profile-name" class="font-semibold text-gray-600">Основной</span>
+                </div>
                 <div class="flex items-center gap-3 mb-4">
                     <span id="status-dot" class="status-dot offline"></span>
                     <div class="flex-1">
@@ -48,7 +68,7 @@
                         Войти через hh.ru
                     </button>
                     <button id="btn-relogin" type="button" onclick="startLogin()" class="btn-secondary hidden">
-                        Сменить аккаунт
+                        Переавторизоваться
                     </button>
                     <button id="btn-logout" type="button" onclick="logout()" class="btn-danger hidden">
                         Выйти

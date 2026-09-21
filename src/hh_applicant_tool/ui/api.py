@@ -9,6 +9,7 @@ from contextlib import redirect_stdout
 from typing import TYPE_CHECKING, Any
 
 from .presets import PresetValidationError, PresetsManager
+from .profiles import ProfileValidationError, ProfilesManager
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool
@@ -79,6 +80,7 @@ class Api:
         self._tool = tool
         self._window = None
         self._presets = PresetsManager(tool.storage.settings)
+        self._profiles = ProfilesManager(tool)
         self._cancel_event: threading.Event | None = None
         self._is_running: bool = False
         self._auth_running: bool = False
@@ -86,6 +88,80 @@ class Api:
 
     def set_window(self, window) -> None:
         self._window = window
+
+    def _profile_change_error(self) -> dict[str, str] | None:
+        if self._auth_running:
+            return {
+                "status": "error",
+                "message": "Нельзя менять профиль во время авторизации",
+            }
+        if self._is_running:
+            return {
+                "status": "error",
+                "message": "Нельзя менять профиль во время выполнения операции",
+            }
+        return None
+
+    def _reset_profile_context(self) -> None:
+        self._presets = PresetsManager(self._tool.storage.settings)
+
+    def get_profiles(self) -> dict[str, Any]:
+        return {
+            "active_profile_id": self._profiles.active_profile_id,
+            "profiles": self._profiles.list_profiles(),
+        }
+
+    def switch_profile(self, profile_id: str) -> dict[str, str]:
+        if error := self._profile_change_error():
+            return error
+        try:
+            active_profile_id = self._profiles.switch_profile(profile_id)
+            self._reset_profile_context()
+            return {
+                "status": "ok",
+                "active_profile_id": active_profile_id,
+            }
+        except ProfileValidationError as e:
+            return {"status": "error", "message": str(e)}
+        except Exception as e:
+            logger.error("switch_profile error: %s", e)
+            return {"status": "error", "message": "Не удалось переключить профиль"}
+
+    def create_profile(self, profile_id: str) -> dict[str, str]:
+        if error := self._profile_change_error():
+            return error
+        try:
+            profile_id = self._profiles.create_profile(profile_id)
+            active_profile_id = self._profiles.switch_profile(profile_id)
+            self._reset_profile_context()
+            return {
+                "status": "ok",
+                "active_profile_id": active_profile_id,
+            }
+        except ProfileValidationError as e:
+            return {"status": "error", "message": str(e)}
+        except Exception as e:
+            logger.error("create_profile error: %s", e)
+            return {"status": "error", "message": "Не удалось создать профиль"}
+
+    def delete_profile(self, profile_id: str) -> dict[str, str]:
+        if error := self._profile_change_error():
+            return error
+        try:
+            profile_id = self._profiles.normalize_profile_id(profile_id)
+            if profile_id == self._profiles.active_profile_id:
+                self._profiles.switch_profile(".")
+                self._reset_profile_context()
+            self._profiles.delete_profile(profile_id)
+            return {
+                "status": "ok",
+                "active_profile_id": self._profiles.active_profile_id,
+            }
+        except ProfileValidationError as e:
+            return {"status": "error", "message": str(e)}
+        except Exception as e:
+            logger.error("delete_profile error: %s", e)
+            return {"status": "error", "message": "Не удалось удалить профиль"}
 
     def _send_progress(self, current: int, total: int, message: str = "") -> None:
         if self._window:
@@ -180,6 +256,7 @@ class Api:
 
                 if self._tool.api_client.access_token:
                     self._tool.save_token()
+                    self._tool.save_cookies()
                     event = "done"
                     message = "Авторизация прошла успешно"
                 else:
