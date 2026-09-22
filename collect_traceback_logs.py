@@ -1,4 +1,4 @@
-# Выведет логи за последние устки
+# Выведет логи за последние сутки
 import pathlib
 from datetime import datetime, timedelta
 
