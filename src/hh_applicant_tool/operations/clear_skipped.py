@@ -18,7 +18,6 @@ class Namespace(BaseNamespace):
 
 
 class Operation(BaseOperation):
-
     __aliases__ = ["clear-skipped-vacancies"]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
@@ -35,8 +34,7 @@ class Operation(BaseOperation):
             help="Только показать количество записей без удаления",
         )
 
-    def run(self, tool: HHApplicantTool) -> None:
-        args = tool.args
+    def run(self, tool: HHApplicantTool, args: Namespace) -> None:
         repo = tool.storage.skipped_vacancies
 
         if args.reason:
@@ -48,7 +46,9 @@ class Operation(BaseOperation):
                     for item in repo.find(reason=args.reason):
                         repo.delete(item.id, commit=False)
                     repo.commit()
-                    print(f"✂️  Удалено {count} записей с причиной '{args.reason}'")
+                    print(
+                        f"✂️  Удалено {count} записей с причиной '{args.reason}'"
+                    )
                 else:
                     print(f"❌ Нет записей с причиной '{args.reason}'")
         else:
@@ -58,6 +58,8 @@ class Operation(BaseOperation):
             else:
                 if total > 0:
                     repo.clear()
-                    print(f"✂️  Очищено {total} записей из базы пропущенных вакансий")
+                    print(
+                        f"✂️  Очищено {total} записей из базы пропущенных вакансий"
+                    )
                 else:
                     print("📋 База пропущенных вакансий уже пуста")
