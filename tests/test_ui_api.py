@@ -454,3 +454,65 @@ class TestRefreshNegotiations:
         assert rows[0]["vacancy_id"] == int(item1["vacancy"]["id"])
         assert rows[1]["state"] == "invitation"
         assert rows[1]["vacancy_id"] == int(item2["vacancy"]["id"])
+
+
+class TestProfiles:
+    def test_get_profiles_returns_active_profile(self, api):
+        api._profiles = MagicMock()
+        api._profiles.active_profile_id = "work"
+        api._profiles.list_profiles.return_value = [
+            {"id": ".", "name": "Основной", "active": False, "has_token": True},
+            {"id": "work", "name": "work", "active": True, "has_token": False},
+        ]
+
+        result = api.get_profiles()
+
+        assert result["active_profile_id"] == "work"
+        assert result["profiles"][1]["active"] is True
+
+    def test_switch_profile_resets_profile_context(self, api):
+        api._profiles = MagicMock()
+        api._profiles.switch_profile.return_value = "work"
+
+        result = api.switch_profile("work")
+
+        assert result == {"status": "ok", "active_profile_id": "work"}
+        api._profiles.switch_profile.assert_called_once_with("work")
+
+    def test_create_profile_creates_and_activates(self, api):
+        api._profiles = MagicMock()
+        api._profiles.create_profile.return_value = "second"
+        api._profiles.switch_profile.return_value = "second"
+
+        result = api.create_profile("second")
+
+        assert result == {"status": "ok", "active_profile_id": "second"}
+        api._profiles.create_profile.assert_called_once_with("second")
+        api._profiles.switch_profile.assert_called_once_with("second")
+
+    def test_delete_active_profile_switches_to_default_first(self, api):
+        api._profiles = MagicMock()
+        api._profiles.normalize_profile_id.return_value = "work"
+        api._profiles.active_profile_id = "work"
+
+        result = api.delete_profile("work")
+
+        assert result["status"] == "ok"
+        api._profiles.switch_profile.assert_called_once_with(".")
+        api._profiles.delete_profile.assert_called_once_with("work")
+
+    def test_profile_change_is_blocked_while_apply_is_running(self, api):
+        api._is_running = True
+
+        result = api.switch_profile("work")
+
+        assert result["status"] == "error"
+        assert "выполнения операции" in result["message"]
+
+    def test_profile_change_is_blocked_while_authorizing(self, api):
+        api._auth_running = True
+
+        result = api.create_profile("work")
+
+        assert result["status"] == "error"
+        assert "авторизации" in result["message"]

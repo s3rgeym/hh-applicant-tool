@@ -95,6 +95,15 @@
 .btn-secondary:hover { background-color: #f9fafb; }
 .btn-sm.btn-danger { padding: 0.375rem 0.75rem; background: #fff; border-color: #fca5a5; color: #dc2626; }
 .btn-sm.btn-danger:hover { background: #fef2f2; }
+.btn-sm:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.btn-sm.btn-danger:disabled {
+    background: #f9fafb;
+    border-color: #e5e7eb;
+    color: #9ca3af;
+}
 
 /* ===== Формы ===== */
 .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }

@@ -27,6 +27,137 @@ function showToast(message, type = 'info') {
     setTimeout(() => toast.classList.remove('show'), 3500);
 }
 
+// ========== Аккаунты / профили ==========
+
+async function loadProfiles() {
+    const select = document.getElementById('profile-select');
+    const state = document.getElementById('profile-state');
+    const deleteBtn = document.getElementById('btn-delete-profile');
+    const dashboardName = document.getElementById('dashboard-profile-name');
+    if (!select) return;
+
+    try {
+        const data = await pywebview.api.get_profiles();
+        const profiles = data.profiles || [];
+        const activeId = data.active_profile_id || '.';
+
+        select.innerHTML = profiles.map(profile => {
+            const suffix = profile.has_token ? ' • токен' : '';
+            return `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name + suffix)}</option>`;
+        }).join('');
+        select.value = activeId;
+        select.disabled = false;
+
+        const active = profiles.find(profile => profile.id === activeId);
+        if (state) {
+            state.textContent = active && active.has_token
+                ? 'Токен авторизации сохранён'
+                : 'Требуется вход в hh.ru';
+        }
+        if (dashboardName) {
+            dashboardName.textContent = active ? active.name : activeId;
+        }
+        if (deleteBtn) {
+            deleteBtn.disabled = activeId === '.';
+            deleteBtn.title = activeId === '.'
+                ? 'Основной профиль удалить нельзя'
+                : 'Удалить текущий профиль';
+        }
+    } catch (e) {
+        console.error('loadProfiles error:', e);
+        if (state) state.textContent = 'Не удалось загрузить профили';
+    }
+}
+
+function _clearProfileScopedClientState() {
+    Object.keys(_lookupCache).forEach(key => delete _lookupCache[key]);
+}
+
+async function _refreshAfterProfileChange() {
+    _clearProfileScopedClientState();
+    await loadProfiles();
+    await loadDashboard();
+    await loadResumes();
+    await loadPresetsList();
+    await loadLastUsed();
+
+    const activeSection = document.querySelector('.section.active')?.id;
+    if (activeSection === 'settings') await loadConfig();
+    if (activeSection === 'negotiations') await loadNegotiations();
+    if (activeSection === 'statistics') await loadStatistics();
+}
+
+async function switchProfile(profileId) {
+    const select = document.getElementById('profile-select');
+    if (select) select.disabled = true;
+    try {
+        const result = await pywebview.api.switch_profile(profileId);
+        if (result.status !== 'ok') {
+            showToast(result.message || 'Не удалось переключить профиль', 'error');
+            await loadProfiles();
+            return;
+        }
+        showToast('Профиль переключён', 'success');
+        await _refreshAfterProfileChange();
+    } catch (e) {
+        console.error('switchProfile error:', e);
+        showToast('Не удалось переключить профиль', 'error');
+        await loadProfiles();
+    } finally {
+        if (select) select.disabled = false;
+    }
+}
+
+async function createProfile() {
+    const raw = prompt('Имя нового профиля (например: work или second):');
+    if (raw === null) return;
+    const profileId = raw.trim();
+    if (!profileId) {
+        showToast('Введите имя профиля', 'error');
+        return;
+    }
+
+    try {
+        const result = await pywebview.api.create_profile(profileId);
+        if (result.status !== 'ok') {
+            showToast(result.message || 'Не удалось создать профиль', 'error');
+            return;
+        }
+        showToast('Профиль создан. Теперь войдите в hh.ru.', 'success');
+        navigate('dashboard');
+        await _refreshAfterProfileChange();
+    } catch (e) {
+        console.error('createProfile error:', e);
+        showToast('Не удалось создать профиль', 'error');
+    }
+}
+
+async function deleteCurrentProfile() {
+    const select = document.getElementById('profile-select');
+    const profileId = select ? select.value : '.';
+    if (profileId === '.') {
+        showToast('Основной профиль удалить нельзя', 'info');
+        return;
+    }
+    if (!confirm(
+        `Удалить профиль "${profileId}"? Будут удалены его токены, cookies, локальная база и настройки.`
+    )) return;
+
+    try {
+        const result = await pywebview.api.delete_profile(profileId);
+        if (result.status !== 'ok') {
+            showToast(result.message || 'Не удалось удалить профиль', 'error');
+            return;
+        }
+        showToast('Профиль удалён', 'success');
+        navigate('dashboard');
+        await _refreshAfterProfileChange();
+    } catch (e) {
+        console.error('deleteCurrentProfile error:', e);
+        showToast('Не удалось удалить профиль', 'error');
+    }
+}
+
 let _authInProgress = false;
 
 function _setAuthButtons({ authorized, authRunning }) {
@@ -148,6 +279,7 @@ async function logout() {
     } catch (e) {
         showToast('Ошибка выхода', 'error');
     }
+    await loadProfiles();
     await loadDashboard();
     await loadResumes();
 }
@@ -163,6 +295,7 @@ function onAuthEvent(event, message) {
     } else if (event === 'done') {
         _authInProgress = false;
         showToast(message || 'Авторизация прошла успешно', 'success');
+        loadProfiles();
         loadDashboard();
         loadResumes();
     } else if (event === 'error') {
@@ -173,6 +306,7 @@ function onAuthEvent(event, message) {
             errEl.textContent = message || 'Ошибка авторизации';
             errEl.classList.remove('hidden');
         }
+        loadProfiles();
         loadDashboard();
     }
 }
@@ -893,6 +1027,7 @@ window.addEventListener('pywebviewready', () => {
     initLookup('area-lookup', 'area-tags', 'area', 'get_areas');
     initLookup('role-lookup', 'role-tags', 'professional_role', 'get_professional_roles');
     initLookup('industry-lookup', 'industry-tags', 'industry', 'get_industries');
+    loadProfiles();
     loadDashboard();
     loadResumes();
     loadPresetsList();
