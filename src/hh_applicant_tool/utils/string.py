@@ -23,6 +23,20 @@ def rand_text(s: str) -> str:
     return s
 
 
+def render_template(
+    template: str, placeholders: dict[str, str], name: str = "шаблоне"
+) -> str:
+    """Подставляет плейсхолдеры `%(имя)s`, а неизвестный плейсхолдер
+    превращает из невнятного `KeyError: 'имя'` в понятную ошибку."""
+    try:
+        return template % placeholders
+    except KeyError as ex:
+        raise ValueError(
+            f"Неизвестный плейсхолдер %({ex.args[0]})s в {name}. "
+            f"Доступные: {', '.join(sorted(placeholders))}"
+        ) from ex
+
+
 def bool2str(v: bool) -> str:
     return str(v).lower()
 

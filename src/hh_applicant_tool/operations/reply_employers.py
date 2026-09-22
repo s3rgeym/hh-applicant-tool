@@ -204,6 +204,7 @@ class Operation(BaseOperation):
 
                 placeholders = {
                     "vacancy_name": vacancy.get("name", ""),
+                    "vacancy_url": vacancy.get("alternate_url") or "",
                     "employer_name": employer.get("name", ""),
                     "resume_title": resume.get("title") or "",
                     **base_placeholders,

@@ -28,6 +28,7 @@ from ..utils.json import JSONDecoder
 from ..utils.string import (
     bool2str,
     rand_text,
+    render_template,
     shorten,
     strip_tags,
     unescape_string,
@@ -841,6 +842,7 @@ class Operation(BaseOperation):
 
                 message_placeholders = {
                     "vacancy_name": vacancy.get("name", ""),
+                    "vacancy_url": vacancy.get("alternate_url") or "",
                     "employer_name": employer.get("name", ""),
                     **placeholders,
                 }
@@ -1046,8 +1048,10 @@ class Operation(BaseOperation):
                         ## logger.debug("prompt: %s", msg) ## убираем отладку
                         letter = self.cover_letter_ai.complete(msg)
                     else:
-                        letter = (
-                            rand_text(self.cover_letter) % message_placeholders
+                        letter = render_template(
+                            rand_text(self.cover_letter),
+                            message_placeholders,
+                            "сопроводительном письме",
                         )
 
                     logger.debug(letter)
@@ -1185,17 +1189,27 @@ class Operation(BaseOperation):
                             if isinstance(mail_to, list)
                             else mail_to
                         )
-                        mail_subject = rand_text(
-                            self.tool.config.get("apply_mail_subject")
-                            or "{Отклик|Резюме} на вакансию %(vacancy_name)s"
-                        ) % message_placeholders
-                        mail_body = unescape_string(
-                            rand_text(
-                                self.tool.config.get("apply_mail_body")
-                                or "{Здравствуйте|Добрый день}, {прошу рассмотреть|пожалуйста рассмотрите} мое резюме %(resume_url)s на вакансию %(vacancy_name)s."
-                            )
-                        ) % message_placeholders
+                        # Шаблоны письма рендерим внутри try: ошибка в них
+                        # не должна обрывать рассылку остальных откликов
                         try:
+                            mail_subject = render_template(
+                                rand_text(
+                                    self.tool.config.get("apply_mail_subject")
+                                    or "{Отклик|Резюме} на вакансию %(vacancy_name)s"
+                                ),
+                                message_placeholders,
+                                "apply_mail_subject",
+                            )
+                            mail_body = render_template(
+                                unescape_string(
+                                    rand_text(
+                                        self.tool.config.get("apply_mail_body")
+                                        or "{Здравствуйте|Добрый день}, {прошу рассмотреть|пожалуйста рассмотрите} мое резюме %(resume_url)s на вакансию %(vacancy_name)s."
+                                    )
+                                ),
+                                message_placeholders,
+                                "apply_mail_body",
+                            )
                             self._send_email(mail_to, mail_subject, mail_body)
                             print(
                                 "📧 Отправлено письмо на email по поводу вакансии",
