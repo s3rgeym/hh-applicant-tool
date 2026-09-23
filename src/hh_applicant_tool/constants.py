@@ -11,7 +11,7 @@ COOKIES_FILENAME = "cookies.txt"
 DESKTOP_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/151.0.0.0 Safari/537.36"
+    "Chrome/153.0.0.0 Safari/537.36"
 )
 # Общий таймаут запроса к OpenAI: соединение + чтение ответа
 DEFAULT_OPENAI_TIMEOUT = 30.0
