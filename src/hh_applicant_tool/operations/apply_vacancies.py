@@ -28,7 +28,7 @@ from ..ai.base import AIError
 from ..api import BadResponse, Redirect, datatypes
 from ..api.datatypes import PaginatedItems, SearchVacancy
 from ..api.errors import ApiError, CaptchaRequired, LimitExceeded
-from ..constants import DEFAULT_SITE_LANGUAGE
+from ..constants import DEFAULT_COVER_LETTER_SYSTEM_PROMPT, DEFAULT_SITE_LANGUAGE
 from ..main import BaseNamespace, BaseOperation
 from ..storage.repositories.errors import RepositoryError
 from ..utils.cookiejar import (
@@ -219,7 +219,7 @@ class Operation(BaseOperation):
             "--system-prompt",
             "--ai-system",
             help="Системный промпт для AI генерации сопроводительных писем",
-            default="Напиши сопроводительное письмо для отклика на эту вакансию. Не используй placeholder'ы, твой ответ будет отправлен без обработки.",  # noqa: E501
+            default=DEFAULT_COVER_LETTER_SYSTEM_PROMPT,
         )
         parser.add_argument(
             "--message-prompt",

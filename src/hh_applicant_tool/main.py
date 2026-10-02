@@ -424,10 +424,9 @@ class HHApplicantTool(MegaTool):
         return self._init_ai_client(system_prompt, purpose="vacancy_filter")
 
     def get_captcha_ai(self) -> ai.ChatOpenAI:
-        # Промпт английский: hh.ru с кукой session_language=EN
-        # отдает латинскую картинку, а в кириллице модели ошибаются
-        # заметно чаще. На случай русской картинки в промпте solve_captcha
-        # отдельно сказано не транслитерировать кириллицу.
+        # Промпт тут короткий и общий: точный промпт распознавания
+        # задаёт solve_captcha, он же требует JSON с двумя словами
+        # и отдельно запрещает транслитерацию кириллицы.
         return self._init_ai_client(
             system_prompt=(
                 "You read CAPTCHA images. Return ONLY the text from the "
