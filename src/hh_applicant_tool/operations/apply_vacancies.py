@@ -28,8 +28,14 @@ import requests
 from ..ai.base import AIError
 from ..api import BadResponse, Redirect, datatypes
 from ..api.datatypes import PaginatedItems, SearchVacancy
+from ..api.captcha import CaptchaError, CaptchaFlow
 from ..api.errors import ApiError, CaptchaRequired, LimitExceeded
-from ..constants import DEFAULT_COVER_LETTER_SYSTEM_PROMPT, DEFAULT_SITE_LANGUAGE
+from ..ai.openai import CAPTCHA_SCRIPT_ANY, CAPTCHA_SCRIPT_BY_LANGUAGE
+from ..constants import (
+    DEFAULT_CAPTCHA_LANGUAGE,
+    DEFAULT_COVER_LETTER_SYSTEM_PROMPT,
+    DEFAULT_SITE_LANGUAGE,
+)
 from ..main import BaseNamespace, BaseOperation
 from ..storage.repositories.errors import RepositoryError
 from ..utils.cookiejar import (
@@ -131,6 +137,8 @@ class Namespace(BaseNamespace):
     captcha_strategy: str | None
     captcha_samples: int | None
     captcha_min_votes: int | None
+    captcha_transport: str | None
+    captcha_language: str | None
     system_prompt: str
     message_prompt: str
     order_by: str
@@ -255,6 +263,27 @@ class Operation(BaseOperation):
                 "Больше порог — меньше риска, но чаще пропуск вакансий"
             ),
             type=int,
+            default=None,
+        )
+        parser.add_argument(
+            "--captcha-transport",
+            help=(
+                "Чем решать капчу: http — прямыми запросами в аккаунтной "
+                "сессии, без браузера; browser — страницу капчи в "
+                "Playwright, запасной путь на случай смены протокола "
+                "hh.ru"
+            ),
+            choices=list(self.CAPTCHA_TRANSPORTS),
+            default=None,
+        )
+        parser.add_argument(
+            "--captcha-language",
+            help=(
+                "Язык картинки капчи. Латиница читается заметно лучше "
+                "кириллицы, поэтому по умолчанию en. Скрипт задаёт "
+                "параметр lang у POST /captcha, а не ссылка на страницу"
+            ),
+            choices=sorted(CAPTCHA_SCRIPT_BY_LANGUAGE),
             default=None,
         )
         parser.add_argument(
@@ -766,9 +795,9 @@ class Operation(BaseOperation):
     # playwright не умеет смешивать css и text= в одном селекторе,
     # поэтому ошибку ищем двумя запросами
     SEL_CAPTCHA_ERROR = '[data-qa="account-captcha-error"]'
-    # Картинка всегда кириллическая: язык в ссылке меняет только текст
-    # интерфейса, а скрипт задаёт сервер. Латиница в регулярке осталась
-    # на случай, если hh.ru сменит выдачу
+    # Тексты ошибок на случай, если hh.ru сменит выдачу. И кириллица, и
+    # латиница: язык картинки задаёт сам hh.ru, а браузерный путь не
+    # может этим управлять
     SEL_CAPTCHA_ERROR_TEXT = (
         'text=/неверн|не правильн|ошибка|incorrect|wrong|'
         'not correct|captcha is not|try again/i'
@@ -797,15 +826,134 @@ class Operation(BaseOperation):
     # устойчивости: порог отсекает нестабильные чтения, а не ищет
     # правильный ответ. Искать правильный должна другая модель.
     CAPTCHA_MIN_VOTES_DEFAULT = 3
+    # Чем решаем капчу. http — прямыми запросами в аккаунтной сессии,
+    # без браузера; browser — страницу капчи в Playwright. По умолчанию
+    # http: браузер нужен был только чтобы прочитать PNG и отправить
+    # одно поле, а после этого поток всё равно возвращался в requests.
+    # browser остаётся запасным путём на случай, если hh.ru поменяет
+    # протокол выдачи картинки
+    CAPTCHA_TRANSPORTS = ("http", "browser")
+    CAPTCHA_TRANSPORT_DEFAULT = "http"
+    # Вердикт браузерного пути по ответу hh.ru. unknown означает, что
+    # сигнала нет вовсе: ни ошибки, ни ухода со страницы капчи. Считать
+    # такой исход успехом нельзя, иначе зависание hh.ru выглядело бы как
+    # пройденная капча
+    CAPTCHA_VERDICT_ACCEPTED = "accepted"
+    CAPTCHA_VERDICT_REJECTED = "rejected"
+    CAPTCHA_VERDICT_UNKNOWN = "unknown"
 
     async def _solve_captcha_async(self, captcha_url: str) -> bool:
-        from playwright.async_api import async_playwright
+        """Решает капчу выбранным транспортом.
 
-        # Стратегию выбираем до запуска браузера: при off он не нужен
+        Короткий путь ходит прямо в аккаунтную сессию requests, длинный
+        открывает страницу капчи в браузере. Стратегию и отключение
+        проверяем здесь, до любой из веток: при off ни браузер, ни
+        запросы не нужны.
+        """
         strategy = self._captcha_strategy()
         if strategy == "off":
             logger.info("Стратегия капчи отключена, вакансия пропущена")
             return False
+
+        if self._captcha_transport() == "browser":
+            return await self._solve_captcha_browser_async(
+                captcha_url, strategy
+            )
+
+        return await self._solve_captcha_http(captcha_url, strategy)
+
+    async def _solve_captcha_http(
+        self, captcha_url: str, strategy: str
+    ) -> bool:
+        """Прямой протокол капчи, без браузера.
+
+        Сессия здесь та же, что и у api_client, поэтому картинка,
+        ответ и последующий отклик идут одним cookie jar. Браузерный
+        путь вынужден заливать куки в Chromium и забирать обратно, и
+        это лишний источник расхождений.
+        """
+        language = self._captcha_language()
+        captcha_ai = self.tool.get_captcha_ai()
+
+        try:
+            flow = CaptchaFlow(
+                self.tool.session, captcha_url, language=language
+            )
+            flow.prime()
+        except CaptchaError as ex:
+            logger.error("Не удалось начать решение капчи: %s", ex)
+            return False
+
+        logger.info(
+            "Решаю капчу прямыми запросами: язык картинки %s, стратегия %s",
+            flow.language,
+            strategy,
+        )
+
+        for attempt in range(1, self.CAPTCHA_MAX_ATTEMPTS + 1):
+            # Каждый fetch отдаёт свежую картинку с новым ключом, поэтому
+            # ни кнопка обновления, ни её ожидание не нужны
+            try:
+                image = flow.fetch()
+            except CaptchaError as ex:
+                logger.error("Не удалось получить картинку капчи: %s", ex)
+                return False
+
+            logger.debug(
+                "Картинка капчи %s/%s: %d байт",
+                attempt,
+                self.CAPTCHA_MAX_ATTEMPTS,
+                len(image.image),
+            )
+
+            captcha_text = await self._captcha_answer(
+                captcha_ai, image.image, strategy, language
+            )
+            if not captcha_text:
+                # Отправлять нечего: либо модель не пришла к согласию,
+                # либо ответ не разобрался. Оба случая стоят новой
+                # картинки, а не отправки наугад
+                await self._captcha_pause(attempt)
+                continue
+
+            logger.info("Распознанный текст капчи: %s", captcha_text)
+
+            try:
+                result = flow.submit(captcha_text, image.key)
+            except CaptchaError as ex:
+                logger.error("Не удалось отправить ответ капчи: %s", ex)
+                return False
+
+            if result.accepted:
+                logger.info("Капча принята hh.ru с %s попытки", attempt)
+                return True
+
+            logger.warning(
+                "Ответ капчи не принят (попытка %s/%s): %s",
+                attempt,
+                self.CAPTCHA_MAX_ATTEMPTS,
+                result.reason,
+            )
+            await self._captcha_pause(attempt)
+
+        logger.error(
+            "Капча не пройдена за %s попыток стратегией %s",
+            self.CAPTCHA_MAX_ATTEMPTS,
+            strategy,
+        )
+        return False
+
+    async def _captcha_pause(self, attempt: int) -> None:
+        """Выдержка перед следующей попыткой, если попытки ещё есть."""
+        if attempt >= self.CAPTCHA_MAX_ATTEMPTS:
+            return
+
+        await asyncio.sleep(self.CAPTCHA_RETRY_DELAY)
+
+    async def _solve_captcha_browser_async(
+        self, captcha_url: str, strategy: str
+    ) -> bool:
+        from playwright.async_api import async_playwright
 
         captcha_ai = self.tool.get_captcha_ai()
         session = self.tool.session
@@ -840,6 +988,9 @@ class Operation(BaseOperation):
                 language = self.tool.config.get(
                     "site_language", DEFAULT_SITE_LANGUAGE
                 )
+                # Язык картинки тут не наш: страницу отдаёт hh.ru, и
+                # скрипт она выбирает сама, поэтому проверять алфавит
+                # ответа нельзя
                 await page.goto(
                     _with_site_language(captcha_url, language),
                     timeout=30000,
@@ -865,12 +1016,16 @@ class Operation(BaseOperation):
                     )
 
                     captcha_text = await self._captcha_answer(
-                        captcha_ai, img_bytes, strategy
+                        captcha_ai,
+                        img_bytes,
+                        strategy,
+                        language=CAPTCHA_SCRIPT_ANY,
                     )
                     if not captcha_text:
                         # Отправлять нечего: либо модель не пришла к
                         # согласию, либо ответ не разобрался. Оба случая
                         # стоят новой картинки, а не отправки наугад
+                        await self._captcha_pause(attempt)
                         continue
 
                     logger.info("Распознанный текст капчи: %s", captcha_text)
@@ -878,12 +1033,15 @@ class Operation(BaseOperation):
                     await page.fill(self.SEL_CAPTCHA_INPUT, captcha_text)
                     await page.press(self.SEL_CAPTCHA_INPUT, "Enter")
 
-                    rejected = await self._captcha_rejected(page)
-                    if not rejected:
+                    verdict = await self._captcha_verdict(page)
+                    if verdict == self.CAPTCHA_VERDICT_ACCEPTED:
                         accepted = True
                         break
 
-                    await page.wait_for_timeout(self.CAPTCHA_RETRY_DELAY * 1000)
+                    # Неизвестный вердикт трактуем как неудачу: новый
+                    # ключ капчи он не испортит, а вот объявлять успехом
+                    # зависший hh.ru нельзя
+                    await self._captcha_pause(attempt)
 
                 if not accepted:
                     logger.error(
@@ -935,8 +1093,51 @@ class Operation(BaseOperation):
         except (TypeError, ValueError):
             return default
 
+    def _captcha_transport(self) -> str:
+        """Чем решаем капчу: флаг, потом config.json, потом умолчание."""
+        transport = getattr(self.args, "captcha_transport", None)
+        if not transport:
+            transport = self.tool.config.get("captcha_transport")
+        transport = str(
+            transport or self.CAPTCHA_TRANSPORT_DEFAULT
+        ).strip().lower()
+        if transport not in self.CAPTCHA_TRANSPORTS:
+            logger.warning(
+                "Неизвестный транспорт капчи %r, беру %s",
+                transport,
+                self.CAPTCHA_TRANSPORT_DEFAULT,
+            )
+            transport = self.CAPTCHA_TRANSPORT_DEFAULT
+        return transport
+
+    def _captcha_language(self) -> str:
+        """Язык картинки капчи.
+
+        Латиница читается заметно лучше кириллицы, поэтому по умолчанию
+        en. Скрипт картинки задаёт параметр lang у POST /captcha, а не
+        ссылка на страницу и не кука session_language.
+        """
+        language = getattr(self.args, "captcha_language", None)
+        if not language:
+            language = self.tool.config.get("captcha_language")
+        language = str(
+            language or DEFAULT_CAPTCHA_LANGUAGE
+        ).strip().lower()
+        if language not in CAPTCHA_SCRIPT_BY_LANGUAGE:
+            logger.warning(
+                "Неизвестный язык капчи %r, беру %s",
+                language,
+                DEFAULT_CAPTCHA_LANGUAGE,
+            )
+            language = DEFAULT_CAPTCHA_LANGUAGE
+        return language
+
     async def _captcha_answer(
-        self, captcha_ai, img_bytes: bytes, strategy: str
+        self,
+        captcha_ai,
+        img_bytes: bytes,
+        strategy: str,
+        language: str = DEFAULT_CAPTCHA_LANGUAGE,
     ) -> str | None:
         """Читает картинку выбранной стратегией.
 
@@ -957,8 +1158,11 @@ class Operation(BaseOperation):
                     min_votes=self._captcha_int(
                         "captcha_min_votes", self.CAPTCHA_MIN_VOTES_DEFAULT
                     ),
+                    language=language,
                 )
-            return await asyncio.to_thread(captcha_ai.solve_captcha, img_bytes)
+            return await asyncio.to_thread(
+                captcha_ai.solve_captcha, img_bytes, language=language
+            )
         except Exception as ex:
             # Модель ответила не в том формате. Считаем попытку
             # неудачной и берем новую картинку, иначе весь отклик
@@ -1085,9 +1289,9 @@ class Operation(BaseOperation):
     async def _renew_captcha(self, page) -> None:
         """Просит у hh.ru новую картинку после неудачной попытки.
 
-        После неверного ответа hh.ru оставляет старую картинку, поэтому
-        без явного нажатия «Другой текст» повторная попытка читала бы
-        ту же самую картинку и получила бы тот же неверный ответ.
+        После неверного ответа hh.ru сам выдаёт новую картинку с новым
+        ключом, поэтому нажатие «Другой текст» — belt-and-braces на тот
+        случай, если новая картинка почему-то не подгрузилась.
         """
         button = await page.query_selector(self.SEL_CAPTCHA_RENEW)
         if button is None:
@@ -1101,12 +1305,13 @@ class Operation(BaseOperation):
         # Даем браузеру время перерисовать картинку
         await page.wait_for_timeout(1000)
 
-    async def _captcha_rejected(self, page) -> bool:
+    async def _captcha_verdict(self, page) -> str:
         """Ждет реакцию hh.ru на введенный ответ.
 
-        True, если капча не пройдена (hh.ru показал ошибку или опять
-        показал форму ввода), False, если форма ввода исчезла, то есть
-        hh.ru принял ответ.
+        Три исхода, а не два. Раньше по таймауту капча объявлялась
+        решённой, и инструмент уходил откликаться с капчей, которую
+        никто не проходил. Теперь отсутствие сигнала — отдельный исход:
+        он не считается ни успехом, ни отказом ответа.
         """
         deadline = time.monotonic() + self.CAPTCHA_RESULT_TIMEOUT
 
@@ -1115,7 +1320,7 @@ class Operation(BaseOperation):
             # Проверяем это раньше текста ошибки, иначе под кого-то
             # попадет любой «ошибка» в подвале на странице вакансии
             if not await page.query_selector(self.SEL_CAPTCHA_INPUT):
-                return False
+                return self.CAPTCHA_VERDICT_ACCEPTED
 
             error = await page.query_selector(self.SEL_CAPTCHA_ERROR)
             if error is None:
@@ -1129,14 +1334,14 @@ class Operation(BaseOperation):
                 logger.warning(
                     "Капча не пройдена: %s", text or "hh.ru показал ошибку"
                 )
-                return True
+                return self.CAPTCHA_VERDICT_REJECTED
 
             if time.monotonic() >= deadline:
                 logger.warning(
-                    "hh.ru не ответил за %s с, считаю капчу решенной",
+                    "hh.ru не ответил за %s с, вердикт неизвестен",
                     self.CAPTCHA_RESULT_TIMEOUT,
                 )
-                return False
+                return self.CAPTCHA_VERDICT_UNKNOWN
 
             await page.wait_for_timeout(500)
 

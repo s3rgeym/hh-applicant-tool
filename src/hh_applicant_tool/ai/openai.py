@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+import re
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -14,6 +15,7 @@ import requests
 from urllib3.util import Timeout
 
 from ..constants import (
+    DEFAULT_CAPTCHA_LANGUAGE,
     DEFAULT_OPENAI_CONNECT_TIMEOUT,
     DEFAULT_OPENAI_TIMEOUT,
 )
@@ -33,6 +35,51 @@ _RETRYABLE_EXCEPTIONS = (
     requests.exceptions.Timeout,
     requests.exceptions.ConnectionError,
 )
+
+
+CAPTCHA_SCRIPT_LATIN = "latin"
+CAPTCHA_SCRIPT_CYRILLIC = "cyrillic"
+# Браузерный путь не управляет языком картинки: скрипт задаёт hh.ru, и
+# какая именно выдача придёт, заранее неизвестно. Проверять алфавит
+# там нельзя, иначе настоящее кириллическое чтение отбраковывалось бы
+# как чужой алфавит и сожгло бы все попытки
+CAPTCHA_SCRIPT_ANY = "any"
+
+# Какой скрипт ждём в ответе, когда попросили картинку на этом языке.
+# Русская картинка всегда кириллическая, английская всегда латинская,
+# поэтому сопоставление однозначное
+CAPTCHA_SCRIPT_BY_LANGUAGE = {
+    "en": CAPTCHA_SCRIPT_LATIN,
+    "ru": CAPTCHA_SCRIPT_CYRILLIC,
+}
+
+# Буквы чужого алфавита в ответе. Раньше скрипт не проверялся вовсе,
+# и модель могла вернуть русские буквы в поле, где ждут латиницу:
+# такой ответ hh.ru засчитывает как промах
+_LATIN_LETTER_RE = re.compile(r"[a-z]")
+_CYRILLIC_LETTER_RE = re.compile(r"[Ѐ-ӿ]")
+
+
+def captcha_script(language: str) -> str:
+    """Ожидаемый алфавит ответа для запрошенного языка картинки."""
+    key = (language or "").strip().lower()
+
+    if key == CAPTCHA_SCRIPT_ANY:
+        return CAPTCHA_SCRIPT_ANY
+
+    return CAPTCHA_SCRIPT_BY_LANGUAGE.get(key, CAPTCHA_SCRIPT_LATIN)
+
+
+def _foreign_letters(text: str, script: str) -> list[str]:
+    """Буквы чужого алфавита: их в ответе быть не должно."""
+    if script == CAPTCHA_SCRIPT_CYRILLIC:
+        pattern = _LATIN_LETTER_RE
+    elif script == CAPTCHA_SCRIPT_LATIN:
+        pattern = _CYRILLIC_LETTER_RE
+    else:
+        return []
+
+    return sorted(set(pattern.findall(text.lower())))
 
 
 def _is_retryable(ex: Exception) -> bool:
@@ -281,13 +328,21 @@ class ChatOpenAI:
         raise OpenAIError("OpenAI request failed after retries")
 
     @staticmethod
-    def _parse_captcha_json(raw: str) -> str:
+    def _parse_captcha_json(
+        raw: str,
+        script: str = CAPTCHA_SCRIPT_LATIN,
+    ) -> str:
         """Достаёт текст капчи из JSON-ответа модели.
 
         Терпимо выкидываем слова вокруг JSON (модель часто пишет
         «The text is {...}»). Если же JSON нет вовсе — это ошибка
         формата: молча отдавать «текст» нельзя, в него попадёт вся
         болтовня модели и hh.ru посчитает её неверным ответом.
+
+        Проверка алфавита: модель на латинской картинке может ответить
+        русскими буквами и наоборот. Раньше такой ответ уходил в поле
+        ввода как есть, и hh.ru засчитывал его как промах. Теперь это
+        ошибка чтения, а не ответ.
         """
         text = (raw or "").strip()
 
@@ -324,35 +379,95 @@ class ChatOpenAI:
                 "Модель не прочитала оба слова: %r" % text[:200]
             )
 
-        return f"{first} {second}"
+        captcha_text = f"{first} {second}"
 
-    # Промпт капчи hh.ru. Собран по живым картинкам 2026-10-03: слова
-    # ложатся по дуге, из-за чего модель дорисовывает обрезанные слова
-    # до знакомых ("альп" вместо "альянс"). Неопределённость лучше
-    # ошибочной буквы, поэтому на unsure модель отвечает лучшим чтением
-    CAPTCHA_SYSTEM_PROMPT = (
-        "You read CAPTCHA images from hh.ru. A picture shows two Russian "
-        "words in small dark letters on a plain light background. The words "
-        "are written along an arc, so the letters at the edges are rotated "
-        "and the gap between the words is not straight. Read every letter "
+        foreign = _foreign_letters(captcha_text, script)
+        if foreign:
+            raise OpenAIError(
+                "Модель ответила чужим алфавитом, ждали %s: %s в %r"
+                % (script, foreign, captcha_text[:60])
+            )
+
+        return captcha_text
+
+    # Промпт капчи hh.ru. Общая часть собрана по живым картинкам
+    # 2026-10-03: слова ложатся по дуге, из-за чего модель дорисовывает
+    # обрезанные слова до знакомых ("альп" вместо "альянс").
+    # Неопределённость лучше ошибочной буквы, поэтому на unsure модель
+    # отвечает лучшим чтением
+    CAPTCHA_PROMPT_COMMON = (
+        "You read CAPTCHA images from hh.ru. A picture shows two words in "
+        "small dark letters on a plain light background. The words are "
+        "written along an arc, so the letters at the edges are rotated and "
+        "the gap between the words is not straight. Read every letter "
         "exactly as it is drawn: the glyphs are distorted, crossed by noise "
         "lines and sometimes cut off. The words are usually nonsense; do NOT "
-        "repair them into real Russian words you happen to know, copy what "
-        "you see letter by letter. The letters are Cyrillic, never "
-        "transliterate them into Latin letters. Copy ё as ё. Answer with a "
-        "JSON object only, of the form "
-        '{"first_word": "...", "second_word": "..."}, with exactly these '
-        "two keys, lowercase, no explanation and no other keys. If you see "
-        "three words, put the first one in first_word and the remaining two "
-        "joined by a space in second_word. If a letter is unreadable, still "
-        "answer with your best reading rather than refusing."
+        "repair them into real words you happen to know, copy what you see "
+        "letter by letter. "
     )
 
-    CAPTCHA_USER_PROMPT = (
-        "Read the two words in this CAPTCHA image and answer with a JSON "
-        'object {"first_word": "...", "second_word": "..."} and nothing '
-        "else."
-    )
+    # Правила на алфавит. Раньше здесь стояло жёсткое «the letters are
+    # Cyrillic, never transliterate them into Latin letters», но язык
+    # картинки задаёт не ссылка на страницу, а параметр lang у
+    # POST /captcha: при lang=EN картинка приходит латинской, и это
+    # указание вводило модель в заблуждение. Замер 2026-10-03 на
+    # английских картинках: три чтения из трёх совпали, тогда как на
+    # кириллице пять чтений из пяти тоже совпадали, но на трёх разных
+    # ответах
+    CAPTCHA_PROMPT_RULES = {
+        CAPTCHA_SCRIPT_LATIN: (
+            "The letters are LATIN lowercase; never turn them into "
+            "Cyrillic letters and never transliterate them. Answer with a "
+            "JSON object only, of the form "
+            '{"first_word": "...", "second_word": "..."}, with exactly '
+            "these two keys, lowercase Latin letters only, no punctuation, "
+            "one space between the words, no explanation and no other keys. "
+            "If you see three words, put the first one in first_word and the "
+            "remaining two joined by a space in second_word. If a letter is "
+            "unreadable, still answer with your best reading rather than "
+            "refusing."
+        ),
+        CAPTCHA_SCRIPT_CYRILLIC: (
+            "The letters are Cyrillic, never transliterate them into Latin "
+            "letters. Copy ё as ё. Answer with a JSON object only, of the "
+            "form "
+            '{"first_word": "...", "second_word": "..."}, with exactly '
+            "these two keys, lowercase, no explanation and no other keys. "
+            "If you see three words, put the first one in first_word and the "
+            "remaining two joined by a space in second_word. If a letter is "
+            "unreadable, still answer with your best reading rather than "
+            "refusing."
+        ),
+        CAPTCHA_SCRIPT_ANY: (
+            "Keep whichever alphabet the picture uses, do not convert the "
+            "letters to another script. Answer with a JSON object only, of "
+            "the form "
+            '{"first_word": "...", "second_word": "..."}, with exactly '
+            "these two keys, lowercase, no punctuation, no explanation and "
+            "no other keys. If you see three words, put the first one in "
+            "first_word and the remaining two joined by a space in "
+            "second_word. If a letter is unreadable, still answer with your "
+            "best reading rather than refusing."
+        ),
+    }
+
+    CAPTCHA_USER_PROMPT = {
+        CAPTCHA_SCRIPT_LATIN: (
+            "Read the two Latin words in this CAPTCHA image and answer with "
+            'a JSON object {"first_word": "...", "second_word": "..."} and '
+            "nothing else."
+        ),
+        CAPTCHA_SCRIPT_CYRILLIC: (
+            "Read the two Cyrillic words in this CAPTCHA image and answer "
+            'with a JSON object {"first_word": "...", "second_word": "..."} '
+            "and nothing else."
+        ),
+        CAPTCHA_SCRIPT_ANY: (
+            "Read the two words in this CAPTCHA image and answer with a "
+            'JSON object {"first_word": "...", "second_word": "..."} and '
+            "nothing else."
+        ),
+    }
 
     # При нулевой температуре все выборки совпадают и голосование
     # превращается в один и тот же запрос
@@ -364,12 +479,22 @@ class ChatOpenAI:
         return text.replace("ё", "е")
 
     def _captcha_payload(
-        self, image_base64: str, content_type: str, temperature: float
+        self,
+        image_base64: str,
+        content_type: str,
+        temperature: float,
+        script: str,
     ) -> dict:
         return {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": self.CAPTCHA_SYSTEM_PROMPT},
+                {
+                    "role": "system",
+                    "content": (
+                        self.CAPTCHA_PROMPT_COMMON
+                        + self.CAPTCHA_PROMPT_RULES[script]
+                    ),
+                },
                 {
                     "role": "user",
                     "content": [
@@ -387,7 +512,7 @@ class ChatOpenAI:
                         },
                         {
                             "type": "text",
-                            "text": self.CAPTCHA_USER_PROMPT,
+                            "text": self.CAPTCHA_USER_PROMPT[script],
                         },
                     ],
                 },
@@ -405,6 +530,7 @@ class ChatOpenAI:
         image_data: bytes,
         temperature: float,
         *,
+        script: str = CAPTCHA_SCRIPT_LATIN,
         throttle: bool = True,
     ) -> str:
         image_base64 = base64.b64encode(image_data).decode("utf-8")
@@ -412,7 +538,7 @@ class ChatOpenAI:
         content_type = "image/png"
 
         payload = self._captcha_payload(
-            image_base64, content_type, temperature
+            image_base64, content_type, temperature, script
         )
 
         logger.debug(
@@ -463,7 +589,9 @@ class ChatOpenAI:
 
             try:
                 raw = data["choices"][0]["message"]["content"]
-                captcha_text = self._parse_captcha_json(raw).lower()
+                captcha_text = self._parse_captcha_json(
+                    raw, script
+                ).lower()
                 if captcha_text:
                     logger.debug("Распознанный текст капчи: %s", captcha_text)
                 return captcha_text
@@ -472,14 +600,20 @@ class ChatOpenAI:
 
         raise OpenAIError("Captcha recognition failed after retries")
 
-    def solve_captcha(self, image_data: bytes) -> str:
+    def solve_captcha(
+        self,
+        image_data: bytes,
+        language: str = DEFAULT_CAPTCHA_LANGUAGE,
+    ) -> str:
         """Одно чтение картинки. Дёшево, но ошибается примерно в половине
         случаев, поэтому для боевого прогона лучше голосование."""
         # Сохраняем то, что реально уходит в AI, иначе по логу
         # непонятно, что именно модель пыталась прочитать
         _dump_captcha_debug_image(image_data)
 
-        return self._read_captcha_once(image_data, self.temperature)
+        return self._read_captcha_once(
+            image_data, self.temperature, script=captcha_script(language)
+        )
 
     def solve_captcha_consensus(
         self,
@@ -487,6 +621,7 @@ class ChatOpenAI:
         *,
         samples: int = 5,
         min_votes: int = 3,
+        language: str = DEFAULT_CAPTCHA_LANGUAGE,
     ) -> str | None:
         """Несколько независимых чтений, ответ отдаётся только при согласии.
 
@@ -495,13 +630,17 @@ class ChatOpenAI:
         больше, чем пропущенная вакансия.
 
         Осторожно, это порог устойчивости, а не проверка правоты. Замер
-        2026-10-03: пять чтений различались на одну букву, но когда все
-        пять совпадали, ответ всё равно оказывался неверным — просто
-        модель была в этом уверена. С разными моделями голосование
-        работает как надо, с одной моделью оно отсекает только
-        нестабильные чтения.
+        2026-10-03 на кириллице: пять чтений различались на одну букву,
+        но когда все пять совпадали, ответ всё равно оказывался
+        неверным — просто модель была в этом уверена. С разными
+        моделями голосование работает как надо, с одной моделью оно
+        отсекает только нестабильные чтения. На латинских картинках
+        согласие заметно выше, но правильность от этого не
+        гарантирована.
         """
         _dump_captcha_debug_image(image_data)
+        script = captcha_script(language)
+        started = time.monotonic()
 
         with ThreadPoolExecutor(max_workers=samples) as pool:
             futures = [
@@ -509,6 +648,7 @@ class ChatOpenAI:
                     self._read_captcha_once,
                     image_data,
                     self.CAPTCHA_SAMPLE_TEMPERATURE,
+                    script=script,
                     throttle=False,
                 )
                 for _ in range(samples)
@@ -529,11 +669,13 @@ class ChatOpenAI:
 
         votes = Counter(self._captcha_vote_key(r) for r in readings)
         best_key, top = votes.most_common(1)[0]
+        # Замер 2026-10-03: пять параллельных чтений латинской картинки
+        # собираются примерно за 13 с, поэтому время в лог стоит
         logger.info(
-            "Чтений капчи: %s, порог согласия %s, собрано за %s: %s",
+            "Чтений капчи: %s, порог согласия %s, собрано за %.1f с: %s",
             len(readings),
             min_votes,
-            best_key,
+            time.monotonic() - started,
             [self._captcha_vote_key(r) for r in readings],
         )
         if top < min_votes:
