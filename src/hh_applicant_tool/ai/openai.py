@@ -1,8 +1,11 @@
 import base64
+import json
 import logging
+import os
 import time
 from dataclasses import KW_ONLY, dataclass, field
 from email.utils import parsedate_to_datetime
+from pathlib import Path
 from threading import Lock
 
 import requests
@@ -19,6 +22,57 @@ logger = logging.getLogger(__package__)
 
 class OpenAIError(AIError):
     pass
+
+
+# Куда складывать картинки капчи для отладки. HH_CAPTCHA_DEBUG_DIR
+# переопределяет каталог, HH_CAPTCHA_DEBUG=0 отключает сохранение.
+CAPTCHA_DEBUG_DIR_ENV = "HH_CAPTCHA_DEBUG_DIR"
+CAPTCHA_DEBUG_DEFAULT_DIR = "/tmp/hh-captcha-debug"
+# Сколько последних картинок держим, чтобы каталог не рос бесконечно
+CAPTCHA_DEBUG_KEEP = 50
+
+
+def _dump_captcha_debug_image(image_data: bytes) -> Path | None:
+    """Сохраняет картинку капчи на диск, чтобы её можно было рассмотреть.
+
+    Отладка: в логе видно только размер картинки и распознанный текст,
+    а что именно ушло в AI — не видно. Возвращает путь к файлу или None,
+    если сохранение выключено либо не удалось.
+    """
+    if os.environ.get("HH_CAPTCHA_DEBUG", "1").strip().lower() in (
+        "0",
+        "false",
+        "no",
+    ):
+        return None
+
+    raw_dir = (
+        os.environ.get(CAPTCHA_DEBUG_DIR_ENV, "").strip()
+        or CAPTCHA_DEBUG_DEFAULT_DIR
+    )
+    try:
+        directory = Path(raw_dir)
+        directory.mkdir(parents=True, exist_ok=True)
+        # Метки нужны с миллисекундами: за минуту капча может попроситься
+        # несколько раз, иначе файлы затрут друг друга
+        stamp = time.strftime("%Y%m%d-%H%M%S") + "-%03d" % int(
+            (time.time() % 1) * 1000
+        )
+        path = directory / f"captcha-{stamp}.png"
+        path.write_bytes(image_data)
+
+        saved = sorted(
+            directory.glob("captcha-*.png"),
+            key=lambda item: item.stat().st_mtime,
+        )
+        for stale in saved[:-CAPTCHA_DEBUG_KEEP]:
+            stale.unlink(missing_ok=True)
+
+        logger.info("Картинка капчи сохранена: %s", path)
+        return path
+    except OSError as ex:
+        logger.warning("Не удалось сохранить картинку капчи: %s", ex)
+        return None
 
 
 @dataclass
@@ -169,8 +223,58 @@ class ChatOpenAI:
 
         raise OpenAIError("OpenAI request failed after retries")
 
+    @staticmethod
+    def _parse_captcha_json(raw: str) -> str:
+        """Достаёт текст капчи из JSON-ответа модели.
+
+        Терпимо выкидываем слова вокруг JSON (модель часто пишет
+        «The text is {...}»). Если же JSON нет вовсе — это ошибка
+        формата: молча отдавать «текст» нельзя, в него попадёт вся
+        болтовня модели и hh.ru посчитает её неверным ответом.
+        """
+        text = (raw or "").strip()
+
+        start = text.find("{")
+        end = text.rfind("}")
+        data = None
+        if start != -1 and end > start:
+            try:
+                data = json.loads(text[start : end + 1])
+            except ValueError as ex:
+                logger.warning(
+                    "Ответ модели не разобрался как JSON: %r", text[:200]
+                )
+                raise OpenAIError(
+                    f"Модель вернула не-JSON: {text[:200]}"
+                ) from ex
+
+        if not isinstance(data, dict):
+            raise OpenAIError(f"Модель вернула не-JSON: {text[:200]}")
+
+        first = data.get("first_word")
+        second = data.get("second_word")
+
+        if not isinstance(first, str) or not isinstance(second, str):
+            raise OpenAIError(
+                "В JSON нет полей first_word/second_word: %s" % text[:200]
+            )
+
+        first = first.strip().lower()
+        second = second.strip().lower()
+
+        if not first or not second:
+            raise OpenAIError(
+                "Модель не прочитала оба слова: %r" % text[:200]
+            )
+
+        return f"{first} {second}"
+
     # Этому методу тут не место. Мы решаем капчу hh.ru, а тут методы для OpenAI
     def solve_captcha(self, image_data: bytes) -> str:
+        # Сохраняем то, что реально уходит в AI, иначе по логу
+        # непонятно, что именно модель пыталась прочитать
+        _dump_captcha_debug_image(image_data)
+
         image_base64 = base64.b64encode(image_data).decode("utf-8")
 
         content_type = "image/png"
@@ -178,11 +282,17 @@ class ChatOpenAI:
         messages = []
 
         system_prompt = (
-            "You must read the text in the image. The image shows a "
-            "CAPTCHA with a few words. Return ONLY the text, without "
-            "any explanation, quotes or extra characters. Keep the case "
-            "of the image. If the text is in Cyrillic, return it in "
-            "Cyrillic, do not transliterate it."
+            "You read CAPTCHA images. What you see is text written in "
+            "small black Latin letters on a plain grey background. The "
+            "text is exactly two lowercase Latin words separated by a "
+            "single space, nothing else on the image. Read the letters "
+            "exactly as written: the glyphs are distorted and crossed by "
+            "noise lines, so look at the shape of each letter and do not "
+            "guess a word you cannot see. Answer with a JSON object only, "
+            'of the form {"first_word": "...", "second_word": "..."}, '
+            "with exactly these two keys, lowercase, no explanation and "
+            "no other keys. If a letter is unreadable, still answer with "
+            "your best reading rather than refusing."
         )
 
         messages.append({"role": "system", "content": system_prompt})
@@ -199,7 +309,11 @@ class ChatOpenAI:
                     },
                     {
                         "type": "text",
-                        "text": "Read the text in this CAPTCHA image and return only the text itself, nothing else.",
+                        "text": (
+                            "Read the two words in this CAPTCHA image and "
+                            'answer with a JSON object {"first_word": "...", '
+                            '"second_word": "..."} and nothing else.'
+                        ),
                     },
                 ],
             }
@@ -213,7 +327,9 @@ class ChatOpenAI:
             "model": self.model,
             "messages": messages,
             "temperature": 0.0,
-            "max_completion_tokens": 20,
+            # JSON-объект занимает заметно больше, чем голый текст,
+            # 20 токенов на {"text": "..."} могло не хватить
+            "max_completion_tokens": 100,
             "stream": False,
         }
 
@@ -247,11 +363,11 @@ class ChatOpenAI:
                 raise OpenAIError(data["error"]["message"])
 
             try:
-                captcha_text = data["choices"][0]["message"]["content"]
+                raw = data["choices"][0]["message"]["content"]
+                captcha_text = self._parse_captcha_json(raw).lower()
                 if captcha_text:
-                    captcha_text = captcha_text.strip()
-                logger.debug("Распознанный текст капчи: %s", captcha_text)
-                return captcha_text if captcha_text else ""
+                    logger.debug("Распознанный текст капчи: %s", captcha_text)
+                return captcha_text
             except (KeyError, IndexError) as ex:
                 raise OpenAIError(f"Invalid response format: {ex}") from ex
 

@@ -474,7 +474,9 @@ class Operation(BaseOperation):
 
                 if "skills" in full_resume:
                     parts.append("\n---------- О СЕБЕ ----------")
-                    parts.append(full_resume.get("skills", ""))
+                    # hh.ru отдаёт skills как null, когда поле не заполнено,
+                    # и .get(..., "") тут не спасает: null уже есть в ответе
+                    parts.append(full_resume.get("skills") or "")
 
                 if "skill_set" in full_resume and full_resume["skill_set"]:
                     parts.append("\n---------- НАВЫКИ ----------")
@@ -742,6 +744,14 @@ class Operation(BaseOperation):
     )
     # Сколько ждем реакции hh.ru на введенный ответ
     CAPTCHA_RESULT_TIMEOUT = 15
+    # Кнопка «Другой текст»: hh.ru не меняет картинку сам после
+    # неверного ответа, новую нужно попросить явно
+    SEL_CAPTCHA_RENEW = '[data-qa="captcha-renew-text"]'
+    # Модель читает английскую картинку примерно в 4 случаях из 5,
+    # поэтому одна попытка — это отказ в 20% вакансий по сути
+    CAPTCHA_MAX_ATTEMPTS = 3
+    # Пауза между попытками, чтобы не долбить hh.ru подряд
+    CAPTCHA_RETRY_DELAY = 2
 
     async def _solve_captcha_async(self, captcha_url: str) -> bool:
         from playwright.async_api import async_playwright
@@ -784,26 +794,59 @@ class Operation(BaseOperation):
                     timeout=30000,
                 )
 
-                captcha_element = await page.wait_for_selector(
-                    self.SEL_CAPTCHA_IMAGE, timeout=10000, state="visible"
-                )
+                accepted = False
+                for attempt in range(1, self.CAPTCHA_MAX_ATTEMPTS + 1):
+                    if attempt > 1:
+                        logger.info(
+                            "Пробую капчу еще раз (%s/%s): "
+                            "предыдущий ответ hh.ru отверг",
+                            attempt,
+                            self.CAPTCHA_MAX_ATTEMPTS,
+                        )
+                        await self._renew_captcha(page)
 
-                img_bytes = await captcha_element.screenshot()
+                    captcha_element = await page.wait_for_selector(
+                        self.SEL_CAPTCHA_IMAGE, timeout=10000, state="visible"
+                    )
 
-                captcha_text = await asyncio.to_thread(
-                    captcha_ai.solve_captcha, img_bytes
-                )
+                    img_bytes = await captcha_element.screenshot()
 
-                if not captcha_text:
-                    logger.error("AI не смог распознать капчу")
-                    return False
+                    try:
+                        captcha_text = await asyncio.to_thread(
+                            captcha_ai.solve_captcha, img_bytes
+                        )
+                    except Exception as ex:
+                        # Модель ответила не в том формате. Считаем попытку
+                        # неудачной и берем новую картинку, иначе весь
+                        # отклик упал бы на одном странном ответе
+                        logger.warning(
+                            "AI вернул неразобранный ответ (%s): %s",
+                            type(ex).__name__,
+                            str(ex)[:200],
+                        )
+                        continue
 
-                logger.info(f"Распознанный текст капчи: {captcha_text}")
+                    if not captcha_text:
+                        logger.error("AI не смог распознать капчу")
+                        continue
 
-                await page.fill(self.SEL_CAPTCHA_INPUT, captcha_text)
-                await page.press(self.SEL_CAPTCHA_INPUT, "Enter")
+                    logger.info(f"Распознанный текст капчи: {captcha_text}")
 
-                rejected = await self._captcha_rejected(page)
+                    await page.fill(self.SEL_CAPTCHA_INPUT, captcha_text)
+                    await page.press(self.SEL_CAPTCHA_INPUT, "Enter")
+
+                    rejected = await self._captcha_rejected(page)
+                    if not rejected:
+                        accepted = True
+                        break
+
+                    await page.wait_for_timeout(self.CAPTCHA_RETRY_DELAY * 1000)
+
+                if not accepted:
+                    logger.error(
+                        "Капча не пройдена за %s попыток",
+                        self.CAPTCHA_MAX_ATTEMPTS,
+                    )
 
                 # Забираем куки из браузера обратно в requests-сессию.
                 # Делаем это и при отказе: обновленные куки hh.ru
@@ -817,7 +860,7 @@ class Operation(BaseOperation):
                     except Exception as ex:
                         logger.warning(f"Не удалось сохранить куки: {ex}")
 
-                return not rejected
+                return accepted
             finally:
                 await browser.close()
 
@@ -878,6 +921,25 @@ class Operation(BaseOperation):
         logger.debug(
             "Передал в браузер %s из %s кук из сессии", added, len(cookies),
         )
+
+    async def _renew_captcha(self, page) -> None:
+        """Просит у hh.ru новую картинку после неудачной попытки.
+
+        После неверного ответа hh.ru оставляет старую картинку, поэтому
+        без явного нажатия «Другой текст» повторная попытка читала бы
+        ту же самую картинку и получила бы тот же неверный ответ.
+        """
+        button = await page.query_selector(self.SEL_CAPTCHA_RENEW)
+        if button is None:
+            logger.debug("Кнопка обновления капчи не найдена")
+            return
+        try:
+            await button.click(timeout=5000)
+        except Exception as ex:
+            logger.debug("Не удалось обновить капчу: %s", str(ex)[:120])
+            return
+        # Даем браузеру время перерисовать картинку
+        await page.wait_for_timeout(1000)
 
     async def _captcha_rejected(self, page) -> bool:
         """Ждет реакцию hh.ru на введенный ответ.
