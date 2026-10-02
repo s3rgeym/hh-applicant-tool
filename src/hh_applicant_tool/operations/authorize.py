@@ -6,7 +6,6 @@ import logging
 import re
 import typing
 from datetime import datetime
-from http.cookiejar import Cookie
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlsplit
 
@@ -19,6 +18,7 @@ else:
     _PLAYWRIGHT_IMPORT_ERROR = None
 
 from ..main import BaseOperation
+from ..utils.cookiejar import set_cookies_from_playwright
 from ..utils.terminal import print_kitty_image, print_sixel_mage
 
 if TYPE_CHECKING:
@@ -335,24 +335,6 @@ class Operation(BaseOperation):
         logger.debug("Капча отправлена")
 
     def _set_session_cookies(self, cookies: list[dict[str, typing.Any]]):
-        for c in cookies:
-            cookie = Cookie(
-                version=0,
-                name=c["name"],
-                value=c["value"],
-                port=None,
-                port_specified=False,
-                domain=c["domain"],
-                domain_specified=True,
-                domain_initial_dot=c["domain"].startswith("."),
-                path=c["path"],
-                path_specified=True,
-                secure=c["secure"],
-                expires=int(c.get("expires") or 0),
-                discard=False,
-                comment=None,
-                comment_url=None,
-                rest={"HttpOnly": str(c.get("httpOnly", False))},
-                rfc2109=False,
-            )
-            self._tool.session.cookies.set_cookie(cookie)
+        # Раньше здесь собирали Cookie руками, в том числе с expires=-1
+        # для сессионных кук: requests считает их протухшими и не отправляет
+        set_cookies_from_playwright(self._tool.session.cookies, cookies)

@@ -14,7 +14,7 @@ import threading
 from collections.abc import Sequence
 from contextlib import contextmanager
 from functools import cached_property
-from http.cookiejar import MozillaCookieJar
+from http.cookiejar import CookieJar, MozillaCookieJar
 from importlib import import_module
 from itertools import count
 from os import getenv
@@ -33,11 +33,12 @@ from .constants import (
     DATABASE_FILENAME,
     DEFAULT_OPENAI_CONNECT_TIMEOUT,
     DEFAULT_OPENAI_TIMEOUT,
+    DEFAULT_SITE_LANGUAGE,
     DESKTOP_USER_AGENT,
     LOG_FILENAME,
 )
 from .storage import StorageFacade
-from .utils.cookiejar import HHOnlyCookieJar
+from .utils.cookiejar import HHOnlyCookieJar, set_site_language
 from .utils.log import setup_logger
 from .utils.mixins import MegaTool
 
@@ -229,7 +230,39 @@ class HHApplicantTool(MegaTool):
         if self.cookies_file.exists():
             session.cookies.load(ignore_discard=True, ignore_expires=True)
 
+        # Язык сайта нужен именно в момент запроса отклика: hh.ru
+        # фиксирует язык картинки капчи, когда выдает captcha_url,
+        # поэтому кука должна быть в сессии заранее
+        self._apply_site_language(session.cookies)
+
         return session
+
+    def _apply_site_language(self, jar: CookieJar) -> None:
+        """Просит hh.ru отдавать сайт и картинку капчи на нужном языке.
+
+        Язык берется из конфигурации (site_language), по умолчанию
+        английский: латиница распознается заметно лучше кириллицы.
+        Пустое значение в конфиге отключает подмену, чтобы hh.ru сам
+        выбрал язык (например, когда в аккаунте его уже переключили).
+        """
+        language = self.config.get("site_language", DEFAULT_SITE_LANGUAGE)
+        language = (language or "").strip()
+
+        if not language:
+            logger.debug(
+                "site_language в конфиге пустой, язык сайта не меняю",
+            )
+            return
+
+        if not set_site_language(jar, language):
+            logger.warning(
+                "Не удалось выставить язык сайта %s, hh.ru может "
+                "отдать капту на языке аккаунта",
+                language,
+            )
+            return
+
+        logger.info("Язык сайта hh.ru: %s", language)
 
     @cached_property
     def openai_session(self) -> requests.Session:
@@ -391,7 +424,17 @@ class HHApplicantTool(MegaTool):
         return self._init_ai_client(system_prompt, purpose="vacancy_filter")
 
     def get_captcha_ai(self) -> ai.ChatOpenAI:
-        return self._init_ai_client(system_prompt="Что написано на картинке?", purpose="captcha")
+        # Промпт английский: hh.ru с кукой session_language=EN
+        # отдает латинскую картинку, а в кириллице модели ошибаются
+        # заметно чаще. На случай русской картинки в промпте solve_captcha
+        # отдельно сказано не транслитерировать кириллицу.
+        return self._init_ai_client(
+            system_prompt=(
+                "You read CAPTCHA images. Return ONLY the text from the "
+                "image, exactly as it is written."
+            ),
+            purpose="captcha",
+        )
 
     def _init_ai_client(self, system_prompt: str, purpose: str) -> ai.ChatOpenAI:
 

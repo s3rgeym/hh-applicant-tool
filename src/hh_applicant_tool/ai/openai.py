@@ -177,7 +177,13 @@ class ChatOpenAI:
 
         messages = []
 
-        system_prompt = "Ты должен распознать текст на изображении. Верни ТОЛЬКО текст, без каких-либо объяснений или дополнительных символов."
+        system_prompt = (
+            "You must read the text in the image. The image shows a "
+            "CAPTCHA with a few words. Return ONLY the text, without "
+            "any explanation, quotes or extra characters. Keep the case "
+            "of the image. If the text is in Cyrillic, return it in "
+            "Cyrillic, do not transliterate it."
+        )
 
         messages.append({"role": "system", "content": system_prompt})
 
@@ -193,7 +199,7 @@ class ChatOpenAI:
                     },
                     {
                         "type": "text",
-                        "text": "Распознай текст на изображении. Верни только результат распознавания (текст на изображении).",
+                        "text": "Read the text in this CAPTCHA image and return only the text itself, nothing else.",
                     },
                 ],
             }

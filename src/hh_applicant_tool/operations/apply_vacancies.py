@@ -12,7 +12,7 @@ from email.message import EmailMessage
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Literal
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse, urlsplit
 
 import requests
 
@@ -22,6 +22,10 @@ from ..api.datatypes import PaginatedItems, SearchVacancy
 from ..api.errors import ApiError, CaptchaRequired, LimitExceeded
 from ..main import BaseNamespace, BaseOperation
 from ..storage.repositories.errors import RepositoryError
+from ..utils.cookiejar import (
+    cookies_to_playwright,
+    set_cookies_from_playwright,
+)
 from ..utils.datatypes import VacancyTestsData
 from ..utils.find import find_key
 from ..utils.json import JSONDecoder
@@ -39,6 +43,41 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__package__)
+
+
+def _playwright_proxy(proxies: dict[str, str] | None) -> dict[str, str] | None:
+    """Прокси из requests в формате playwright chromium.launch(proxy=...)."""
+    if not proxies:
+        return None
+
+    url = proxies.get("https") or proxies.get("http")
+    if not url:
+        return None
+
+    parsed = urlsplit(url)
+    if not parsed.scheme or not parsed.hostname:
+        logger.warning(f"Не понимаю прокси {url!r}, браузер пойдет без него")
+        return None
+
+    server = f"{parsed.scheme}://{parsed.hostname}"
+    if parsed.port:
+        server = f"{server}:{parsed.port}"
+
+    rv = {"server": server}
+    # Логин с паролем часто есть только в одной из схем, а браузер
+    # умеет одну, так что подтягиваем авторизацию из соседней
+    username, password = parsed.username, parsed.password
+    if username is None:
+        for other_url in proxies.values():
+            other = urlsplit(other_url)
+            if other.username:
+                username, password = other.username, other.password
+                break
+    if username:
+        rv["username"] = unquote(username)
+    if password:
+        rv["password"] = unquote(password)
+    return rv
 
 
 class Namespace(BaseNamespace):
@@ -654,17 +693,50 @@ class Operation(BaseOperation):
 
     SEL_CAPTCHA_IMAGE = 'img[data-qa="account-captcha-picture"]'
     SEL_CAPTCHA_INPUT = 'input[data-qa="account-captcha-input"]'
+    # playwright не умеет смешивать css и text= в одном селекторе,
+    # поэтому ошибку ищем двумя запросами
+    SEL_CAPTCHA_ERROR = '[data-qa="account-captcha-error"]'
+    # Кириллица на случай, если hh.ru все же выдал русскую капчу,
+    # латиница — на английскую, которую теперь просим через
+    # куку session_language (см. константы SITE_LANGUAGE_COOKIE)
+    SEL_CAPTCHA_ERROR_TEXT = (
+        'text=/неверн|не правильн|ошибка|incorrect|wrong|'
+        'not correct|captcha is not|try again/i'
+    )
+    # Сколько ждем реакции hh.ru на введенный ответ
+    CAPTCHA_RESULT_TIMEOUT = 15
 
-    # Даже куки не грузятся, исправь
     async def _solve_captcha_async(self, captcha_url: str) -> bool:
         from playwright.async_api import async_playwright
 
         captcha_ai = self.tool.get_captcha_ai()
+        session = self.tool.session
+        cookiejar = session.cookies
+
+        # Браузер должен работать в той же сессии, что и requests,
+        # иначе hh.ru не признает капчу решенной (и ответит капчей снова)
+        session_cookies = cookies_to_playwright(cookiejar)
+        proxy = _playwright_proxy(session.proxies)
 
         async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True)
             try:
-                context = await browser.new_context()
+                browser = await pw.chromium.launch(headless=True, proxy=proxy)
+            except Exception as ex:
+                if not proxy:
+                    raise
+                logger.warning(
+                    "Не удалось запустить браузер через прокси %s (%s), "
+                    "пробую без него",
+                    proxy.get("server"),
+                    ex,
+                )
+                browser = await pw.chromium.launch(headless=True)
+            try:
+                context = await browser.new_context(
+                    user_agent=session.headers.get("User-Agent"),
+                )
+                if session_cookies:
+                    await self._add_cookies(context, session_cookies)
                 page = await context.new_page()
 
                 await page.goto(captcha_url, timeout=30000)
@@ -688,22 +760,120 @@ class Operation(BaseOperation):
                 await page.fill(self.SEL_CAPTCHA_INPUT, captcha_text)
                 await page.press(self.SEL_CAPTCHA_INPUT, "Enter")
 
-                await page.wait_for_load_state("networkidle", timeout=15000)
+                rejected = await self._captcha_rejected(page)
 
+                # Забираем куки из браузера обратно в requests-сессию.
+                # Делаем это и при отказе: обновленные куки hh.ru
+                # (тот же _xsrf, например) еще пригодятся
                 cookies = await context.cookies()
-                for c in cookies:
-                    self.tool.session.cookies.set(
-                        c["name"],
-                        c["value"],
-                        domain=c.get("domain", ""),
-                        path=c.get("path", "/"),
-                    )
+                parsed = set_cookies_from_playwright(cookiejar, cookies)
+                logger.debug("Получил из браузера %s кук", parsed)
+                if parsed:
+                    try:
+                        self.tool.save_cookies()
+                    except Exception as ex:
+                        logger.warning(f"Не удалось сохранить куки: {ex}")
 
-                return True
+                return not rejected
             finally:
                 await browser.close()
 
         return False
+
+    async def _add_cookies(
+        self,
+        context,
+        cookies: list[dict[str, Any]],
+    ) -> None:
+        """Заливает куки в браузер, не давая одной плохой куке убить капчу.
+
+        Chromium отвергает всю пачку, если хотя бы одна кука кривая
+        (Invalid cookie fields), поэтому при ошибке ищем виновника и
+        повторяем заливку уже без него.
+        """
+        try:
+            await context.add_cookies(cookies)
+        except Exception as ex:
+            logger.warning(
+                "Браузер отверг пачку из %s кук (%s), "
+                "пробую передать их по одной",
+                len(cookies),
+                str(ex)[:200],
+            )
+            await self._add_cookies_one_by_one(context, cookies)
+            return
+
+        logger.debug(
+            "Передал в браузер %s кук из сессии", len(cookies),
+        )
+
+    async def _add_cookies_one_by_one(
+        self,
+        context,
+        cookies: list[dict[str, Any]],
+    ) -> None:
+        """Заливает куки по одной, пропуская те, что Chromium не принимает.
+
+        Медленнее bisect-а на куках hh.ru (там их десятки), но зато
+        показывает в логе имя каждой отвергнутой куки.
+        """
+        added = 0
+
+        for cookie in cookies:
+            try:
+                await context.add_cookies([cookie])
+            except Exception as ex:
+                logger.warning(
+                    "Кука %s с домена %s не принята браузером (%s), пропускаю",
+                    cookie.get("name"),
+                    cookie.get("domain"),
+                    str(ex)[:200],
+                )
+                continue
+            added += 1
+
+        logger.debug(
+            "Передал в браузер %s из %s кук из сессии", added, len(cookies),
+        )
+
+    async def _captcha_rejected(self, page) -> bool:
+        """Ждет реакцию hh.ru на введенный ответ.
+
+        True, если капча не пройдена (hh.ru показал ошибку или опять
+        показал форму ввода), False, если форма ввода исчезла, то есть
+        hh.ru принял ответ.
+        """
+        deadline = time.monotonic() + self.CAPTCHA_RESULT_TIMEOUT
+
+        while True:
+            # Форма исчезла -> hh.ru принял ответ и ушел со страницы капчи.
+            # Проверяем это раньше текста ошибки, иначе под кого-то
+            # попадет любой «ошибка» в подвале на странице вакансии
+            if not await page.query_selector(self.SEL_CAPTCHA_INPUT):
+                return False
+
+            error = await page.query_selector(self.SEL_CAPTCHA_ERROR)
+            if error is None:
+                error = await page.query_selector(self.SEL_CAPTCHA_ERROR_TEXT)
+            if error:
+                text = ""
+                try:
+                    text = (await error.inner_text()).strip()
+                except Exception:
+                    pass
+                logger.warning(
+                    "Капча не пройдена: %s", text or "hh.ru показал ошибку"
+                )
+                return True
+
+            if time.monotonic() >= deadline:
+                logger.warning(
+                    "hh.ru не ответил за %s с, считаю капчу решенной",
+                    self.CAPTCHA_RESULT_TIMEOUT,
+                )
+                return False
+
+            await page.wait_for_timeout(500)
 
     def _apply_vacancies(self) -> None:
         resumes: list[datatypes.Resume] = self.tool.get_resumes()
@@ -1156,25 +1326,31 @@ class Operation(BaseOperation):
                             success = asyncio.run(
                                 self._solve_captcha_async(ex.captcha_url)
                             )
-                            if success:
-                                if not self.dry_run:
-                                    res = self.api_client.post(
-                                        "/negotiations",
-                                        params,
-                                        delay=random.uniform(1, 3),
-                                    )
-                                    assert res == {}
-                                    applied_count += 1
-                                    print(
-                                        "📨 Отправили отклик на вакансию после капчи",
-                                        vacancy["alternate_url"],
-                                    )
-                            else:
-                                logger.error("Не удалось решить капчу")
-                                raise
                         except Exception as e:
                             logger.error(f"Ошибка при решении капчи: {e}")
-                            raise
+                            # Одна вакансия не должна убивать всю рассылку
+                            continue
+
+                        if not success:
+                            logger.error(
+                                "Не удалось решить капчу для %s, "
+                                "пропускаю вакансию",
+                                vacancy["alternate_url"],
+                            )
+                            continue
+
+                        if not self.dry_run:
+                            res = self.api_client.post(
+                                "/negotiations",
+                                params,
+                                delay=random.uniform(1, 3),
+                            )
+                            assert res == {}
+                            applied_count += 1
+                            print(
+                                "📨 Отправили отклик на вакансию после капчи",
+                                vacancy["alternate_url"],
+                            )
 
                 # Отправка письма на email
                 if self.args.send_email:
