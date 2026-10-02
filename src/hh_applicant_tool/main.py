@@ -238,10 +238,11 @@ class HHApplicantTool(MegaTool):
         return session
 
     def _apply_site_language(self, jar: CookieJar) -> None:
-        """Просит hh.ru отдавать сайт и картинку капчи на нужном языке.
+        """Просит hh.ru отдавать сайт на нужном языке.
 
         Язык берется из конфигурации (site_language), по умолчанию
-        английский: латиница распознается заметно лучше кириллицы.
+        английский. На язык картинки капчи эта кука не действует:
+        скрипт задаёт параметр lang у POST /captcha, см. api/captcha.py.
         Пустое значение в конфиге отключает подмену, чтобы hh.ru сам
         выбрал язык (например, когда в аккаунте его уже переключили).
         """
@@ -426,7 +427,7 @@ class HHApplicantTool(MegaTool):
     def get_captcha_ai(self) -> ai.ChatOpenAI:
         # Промпт тут короткий и общий: точный промпт распознавания
         # задаёт solve_captcha, он же требует JSON с двумя словами
-        # и отдельно запрещает транслитерацию кириллицы.
+        # и отдельно запрещает менять алфавит картинки на другой.
         return self._init_ai_client(
             system_prompt=(
                 "You read CAPTCHA images. Return ONLY the text from the "
