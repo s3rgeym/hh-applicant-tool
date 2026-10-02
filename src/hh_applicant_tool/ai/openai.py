@@ -24,6 +24,19 @@ class OpenAIError(AIError):
     pass
 
 
+# Сетевые сбои, которые имеет смысл повторить: локальная модель может
+# не уложиться в таймаут, соединение может оборваться. Остальное
+# (битый URL, отказ SSL) повтором не лечится
+_RETRYABLE_EXCEPTIONS = (
+    requests.exceptions.Timeout,
+    requests.exceptions.ConnectionError,
+)
+
+
+def _is_retryable(ex: Exception) -> bool:
+    return isinstance(ex, _RETRYABLE_EXCEPTIONS)
+
+
 # Куда складывать картинки капчи для отладки. HH_CAPTCHA_DEBUG_DIR
 # переопределяет каталог, HH_CAPTCHA_DEBUG=0 отключает сохранение.
 CAPTCHA_DEBUG_DIR_ENV = "HH_CAPTCHA_DEBUG_DIR"
@@ -161,6 +174,10 @@ class ChatOpenAI:
 
         return max(min_interval * (attempt + 1), 1.0)
 
+    def _get_network_retry_delay(self, attempt: int) -> float:
+        """Задержка перед повтором после сетевого сбоя."""
+        return max(self._min_request_interval * (attempt + 1), 1.0)
+
     def complete(self, message: str) -> str:
         """Генерация текста через OpenAI API"""
         messages = []
@@ -188,7 +205,17 @@ class ChatOpenAI:
             try:
                 response = self._request(payload)
             except requests.exceptions.RequestException as ex:
-                raise OpenAIError(f"Network error: {ex}") from ex
+                # Таймаут локальной модели и оборванное соединение
+                # повторяем, а не роняем отклик на первой вакансии
+                if attempt >= self.max_retries or not _is_retryable(ex):
+                    raise OpenAIError(f"Network error: {ex}") from ex
+
+                delay = self._get_network_retry_delay(attempt)
+                logger.warning(
+                    "OpenAI network error, retry in %.2fs: %s", delay, ex
+                )
+                time.sleep(delay)
+                continue
 
             if response.status_code == 429:
                 if attempt >= self.max_retries:
@@ -283,16 +310,18 @@ class ChatOpenAI:
 
         system_prompt = (
             "You read CAPTCHA images. What you see is text written in "
-            "small black Latin letters on a plain grey background. The "
-            "text is exactly two lowercase Latin words separated by a "
-            "single space, nothing else on the image. Read the letters "
+            "small dark letters on a plain light background. The text is "
+            "exactly two lowercase Cyrillic words separated by a single "
+            "space, and nothing else on the image. Read the letters "
             "exactly as written: the glyphs are distorted and crossed by "
             "noise lines, so look at the shape of each letter and do not "
-            "guess a word you cannot see. Answer with a JSON object only, "
-            'of the form {"first_word": "...", "second_word": "..."}, '
-            "with exactly these two keys, lowercase, no explanation and "
-            "no other keys. If a letter is unreadable, still answer with "
-            "your best reading rather than refusing."
+            "guess a word you cannot see. The letters are Cyrillic, never "
+            "transliterate them into Latin letters. Copy ё as ё. Answer "
+            "with a JSON object only, of the form "
+            '{"first_word": "...", "second_word": "..."}, with exactly '
+            "these two keys, lowercase, no explanation and no other keys. "
+            "If a letter is unreadable, still answer with your best "
+            "reading rather than refusing."
         )
 
         messages.append({"role": "system", "content": system_prompt})
@@ -337,7 +366,17 @@ class ChatOpenAI:
             try:
                 response = self._request(payload)
             except requests.exceptions.RequestException as ex:
-                raise OpenAIError(f"Network error: {ex}") from ex
+                # Таймаут локальной модели и оборванное соединение
+                # повторяем, а не роняем отклик на первой вакансии
+                if attempt >= self.max_retries or not _is_retryable(ex):
+                    raise OpenAIError(f"Network error: {ex}") from ex
+
+                delay = self._get_network_retry_delay(attempt)
+                logger.warning(
+                    "OpenAI network error, retry in %.2fs: %s", delay, ex
+                )
+                time.sleep(delay)
+                continue
 
             if response.status_code == 429:
                 if attempt >= self.max_retries:

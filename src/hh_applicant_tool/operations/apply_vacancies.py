@@ -16,6 +16,7 @@ from urllib.parse import (
     parse_qsl,
     unquote,
     urlencode,
+    urljoin,
     urlparse,
     urlsplit,
     urlunsplit,
@@ -809,7 +810,9 @@ class Operation(BaseOperation):
                         self.SEL_CAPTCHA_IMAGE, timeout=10000, state="visible"
                     )
 
-                    img_bytes = await captcha_element.screenshot()
+                    img_bytes = await self._captcha_image_bytes(
+                        page, captcha_element
+                    )
 
                     try:
                         captcha_text = await asyncio.to_thread(
@@ -921,6 +924,36 @@ class Operation(BaseOperation):
         logger.debug(
             "Передал в браузер %s из %s кук из сессии", added, len(cookies),
         )
+
+    async def _captcha_image_bytes(self, page, element) -> bytes:
+        """Отдаёт оригинальные байты картинки капчи.
+
+        Скриншот элемента браузер рисует в размерах, в которых картинка
+        стоит на странице, а сама она меньше: hh.ru отдаёт 250px, на
+        странице она растянута примерно до 346. Растянутое изображение
+        мылится, и модель читает буквы неверно. Проверено на живых
+        капчах: ответ, снятый со скриншота, hh.ru отклонял, а ответ по
+        оригинальным байтам принимал с первой попытки. Поэтому файл
+        забираем напрямую, а на скриншот падаем только как на крайний
+        случай.
+        """
+        try:
+            src = await element.get_attribute("src")
+            if src:
+                response = await page.request.get(
+                    urljoin("https://hh.ru", src)
+                )
+                if response.ok:
+                    body = await response.body()
+                    if body:
+                        return body
+        except Exception as ex:
+            logger.debug(
+                "Не удалось скачать картинку капчи: %s", str(ex)[:120]
+            )
+
+        logger.debug("Беру картинку капчи скриншотом элемента")
+        return await element.screenshot()
 
     async def _renew_captcha(self, page) -> None:
         """Просит у hh.ru новую картинку после неудачной попытки.
