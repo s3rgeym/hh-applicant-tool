@@ -6,6 +6,7 @@ import html
 import logging
 import random
 import re
+import sys
 import time
 from datetime import datetime
 from email.message import EmailMessage
@@ -127,6 +128,9 @@ class Namespace(BaseNamespace):
     ai_filter: Literal["heavy", "light", "custom"] | None
     ai_rate_limit: int
     ai_filter_prompt: str | None
+    captcha_strategy: str | None
+    captcha_samples: int | None
+    captcha_min_votes: int | None
     system_prompt: str
     message_prompt: str
     order_by: str
@@ -226,6 +230,32 @@ class Operation(BaseOperation):
             "--prompt",
             help="Промпт для генерации сопроводительного письма",
             default="Сгенерируй сопроводительное письмо не более 5-7 предложений от моего имени для вакансии",  # noqa: E501
+        )
+        parser.add_argument(
+            "--captcha-strategy",
+            help=(
+                "Как читать капчу: consensus — несколько чтений, ответ "
+                "отправляется только при согласии; single — одно дешёвое "
+                "чтение; off — не решать, пропустить вакансию; manual — "
+                "показать картинку и спросить в терминале"
+            ),
+            choices=list(self.CAPTCHA_STRATEGIES),
+            default=None,
+        )
+        parser.add_argument(
+            "--captcha-samples",
+            help="Сколько чтений делать при стратегии consensus",
+            type=int,
+            default=None,
+        )
+        parser.add_argument(
+            "--captcha-min-votes",
+            help=(
+                "Сколько чтений должны совпасть, чтобы отправить ответ. "
+                "Больше порог — меньше риска, но чаще пропуск вакансий"
+            ),
+            type=int,
+            default=None,
         )
         parser.add_argument(
             "--total-pages",
@@ -736,26 +766,46 @@ class Operation(BaseOperation):
     # playwright не умеет смешивать css и text= в одном селекторе,
     # поэтому ошибку ищем двумя запросами
     SEL_CAPTCHA_ERROR = '[data-qa="account-captcha-error"]'
-    # Кириллица на случай, если hh.ru все же выдал русскую капчу,
-    # латиница — на английскую, которую теперь просим через
-    # куку session_language (см. константы SITE_LANGUAGE_COOKIE)
+    # Картинка всегда кириллическая: язык в ссылке меняет только текст
+    # интерфейса, а скрипт задаёт сервер. Латиница в регулярке осталась
+    # на случай, если hh.ru сменит выдачу
     SEL_CAPTCHA_ERROR_TEXT = (
         'text=/неверн|не правильн|ошибка|incorrect|wrong|'
         'not correct|captcha is not|try again/i'
     )
     # Сколько ждем реакции hh.ru на введенный ответ
     CAPTCHA_RESULT_TIMEOUT = 15
-    # Кнопка «Другой текст»: hh.ru не меняет картинку сам после
-    # неверного ответа, новую нужно попросить явно
+    # Кнопка «Другой текст». Нужна не всегда: после неверного ответа
+    # hh.ru сам выдает новую картинку с новым ключом
     SEL_CAPTCHA_RENEW = '[data-qa="captcha-renew-text"]'
-    # Модель читает английскую картинку примерно в 4 случаях из 5,
-    # поэтому одна попытка — это отказ в 20% вакансий по сути
+    # Сколько картинок готовы попробовать подряд. Слепых повторов быть
+    # не должно: неверный ответ hh.ru записывает как isBot
     CAPTCHA_MAX_ATTEMPTS = 3
     # Пауза между попытками, чтобы не долбить hh.ru подряд
     CAPTCHA_RETRY_DELAY = 2
+    # Как читать картинку. consensus — несколько независимых чтений и
+    # отправка только при согласии, single — одно дешёвое чтение,
+    # off — не пробовать вовсе, manual — отдать картинку человеку
+    CAPTCHA_STRATEGIES = ("consensus", "single", "off", "manual")
+    CAPTCHA_STRATEGY_DEFAULT = "consensus"
+    CAPTCHA_SAMPLES_DEFAULT = 5
+    # Порог 3 из 5, а не 4: замер 2026-10-03 показал, что пять чтений
+    # одной модели расходятся из-за одной неуверенной буквы, и порог 4
+    # недостижим почти всегда. Важно другое: когда все пять совпали,
+    # ответ всё равно может быть неверным — просто модель в этом
+    # уверена. Поэтому согласие здесь не признак правоты, а признак
+    # устойчивости: порог отсекает нестабильные чтения, а не ищет
+    # правильный ответ. Искать правильный должна другая модель.
+    CAPTCHA_MIN_VOTES_DEFAULT = 3
 
     async def _solve_captcha_async(self, captcha_url: str) -> bool:
         from playwright.async_api import async_playwright
+
+        # Стратегию выбираем до запуска браузера: при off он не нужен
+        strategy = self._captcha_strategy()
+        if strategy == "off":
+            logger.info("Стратегия капчи отключена, вакансия пропущена")
+            return False
 
         captcha_ai = self.tool.get_captcha_ai()
         session = self.tool.session
@@ -799,7 +849,7 @@ class Operation(BaseOperation):
                 for attempt in range(1, self.CAPTCHA_MAX_ATTEMPTS + 1):
                     if attempt > 1:
                         logger.info(
-                            "Пробую капчу еще раз (%s/%s): "
+                            "Беру другую картинку (%s/%s): "
                             "предыдущий ответ hh.ru отверг",
                             attempt,
                             self.CAPTCHA_MAX_ATTEMPTS,
@@ -814,26 +864,16 @@ class Operation(BaseOperation):
                         page, captcha_element
                     )
 
-                    try:
-                        captcha_text = await asyncio.to_thread(
-                            captcha_ai.solve_captcha, img_bytes
-                        )
-                    except Exception as ex:
-                        # Модель ответила не в том формате. Считаем попытку
-                        # неудачной и берем новую картинку, иначе весь
-                        # отклик упал бы на одном странном ответе
-                        logger.warning(
-                            "AI вернул неразобранный ответ (%s): %s",
-                            type(ex).__name__,
-                            str(ex)[:200],
-                        )
-                        continue
-
+                    captcha_text = await self._captcha_answer(
+                        captcha_ai, img_bytes, strategy
+                    )
                     if not captcha_text:
-                        logger.error("AI не смог распознать капчу")
+                        # Отправлять нечего: либо модель не пришла к
+                        # согласию, либо ответ не разобрался. Оба случая
+                        # стоят новой картинки, а не отправки наугад
                         continue
 
-                    logger.info(f"Распознанный текст капчи: {captcha_text}")
+                    logger.info("Распознанный текст капчи: %s", captcha_text)
 
                     await page.fill(self.SEL_CAPTCHA_INPUT, captcha_text)
                     await page.press(self.SEL_CAPTCHA_INPUT, "Enter")
@@ -847,8 +887,9 @@ class Operation(BaseOperation):
 
                 if not accepted:
                     logger.error(
-                        "Капча не пройдена за %s попыток",
+                        "Капча не пройдена за %s попыток стратегией %s",
                         self.CAPTCHA_MAX_ATTEMPTS,
+                        strategy,
                     )
 
                 # Забираем куки из браузера обратно в requests-сессию.
@@ -866,6 +907,92 @@ class Operation(BaseOperation):
                 return accepted
             finally:
                 await browser.close()
+
+    def _captcha_strategy(self) -> str:
+        """Флаг важнее config.json, config важнее встроенного умолчания."""
+        strategy = getattr(self.args, "captcha_strategy", None)
+        if not strategy:
+            strategy = self.tool.config.get("captcha_strategy")
+        strategy = str(
+            strategy or self.CAPTCHA_STRATEGY_DEFAULT
+        ).strip().lower()
+        if strategy not in self.CAPTCHA_STRATEGIES:
+            logger.warning(
+                "Неизвестная стратегия капчи %r, беру %s",
+                strategy,
+                self.CAPTCHA_STRATEGY_DEFAULT,
+            )
+            strategy = self.CAPTCHA_STRATEGY_DEFAULT
+        return strategy
+
+    def _captcha_int(self, name: str, default: int) -> int:
+        """Число настройки: флаг, потом config.json, потом умолчание."""
+        value = getattr(self.args, name, None)
+        if value is None:
+            value = self.tool.config.get(name)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    async def _captcha_answer(
+        self, captcha_ai, img_bytes: bytes, strategy: str
+    ) -> str | None:
+        """Читает картинку выбранной стратегией.
+
+        None означает «отправлять нечего»: модель либо не пришла к
+        согласию, либо её ответ не разобрался.
+        """
+        if strategy == "manual":
+            return await self._ask_human_captcha(img_bytes)
+
+        try:
+            if strategy == "consensus":
+                return await asyncio.to_thread(
+                    captcha_ai.solve_captcha_consensus,
+                    img_bytes,
+                    samples=self._captcha_int(
+                        "captcha_samples", self.CAPTCHA_SAMPLES_DEFAULT
+                    ),
+                    min_votes=self._captcha_int(
+                        "captcha_min_votes", self.CAPTCHA_MIN_VOTES_DEFAULT
+                    ),
+                )
+            return await asyncio.to_thread(captcha_ai.solve_captcha, img_bytes)
+        except Exception as ex:
+            # Модель ответила не в том формате. Считаем попытку
+            # неудачной и берем новую картинку, иначе весь отклик
+            # упал бы на одном странном ответе
+            logger.warning(
+                "AI вернул неразобранный ответ (%s): %s",
+                type(ex).__name__,
+                str(ex)[:200],
+            )
+            return None
+
+    async def _ask_human_captcha(self, img_bytes: bytes) -> str | None:
+        """Сохраняет картинку и ждёт ответа в терминале.
+
+        В фоновом прогоне stdin закрыт, и тогда вакансия просто
+        пропускается: гадать вместо человека нельзя, hh.ru записывает
+        неверный ответ как isBot.
+        """
+        from ..ai.openai import _dump_captcha_debug_image
+
+        path = _dump_captcha_debug_image(img_bytes)
+        if not (sys.stdin and sys.stdin.isatty()):
+            logger.error(
+                "Стратегия manual, но stdin не терминал. Картинка: %s. "
+                "Пропускаю вакансию",
+                path,
+            )
+            return None
+
+        print(f"Капча сохранена: {path}", file=sys.stderr)
+        answer = await asyncio.to_thread(
+            input, "Введите текст с капчи: "
+        )
+        return answer.strip() or None
 
         return False
 

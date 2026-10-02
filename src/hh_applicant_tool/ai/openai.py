@@ -3,10 +3,12 @@ import json
 import logging
 import os
 import time
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import KW_ONLY, dataclass, field
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from threading import Lock
+from threading import Lock, local
 
 import requests
 from urllib3.util import Timeout
@@ -116,9 +118,20 @@ class ChatOpenAI:
     # Внутренние поля для retry логики
     _previous_request_time: float = field(default=0.0, init=False)
     _lock: Lock = field(init=False, repr=False)
+    # Сессия на каждый поток: requests.Session не потокобезопасен, а
+    # голосование по капче шлёт несколько запросов одновременно
+    _tls: local = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._lock = Lock()
+        self._tls = local()
+
+    def _thread_session(self) -> requests.Session:
+        session = getattr(self._tls, "session", None)
+        if session is None:
+            session = requests.Session()
+            self._tls.session = session
+        return session
 
     def _default_headers(self) -> dict[str, str]:
         return {
@@ -129,8 +142,25 @@ class ChatOpenAI:
     def _min_request_interval(self) -> float:
         return 60.0 / self.rate_limit if self.rate_limit > 0 else 0.0
 
-    def _request(self, payload: dict) -> requests.Response:
-        """Выполнение запроса с минимальным интервалом между запросами."""
+    def _request(
+        self, payload: dict, *, throttle: bool = True
+    ) -> requests.Response:
+        """Выполнение запроса с минимальным интервалом между запросами.
+
+        throttle=False снимает и интервал, и блокировку: этим пользуется
+        голосование по капче, где несколько одинаковых запросов идут
+        одновременно и ждать их по очереди бессмысленно.
+        """
+        if not throttle:
+            return self._thread_session().post(
+                self.base_url,
+                json=payload,
+                headers=self._default_headers(),
+                timeout=Timeout(
+                    connect=self.connect_timeout, total=self.timeout
+                ),
+            )
+
         with self._lock:
             if self._previous_request_time > 0:
                 delay = (
@@ -296,75 +326,105 @@ class ChatOpenAI:
 
         return f"{first} {second}"
 
-    # Этому методу тут не место. Мы решаем капчу hh.ru, а тут методы для OpenAI
-    def solve_captcha(self, image_data: bytes) -> str:
-        # Сохраняем то, что реально уходит в AI, иначе по логу
-        # непонятно, что именно модель пыталась прочитать
-        _dump_captcha_debug_image(image_data)
+    # Промпт капчи hh.ru. Собран по живым картинкам 2026-10-03: слова
+    # ложатся по дуге, из-за чего модель дорисовывает обрезанные слова
+    # до знакомых ("альп" вместо "альянс"). Неопределённость лучше
+    # ошибочной буквы, поэтому на unsure модель отвечает лучшим чтением
+    CAPTCHA_SYSTEM_PROMPT = (
+        "You read CAPTCHA images from hh.ru. A picture shows two Russian "
+        "words in small dark letters on a plain light background. The words "
+        "are written along an arc, so the letters at the edges are rotated "
+        "and the gap between the words is not straight. Read every letter "
+        "exactly as it is drawn: the glyphs are distorted, crossed by noise "
+        "lines and sometimes cut off. The words are usually nonsense; do NOT "
+        "repair them into real Russian words you happen to know, copy what "
+        "you see letter by letter. The letters are Cyrillic, never "
+        "transliterate them into Latin letters. Copy ё as ё. Answer with a "
+        "JSON object only, of the form "
+        '{"first_word": "...", "second_word": "..."}, with exactly these '
+        "two keys, lowercase, no explanation and no other keys. If you see "
+        "three words, put the first one in first_word and the remaining two "
+        "joined by a space in second_word. If a letter is unreadable, still "
+        "answer with your best reading rather than refusing."
+    )
 
-        image_base64 = base64.b64encode(image_data).decode("utf-8")
+    CAPTCHA_USER_PROMPT = (
+        "Read the two words in this CAPTCHA image and answer with a JSON "
+        'object {"first_word": "...", "second_word": "..."} and nothing '
+        "else."
+    )
 
-        content_type = "image/png"
+    # При нулевой температуре все выборки совпадают и голосование
+    # превращается в один и тот же запрос
+    CAPTCHA_SAMPLE_TEMPERATURE = 0.7
 
-        messages = []
+    @staticmethod
+    def _captcha_vote_key(text: str) -> str:
+        # ё и е в капче неразличимы, для подсчёта голосов это один ответ
+        return text.replace("ё", "е")
 
-        system_prompt = (
-            "You read CAPTCHA images. What you see is text written in "
-            "small dark letters on a plain light background. The text is "
-            "exactly two lowercase Cyrillic words separated by a single "
-            "space, and nothing else on the image. Read the letters "
-            "exactly as written: the glyphs are distorted and crossed by "
-            "noise lines, so look at the shape of each letter and do not "
-            "guess a word you cannot see. The letters are Cyrillic, never "
-            "transliterate them into Latin letters. Copy ё as ё. Answer "
-            "with a JSON object only, of the form "
-            '{"first_word": "...", "second_word": "..."}, with exactly '
-            "these two keys, lowercase, no explanation and no other keys. "
-            "If a letter is unreadable, still answer with your best "
-            "reading rather than refusing."
-        )
-
-        messages.append({"role": "system", "content": system_prompt})
-
-        messages.append(
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{content_type};base64,{image_base64}"
-                        },
-                    },
-                    {
-                        "type": "text",
-                        "text": (
-                            "Read the two words in this CAPTCHA image and "
-                            'answer with a JSON object {"first_word": "...", '
-                            '"second_word": "..."} and nothing else.'
-                        ),
-                    },
-                ],
-            }
-        )
-
-        logger.debug(
-            "AI запрос на распознавание капчи: %d bytes", len(image_data)
-        )
-
-        payload = {
+    def _captcha_payload(
+        self, image_base64: str, content_type: str, temperature: float
+    ) -> dict:
+        return {
             "model": self.model,
-            "messages": messages,
-            "temperature": 0.0,
+            "messages": [
+                {"role": "system", "content": self.CAPTCHA_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": (
+                                    f"data:{content_type};base64,"
+                                    f"{image_base64}"
+                                ),
+                                # мелкие буквы по дуге в режиме по
+                                # умолчанию читаются заметно хуже
+                                "detail": "high",
+                            },
+                        },
+                        {
+                            "type": "text",
+                            "text": self.CAPTCHA_USER_PROMPT,
+                        },
+                    ],
+                },
+            ],
+            "temperature": temperature,
             # JSON-объект занимает заметно больше, чем голый текст,
             # 20 токенов на {"text": "..."} могло не хватить
             "max_completion_tokens": 100,
             "stream": False,
         }
 
+    # Этому методу тут не место. Мы решаем капчу hh.ru, а тут методы для OpenAI
+    def _read_captcha_once(
+        self,
+        image_data: bytes,
+        temperature: float,
+        *,
+        throttle: bool = True,
+    ) -> str:
+        image_base64 = base64.b64encode(image_data).decode("utf-8")
+
+        content_type = "image/png"
+
+        payload = self._captcha_payload(
+            image_base64, content_type, temperature
+        )
+
+        logger.debug(
+            "AI запрос на распознавание капчи: %d bytes, выборка на "
+            "температуре %.2f",
+            len(image_data),
+            temperature,
+        )
+
         for attempt in range(self.max_retries + 1):
             try:
-                response = self._request(payload)
+                response = self._request(payload, throttle=throttle)
             except requests.exceptions.RequestException as ex:
                 # Таймаут локальной модели и оборванное соединение
                 # повторяем, а не роняем отклик на первой вакансии
@@ -411,3 +471,77 @@ class ChatOpenAI:
                 raise OpenAIError(f"Invalid response format: {ex}") from ex
 
         raise OpenAIError("Captcha recognition failed after retries")
+
+    def solve_captcha(self, image_data: bytes) -> str:
+        """Одно чтение картинки. Дёшево, но ошибается примерно в половине
+        случаев, поэтому для боевого прогона лучше голосование."""
+        # Сохраняем то, что реально уходит в AI, иначе по логу
+        # непонятно, что именно модель пыталась прочитать
+        _dump_captcha_debug_image(image_data)
+
+        return self._read_captcha_once(image_data, self.temperature)
+
+    def solve_captcha_consensus(
+        self,
+        image_data: bytes,
+        *,
+        samples: int = 5,
+        min_votes: int = 3,
+    ) -> str | None:
+        """Несколько независимых чтений, ответ отдаётся только при согласии.
+
+        None означает «модель не уверена». Такой ответ отправлять нельзя:
+        hh.ru записывает неверный ответ как isBot, и один промах вредит
+        больше, чем пропущенная вакансия.
+
+        Осторожно, это порог устойчивости, а не проверка правоты. Замер
+        2026-10-03: пять чтений различались на одну букву, но когда все
+        пять совпадали, ответ всё равно оказывался неверным — просто
+        модель была в этом уверена. С разными моделями голосование
+        работает как надо, с одной моделью оно отсекает только
+        нестабильные чтения.
+        """
+        _dump_captcha_debug_image(image_data)
+
+        with ThreadPoolExecutor(max_workers=samples) as pool:
+            futures = [
+                pool.submit(
+                    self._read_captcha_once,
+                    image_data,
+                    self.CAPTCHA_SAMPLE_TEMPERATURE,
+                    throttle=False,
+                )
+                for _ in range(samples)
+            ]
+            readings: list[str] = []
+            for future in futures:
+                try:
+                    readings.append(future.result())
+                except Exception as ex:
+                    logger.debug(
+                        "Одно из чтений капчи не удалось (%s): %s",
+                        type(ex).__name__,
+                        str(ex)[:200],
+                    )
+
+        if not readings:
+            raise OpenAIError("Captcha recognition failed after retries")
+
+        votes = Counter(self._captcha_vote_key(r) for r in readings)
+        best_key, top = votes.most_common(1)[0]
+        logger.info(
+            "Чтений капчи: %s, порог согласия %s, собрано за %s: %s",
+            len(readings),
+            min_votes,
+            best_key,
+            [self._captcha_vote_key(r) for r in readings],
+        )
+        if top < min_votes:
+            return None
+
+        # Отдаём то написание, которое модель выдала чаще, а не
+        # нормализованный ключ: в капче встречается и ё
+        spellings = Counter(
+            r for r in readings if self._captcha_vote_key(r) == best_key
+        )
+        return spellings.most_common(1)[0][0]
