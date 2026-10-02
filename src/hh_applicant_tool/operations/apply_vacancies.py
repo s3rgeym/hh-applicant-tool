@@ -12,7 +12,14 @@ from email.message import EmailMessage
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Literal
-from urllib.parse import unquote, urlparse, urlsplit
+from urllib.parse import (
+    parse_qsl,
+    unquote,
+    urlencode,
+    urlparse,
+    urlsplit,
+    urlunsplit,
+)
 
 import requests
 
@@ -20,6 +27,7 @@ from ..ai.base import AIError
 from ..api import BadResponse, Redirect, datatypes
 from ..api.datatypes import PaginatedItems, SearchVacancy
 from ..api.errors import ApiError, CaptchaRequired, LimitExceeded
+from ..constants import DEFAULT_SITE_LANGUAGE
 from ..main import BaseNamespace, BaseOperation
 from ..storage.repositories.errors import RepositoryError
 from ..utils.cookiejar import (
@@ -78,6 +86,35 @@ def _playwright_proxy(proxies: dict[str, str] | None) -> dict[str, str] | None:
     if password:
         rv["password"] = unquote(password)
     return rv
+
+
+def _with_site_language(url: str, language: str) -> str:
+    """Дописывает язык в ссылку на капчу (например, &lang=en).
+
+    Ссылку captcha_url присылает hh.ru в ответе 403 на отклик,
+    и язык в ней не проставлен. Даже если картинка задана на языке
+    аккаунта, сам параметр нужен, чтобы страница капчи и ее тексты
+    были на том же языке, который мы просим кукой session_language.
+    """
+    if not language:
+        return url
+
+    parsed = urlsplit(url)
+    params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    if params.get("lang") == language:
+        return url
+
+    params["lang"] = language
+
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            urlencode(params),
+            parsed.fragment,
+        )
+    )
 
 
 class Namespace(BaseNamespace):
@@ -739,7 +776,13 @@ class Operation(BaseOperation):
                     await self._add_cookies(context, session_cookies)
                 page = await context.new_page()
 
-                await page.goto(captcha_url, timeout=30000)
+                language = self.tool.config.get(
+                    "site_language", DEFAULT_SITE_LANGUAGE
+                )
+                await page.goto(
+                    _with_site_language(captcha_url, language),
+                    timeout=30000,
+                )
 
                 captcha_element = await page.wait_for_selector(
                     self.SEL_CAPTCHA_IMAGE, timeout=10000, state="visible"
