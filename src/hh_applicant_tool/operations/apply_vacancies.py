@@ -9,6 +9,7 @@ import re
 import time
 from datetime import datetime
 from email.message import EmailMessage
+from http.cookiejar import Cookie
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Literal
@@ -655,7 +656,8 @@ class Operation(BaseOperation):
     SEL_CAPTCHA_IMAGE = 'img[data-qa="account-captcha-picture"]'
     SEL_CAPTCHA_INPUT = 'input[data-qa="account-captcha-input"]'
 
-    # Даже куки не грузятся, исправь
+    # Уберите это нахуй отсюда. Чтобы картинку загрузить, браузер не нужно
+    # запускать!!!
     async def _solve_captcha_async(self, captcha_url: str) -> bool:
         from playwright.async_api import async_playwright
 
@@ -692,12 +694,33 @@ class Operation(BaseOperation):
 
                 cookies = await context.cookies()
                 for c in cookies:
-                    self.tool.session.cookies.set(
-                        c["name"],
-                        c["value"],
-                        domain=c.get("domain", ""),
+                    domain = c.get("domain", "")
+
+                    cookie = Cookie(
+                        version=0,
+                        name=c["name"],
+                        value=c["value"],
+                        port=None,
+                        port_specified=False,
+                        domain=domain,
+                        domain_specified=domain.startswith("."),
+                        domain_initial_dot=domain.startswith("."),
                         path=c.get("path", "/"),
+                        path_specified=True,
+                        secure=c.get("secure", False),
+                        expires=c.get("expires"),
+                        discard=c.get("expires") is None,
+                        comment=None,
+                        comment_url=None,
+                        rest={
+                            "HttpOnly": "",
+                        }
+                        if c.get("httpOnly")
+                        else {},
+                        rfc2109=False,
                     )
+
+                    self.tool.session.cookies.set_cookie(cookie)
 
                 return True
             finally:
@@ -798,7 +821,7 @@ class Operation(BaseOperation):
                 system_prompt = (
                     f"{self.ai_filter_prompt}\n\nКандидат:\n{resume_analysis}\n\n"
                     "Не пиши объяснения.\n"
-                    'Ответ строго JSON:\n'
+                    "Ответ строго JSON:\n"
                     '{{"suitable": true}} или {{"suitable": false}}'
                 )
             elif self.ai_filter == "heavy":
@@ -939,7 +962,10 @@ class Operation(BaseOperation):
 
                     if self.ai_filter in ("heavy", "custom"):
                         is_suitable = self._is_vacancy_suitable_heavy(
-                            vacancy, "(custom)" if self.ai_filter == "custom" else "(heavy)"
+                            vacancy,
+                            "(custom)"
+                            if self.ai_filter == "custom"
+                            else "(heavy)",
                         )
                     else:
                         is_suitable = self._is_vacancy_suitable_light(vacancy)
@@ -1024,24 +1050,31 @@ class Operation(BaseOperation):
                         msg += (
                             "[ВАКАНСИЯ] "
                             + "Название: "
-                            + message_placeholders["vacancy_name"] + ", "
+                            + message_placeholders["vacancy_name"]
+                            + ", "
                             + "Работодатель: "
-                            + message_placeholders["employer_name"] + "; "
+                            + message_placeholders["employer_name"]
+                            + "; "
                         )
                         msg += (
                             "[РЕЗЮМЕ] "
                             + "Название: "
-                            + message_placeholders["resume_title"] + ", "
+                            + message_placeholders["resume_title"]
+                            + ", "
                             + "Ссылка на резюме: "
-                            + message_placeholders["resume_url"] + ", "    
+                            + message_placeholders["resume_url"]
+                            + ", "
                         )
                         msg += (
                             "Имя: "
-                            + message_placeholders["first_name"] + ", "
+                            + message_placeholders["first_name"]
+                            + ", "
                             + "Фамилия: "
-                            + message_placeholders["last_name"] + ", "
+                            + message_placeholders["last_name"]
+                            + ", "
                             + "Телефон: "
-                            + message_placeholders["phone"] + ", "
+                            + message_placeholders["phone"]
+                            + ", "
                             + "Почта: "
                             + message_placeholders["email"]
                         )
@@ -1120,7 +1153,9 @@ class Operation(BaseOperation):
                                 vacancy["alternate_url"],
                             )
                         else:
-                            logger.error(f"Произошла непредвиденная ошибка: {ex}")
+                            logger.error(
+                                f"Произошла непредвиденная ошибка: {ex}"
+                            )
                             continue
                     except Exception as ex:
                         logger.error(f"Произошла непредвиденная ошибка: {ex}")
@@ -1254,7 +1289,7 @@ class Operation(BaseOperation):
 
     def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData | None:
         """Парсит тесты"""
-        res = self.tool.get_redirect_config(response_url)  
+        res = self.tool.get_redirect_config(response_url)
         return find_key(res, "vacancyTests")
 
     def _solve_vacancy_test(
@@ -1270,8 +1305,10 @@ class Operation(BaseOperation):
             raise ValueError(f"Данные тестов не найдены на {response_url}.")
 
         if not (test_data := tests_data.get(str(vacancy_id))):
-            raise ValueError(f"Пустые данные теста вакансии vacancy_id={vacancy_id}")
-        
+            raise ValueError(
+                f"Пустые данные теста вакансии vacancy_id={vacancy_id}"
+            )
+
         logger.debug(f"{test_data = }")
 
         payload: dict[str, Any] = {
@@ -1590,7 +1627,9 @@ class Operation(BaseOperation):
             )
             return False
 
-        description, _ = self.json_decoder.raw_decode(description_match.group(1))
+        description, _ = self.json_decoder.raw_decode(
+            description_match.group(1)
+        )
         description = strip_tags(description)
         logger.debug(description[:2047])
         return bool(excluded_pat.search(description))
