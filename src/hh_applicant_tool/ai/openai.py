@@ -35,7 +35,7 @@ class ChatOpenAI:
     connect_timeout: float = DEFAULT_OPENAI_CONNECT_TIMEOUT
 
     # Параметры для retry логики
-    max_retries: int = 5
+    max_retries: int = 3
 
     temperature: float = 0.0
     max_completion_tokens: int = 1000
@@ -169,7 +169,6 @@ class ChatOpenAI:
 
         raise OpenAIError("OpenAI request failed after retries")
 
-    # Этому методу тут не место. Мы решаем капчу hh.ru, а тут методы для OpenAI
     def solve_captcha(self, image_data: bytes) -> str:
         image_base64 = base64.b64encode(image_data).decode("utf-8")
 

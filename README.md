@@ -17,7 +17,14 @@
 > Прежде чем задавать долбоебские вопросы, прочитай весь текст ниже, особенно пункт [ответы на заебавшие вопросы](#ответы-на-заебавшие-вопросы).
 
 > [!NOTE]
-> Советую попробовать [HH AI Responder](https://github.com/s3rgeym/hh-ai-responder/tree/main) — это программа, которая не требует установки и зависимостей (просто скачал и запусти), написанная на Go под Linux, Mac, Windows и Android, которая автоматически рассылает отклики и общается с хрюшами и кабанычами через ХуИИ.
+> Советую попробовать [HH AI
+> Responder](https://github.com/s3rgeym/hh-ai-responder/tree/main) — это
+> программа, которая не требует установки и зависимостей (просто скачал и
+> запусти), написанная на Go под Linux, Mac, Windows и Android, которая
+> автоматически рассылает отклики и общается с хрюшами и кабанычами через ХуИИ.
+> Так же можете дописать src/hh_applicant_tool/operations/autoresponder.py, чтобы
+> добавить автоответчик по чатам и в HH Applicant Tool, натравив на тот нейронку
+> (я половину бреда чатагпт вычистил вручную).
 
 > [!IMPORTANT]
 > Сайт с одноименным названием (НН Applicant Tool) к этой утилите отношения не имеет, то какой-то кабан кабаныч решил за счет мусорной поисковой выдачи клиентов залутать.
@@ -768,30 +775,28 @@ hh-applicant-tool config -e
 > [!CAUTION]
 > В рамках борьбы с нейрослопом формат конфигов может быть изменен.
 
-Для разных задач можно настроить отдельные параметры AI:
+Универсальный конфиг OpenAI задается в секции `openai` с полями `api_key`, `base_url`, `model` и тп.
+
+Для разных задач можно задать отдельные секции конфига. Доступные: `openai_cover_letter`, `openai_captcha`, `openai_chat`, `openai_vacancy_filter`. В них можно переопределить модель, ссылку, ключ API и тд. Если в них не хватает какого-то поля, то оно берется из `openai`.
 
 ```json
 {
-  "openai_cover_letter": {
+  "openai": {
     "api_key": "ВАШ_API_КЛЮЧ",
     "base_url": "https://api.openai.com/v1/chat/completions",
     "model": "gpt-4o-mini",
+  },
+  "openai_cover_letter": {
     "temperature": 0.7,
     "max_completion_tokens": 1000,
     "rate_limit": 40
   },
   "openai_vacancy_filter": {
-    "api_key": "ВАШ_API_КЛЮЧ",
-    "base_url": "https://api.openai.com/v1/chat/completions",
-    "model": "gpt-4o-mini",
     "temperature": 0.1,
     "max_completion_tokens": 100,
     "rate_limit": 60
   },
   "openai_captcha": {
-    "api_key": "ВАШ_API_КЛЮЧ",
-    "base_url": "https://api.openai.com/v1/chat/completions",
-    "model": "gpt-4o-mini",
     "temperature": 0.0,
     "max_completion_tokens": 20,
     "rate_limit": 40
