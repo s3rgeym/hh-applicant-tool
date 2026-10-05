@@ -34,7 +34,7 @@ def _make_operation() -> Operation:
     operation.max_responses = 0
     operation.dry_run = True
     operation.excluded_filter = None
-    operation._get_vacancies = lambda resume_id=None: iter(())
+    operation._get_vacancies = lambda resume_id=None, resume_title="": iter(())
     operation._analyze_resume_heavy = lambda resume: "resume details"
     return operation
 
