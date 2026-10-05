@@ -380,8 +380,10 @@ class HHApplicantTool(MegaTool):
             raw_config = response.text.split('id="HH-Lux-InitialState">')[
                 1
             ].split("</template>")[0]
-        except IndexError:
-            raise Error(f"Template with config not found on {response.url}")
+        except IndexError as ex:
+            raise Error(
+                f"Template with config not found on {response.url}"
+            ) from ex
 
         # Теперь кавычки всегда превращаются в сущности?
         if raw_config.startswith("{&#34;"):
