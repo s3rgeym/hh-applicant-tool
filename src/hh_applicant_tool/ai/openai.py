@@ -151,7 +151,7 @@ class ChatOpenAI:
     connect_timeout: float = DEFAULT_OPENAI_CONNECT_TIMEOUT
 
     # Параметры для retry логики
-    max_retries: int = 5
+    max_retries: int = 3
 
     temperature: float = 0.0
     max_completion_tokens: int = 1000

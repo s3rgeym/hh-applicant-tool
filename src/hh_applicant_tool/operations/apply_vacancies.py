@@ -1443,7 +1443,7 @@ class Operation(BaseOperation):
                 system_prompt = (
                     f"{self.ai_filter_prompt}\n\nКандидат:\n{resume_analysis}\n\n"
                     "Не пиши объяснения.\n"
-                    'Ответ строго JSON:\n'
+                    "Ответ строго JSON:\n"
                     '{{"suitable": true}} или {{"suitable": false}}'
                 )
             elif self.ai_filter == "heavy":
@@ -1584,7 +1584,10 @@ class Operation(BaseOperation):
 
                     if self.ai_filter in ("heavy", "custom"):
                         is_suitable = self._is_vacancy_suitable_heavy(
-                            vacancy, "(custom)" if self.ai_filter == "custom" else "(heavy)"
+                            vacancy,
+                            "(custom)"
+                            if self.ai_filter == "custom"
+                            else "(heavy)",
                         )
                     else:
                         is_suitable = self._is_vacancy_suitable_light(vacancy)
@@ -1669,24 +1672,31 @@ class Operation(BaseOperation):
                         msg += (
                             "[ВАКАНСИЯ] "
                             + "Название: "
-                            + message_placeholders["vacancy_name"] + ", "
+                            + message_placeholders["vacancy_name"]
+                            + ", "
                             + "Работодатель: "
-                            + message_placeholders["employer_name"] + "; "
+                            + message_placeholders["employer_name"]
+                            + "; "
                         )
                         msg += (
                             "[РЕЗЮМЕ] "
                             + "Название: "
-                            + message_placeholders["resume_title"] + ", "
+                            + message_placeholders["resume_title"]
+                            + ", "
                             + "Ссылка на резюме: "
-                            + message_placeholders["resume_url"] + ", "    
+                            + message_placeholders["resume_url"]
+                            + ", "
                         )
                         msg += (
                             "Имя: "
-                            + message_placeholders["first_name"] + ", "
+                            + message_placeholders["first_name"]
+                            + ", "
                             + "Фамилия: "
-                            + message_placeholders["last_name"] + ", "
+                            + message_placeholders["last_name"]
+                            + ", "
                             + "Телефон: "
-                            + message_placeholders["phone"] + ", "
+                            + message_placeholders["phone"]
+                            + ", "
                             + "Почта: "
                             + message_placeholders["email"]
                         )
@@ -1765,7 +1775,9 @@ class Operation(BaseOperation):
                                 vacancy["alternate_url"],
                             )
                         else:
-                            logger.error(f"Произошла непредвиденная ошибка: {ex}")
+                            logger.error(
+                                f"Произошла непредвиденная ошибка: {ex}"
+                            )
                             continue
                     except Exception as ex:
                         logger.error(f"Произошла непредвиденная ошибка: {ex}")
@@ -1905,7 +1917,7 @@ class Operation(BaseOperation):
 
     def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData | None:
         """Парсит тесты"""
-        res = self.tool.get_redirect_config(response_url)  
+        res = self.tool.get_redirect_config(response_url)
         return find_key(res, "vacancyTests")
 
     def _solve_vacancy_test(
@@ -1921,8 +1933,10 @@ class Operation(BaseOperation):
             raise ValueError(f"Данные тестов не найдены на {response_url}.")
 
         if not (test_data := tests_data.get(str(vacancy_id))):
-            raise ValueError(f"Пустые данные теста вакансии vacancy_id={vacancy_id}")
-        
+            raise ValueError(
+                f"Пустые данные теста вакансии vacancy_id={vacancy_id}"
+            )
+
         logger.debug(f"{test_data = }")
 
         payload: dict[str, Any] = {
@@ -2241,7 +2255,9 @@ class Operation(BaseOperation):
             )
             return False
 
-        description, _ = self.json_decoder.raw_decode(description_match.group(1))
+        description, _ = self.json_decoder.raw_decode(
+            description_match.group(1)
+        )
         description = strip_tags(description)
         logger.debug(description[:2047])
         return bool(excluded_pat.search(description))

@@ -57,7 +57,7 @@ class BaseOperation:
     def run(
         self,
         tool: HHApplicantTool,
-        args: BaseNamespace,
+        args: BaseNamespace,  # pyright: ignore[reportUnusedParameter]
     ) -> None | int:
         raise NotImplementedError()
 
@@ -80,7 +80,7 @@ class HHApplicantTool(MegaTool):
 
     Исходники и предложения: <https://github.com/s3rgeym/hh-applicant-tool>
 
-    Группа поддержки: <https://t.me/hh_applicant_tool>
+    Группа поддержки: <https://t.me/s3rgeym_chat>
     """
 
     class ArgumentFormatter(
@@ -360,42 +360,50 @@ class HHApplicantTool(MegaTool):
 
             if page + 1 >= r.get("pages", 0):
                 break
-                
+
     def _is_authenticated(self, config: dict[str, Any]) -> bool:
-        account = config.get('account') or {}
+        account = config.get("account") or {}
         if not account:
             return False
         # Если пользователь неавторизован содержит поля типа firstName, lastName и тд со значением None (все поля)
         return any(v is not None for v in account.values())
-    
-    def parse_redirect_config(self, response: requests.Response, check_auth: bool = True) -> dict[str, Any]:
+
+    def parse_redirect_config(
+        self, response: requests.Response, check_auth: bool = True
+    ) -> dict[str, Any]:
         if response.status_code != 200:
-            raise Error(f"Неожиданный код ответа: {response.status_code} {response.url}")
+            raise Error(
+                f"Неожиданный код ответа: {response.status_code} {response.url}"
+            )
 
         try:
-            raw_config = response.text.split('id="HH-Lux-InitialState">')[1].split('</template>')[0]
+            raw_config = response.text.split('id="HH-Lux-InitialState">')[
+                1
+            ].split("</template>")[0]
         except IndexError:
             raise Error(f"Template with config not found on {response.url}")
-        
+
         # Теперь кавычки всегда превращаются в сущности?
-        if raw_config.startswith('{&#34;'):
-           raw_config = html.unescape(raw_config)
-            
+        if raw_config.startswith("{&#34;"):
+            raw_config = html.unescape(raw_config)
+
         # import tempfile
         # with tempfile.NamedTemporaryFile('w', delete=False, prefix='hh_config_', suffix='.json', dir='.', encoding='utf-8') as tmp_file:
         #     tmp_file.write(raw_config)
         #     file_path = tmp_file.name
         #     print(file_path)
-        
+
         config = json.loads(raw_config)
         assert type(config) is dict
         assert "redirectConfig" in config
         if check_auth and not self._is_authenticated(config):
             raise Error("Авторизация истекла требуется новая!")
-            
+
         return config
 
-    def get_redirect_config(self, url: str, check_auth: bool = True) -> dict[str, Any]:
+    def get_redirect_config(
+        self, url: str, check_auth: bool = True
+    ) -> dict[str, Any]:
         return self.parse_redirect_config(self.session.get(url), check_auth)
 
     # TODO: добавить еще методов или те удалить?
@@ -419,16 +427,19 @@ class HHApplicantTool(MegaTool):
             )
 
     def get_cover_letter_ai(self, system_prompt: str) -> ai.ChatOpenAI:
-        return self._init_ai_client(system_prompt, purpose="cover_letter")
+        return self.get_ai_client(system_prompt, purpose="cover_letter")
 
     def get_vacancy_filter_ai(self, system_prompt: str) -> ai.ChatOpenAI:
-        return self._init_ai_client(system_prompt, purpose="vacancy_filter")
+        return self.get_ai_client(system_prompt, purpose="vacancy_filter")
+
+    def get_chat_ai(self, system_prompt: str) -> ai.ChatOpenAI:
+        return self.get_ai_client(system_prompt, purpose="chat")
 
     def get_captcha_ai(self) -> ai.ChatOpenAI:
         # Промпт тут короткий и общий: точный промпт распознавания
         # задаёт solve_captcha, он же требует JSON с двумя словами
         # и отдельно запрещает менять алфавит картинки на другой.
-        return self._init_ai_client(
+        return self.get_ai_client(
             system_prompt=(
                 "You read CAPTCHA images. Return ONLY the text from the "
                 "image, exactly as it is written."
@@ -436,48 +447,56 @@ class HHApplicantTool(MegaTool):
             purpose="captcha",
         )
 
-    def _init_ai_client(self, system_prompt: str, purpose: str) -> ai.ChatOpenAI:
-
+    def get_ai_client(
+        self,
+        system_prompt: str,
+        purpose: str | None = None,
+    ) -> ai.ChatOpenAI:
         config_sections = {
             "cover_letter": "openai_cover_letter",
             "vacancy_filter": "openai_vacancy_filter",
             "captcha": "openai_captcha",
+            "chat": "openai_chat",
         }
-        
-        if purpose not in config_sections:
-            raise ValueError(
-                f"Неизвестная цель AI: {purpose}. "
-                f"Допустимые значения: {list(config_sections.keys())}"
-            )
-        
-        config_section = config_sections[purpose]
-        c = self.config.get(config_section, {})
-        
+
+        c = self.config.get("openai", {})
+
+        if purpose is not None:
+            if purpose not in config_sections:
+                raise ValueError(
+                    f"Неизвестная цель AI: {purpose}. "
+                    f"Допустимые значения: {list(config_sections.keys())}"
+                )
+
+            purpose_config = self.config.get(config_sections[purpose], {})
+            # Переписываем значения openai
+            c = {**c, **purpose_config}
+
         api_key = c.get("api_key")
         if not api_key:
             raise ValueError(
-                f"API-ключ не задан. Укажите 'api_key' в секции '{config_section}' конфигурации."
+                "API-ключ не задан. Укажите 'api_key' в секции 'openai'"
+                + (f" или '{config_sections[purpose]}'." if purpose else ".")
             )
 
         base_url = c.get("base_url")
         if not base_url:
             raise ValueError(
-                f"Параметр 'base_url' обязателен для AI-конфигурации в секции '{config_section}'. "
-                "Примеры: OpenAI='https://api.openai.com/v1/chat/completions', "
-                "Ollama='http://localhost:11434/v1/chat/completions', "
-                "OpenRouter='https://openrouter.ai/api/v1/chat/completions'"
+                "Параметр 'base_url' не задан. Укажите его в секции 'openai'"
+                + (f" или '{config_sections[purpose]}'." if purpose else ".")
             )
 
         model = c.get("model")
         if not model:
             logger.warning(
-                "Параметр 'model' не задан в секции '%s'. "
-                "Большинство AI-провайдеров (OpenAI, OpenRouter) требуют указания модели. "
-                "Примеры: 'gpt-4o-mini', 'gpt-3.5-turbo', 'openai/gpt-4'",
-                config_section,
+                "Параметр 'model' не задан в конфигурации."
+                + (
+                    f" Секции 'openai' и '{config_sections[purpose]}' не содержат "
+                    "этого параметра."
+                    if purpose
+                    else " Секция 'openai' не содержит этого параметра."
+                )
             )
-    
-        openai_config = self.config.get("openai", {})
 
         return ai.ChatOpenAI(
             api_key=api_key,
@@ -490,20 +509,18 @@ class HHApplicantTool(MegaTool):
             timeout=(
                 self.openai_timeout
                 or c.get("timeout")
-                or openai_config.get("timeout")
                 or DEFAULT_OPENAI_TIMEOUT
             ),
             connect_timeout=(
                 self.openai_connect_timeout
                 or c.get("connect_timeout")
-                or openai_config.get("connect_timeout")
                 or DEFAULT_OPENAI_CONNECT_TIMEOUT
             ),
             session=self.openai_session,
         )
 
     # TODO: вынести в миксин какой
-    def _cookie_value(self, name: str) -> str | None:
+    def get_cookie(self, name: str) -> str | None:
         """Значение cookie по имени из jar на базе {CookieJar} (нет get_dict)."""
         return next(
             (c.value for c in self.session.cookies if c.name == name),
@@ -524,7 +541,7 @@ class HHApplicantTool(MegaTool):
         # /applicant/vacancy_response/popup возвращал 403 (CSRF mismatch).
         # Сервер сверяет токен именно с cookie `_xsrf`, поэтому отдаем
         # совпадающее значение, а не первое вхождение.
-        cookie_xsrf = self._cookie_value("_xsrf")
+        cookie_xsrf = self.get_cookie("_xsrf")
         if cookie_xsrf and cookie_xsrf in tokens:
             return cookie_xsrf
         return tokens[0]
@@ -533,7 +550,7 @@ class HHApplicantTool(MegaTool):
         """Возвращает XSRF-токен, который выдается на сессию."""
         # Токен, который сервер реально валидирует, лежит в cookie `_xsrf`.
         # Если cookie уже есть — используем его и не делаем лишний GET.
-        cookie_xsrf = self._cookie_value("_xsrf")
+        cookie_xsrf = self.get_cookie("_xsrf")
         if cookie_xsrf:
             return cookie_xsrf
         r = self.session.get(url or "https://hh.ru/")
