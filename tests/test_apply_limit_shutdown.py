@@ -73,7 +73,7 @@ class TestMaxResponses:
         """With --max-responses 5 and 20 vacancies, only 5 are applied."""
         op = _make_operation(max_responses=5)
         total = 20
-        op._get_vacancies = lambda resume_id=None: iter(
+        op._get_vacancies = lambda resume_id=None, resume_title="": iter(
             _make_vacancy(i) for i in range(total)
         )
 
@@ -87,7 +87,7 @@ class TestMaxResponses:
         """Without max-responses, all vacancies are attempted."""
         op = _make_operation(max_responses=0)
         total = 8
-        op._get_vacancies = lambda resume_id=None: iter(
+        op._get_vacancies = lambda resume_id=None, resume_title="": iter(
             _make_vacancy(i) for i in range(total)
         )
 
@@ -107,7 +107,7 @@ class TestGracefulShutdown:
 
         applied = []
 
-        def fake_get(resume_id=None):
+        def fake_get(resume_id=None, resume_title=""):
             for i in range(20):
                 applied.append(i)
                 if i == 2:

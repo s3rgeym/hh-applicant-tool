@@ -1469,7 +1469,9 @@ class Operation(BaseOperation):
             if self.args.ai_rate_limit:
                 self.vacancy_filter_ai.rate_limit = self.args.ai_rate_limit
 
-        for vacancy in self._get_vacancies(resume_id=resume["id"]):
+        for vacancy in self._get_vacancies(
+            resume_id=resume["id"], resume_title=resume["title"]
+        ):
             if (
                 getattr(self, "_cancel_event", None)
                 and self._cancel_event.is_set()
@@ -2119,15 +2121,17 @@ class Operation(BaseOperation):
             if not item.startswith("*.")
         )
 
-    def _get_search_params(self, page: int) -> dict:
+    def _get_search_params(self, page: int, text: str | None = None) -> dict:
         params = {
             "page": page,
             "per_page": self.per_page,
         }
         if self.order_by:
             params |= {"order_by": self.order_by}
-        if self.search:
-            params["text"] = self.search
+        if text is None:
+            text = self.search
+        if text:
+            params["text"] = text
         if self.schedule:
             params["schedule"] = self.schedule
         if self.work_format:
@@ -2178,8 +2182,11 @@ class Operation(BaseOperation):
             params["only_with_salary"] = bool2str(self.only_with_salary)
         # if self.clusters:
         #     params["clusters"] = bool2str(self.clusters)
-        if self.no_magic:
-            params["no_magic"] = bool2str(self.no_magic)
+        # magic (авторазбор запроса hh.ru) включён по умолчанию, и шлём
+        # его явно: дефолт на стороне hh мы не контролируем, а без
+        # разбора запроса подстановка тайтла резюме работает заметно
+        # хуже. Выключается только --no-magic.
+        params["no_magic"] = bool2str(self.no_magic)
         if self.premium:
             params["premium"] = bool2str(self.premium)
         # if self.responses_count_enabled is not None:
@@ -2188,11 +2195,29 @@ class Operation(BaseOperation):
         return params
 
     def _get_vacancies(
-        self, resume_id: str | None = None
+        self,
+        resume_id: str | None = None,
+        resume_title: str = "",
     ) -> Iterator[SearchVacancy]:
+        # Похожие вакансии hh.ru подбирает только по навыкам резюме, и
+        # на «разработчике» это даёт сборщиков компьютеров. Если
+        # поисковая строка не задана, подставляем тайтл резюме:
+        # поиск остаётся по похожим вакансиям, но с текстовым
+        # запросом, который и делает выдачу осмысленной.
+        text = self.search or resume_title
+        if not self.search and resume_title:
+            logger.info(
+                "Поисковый запрос не задан, беру тайтл резюме: %s",
+                resume_title,
+            )
+            print(
+                "🔎 Поисковый запрос не задан, "
+                f"беру тайтл резюме: {resume_title}"
+            )
+
         for page in range(self.total_pages):
             logger.debug(f"Загружаем вакансии со страницы: {page + 1}")
-            params = self._get_search_params(page)
+            params = self._get_search_params(page, text=text)
 
             if self.search:
                 res: PaginatedItems[SearchVacancy] = self.api_client.get(
