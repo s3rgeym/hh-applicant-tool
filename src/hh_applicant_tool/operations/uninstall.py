@@ -6,7 +6,7 @@ import sys
 from runpy import run_module
 from typing import TYPE_CHECKING
 
-from ..main import BaseOperation
+from ..main import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:
     from ..main import HHApplicantTool

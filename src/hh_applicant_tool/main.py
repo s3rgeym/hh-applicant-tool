@@ -14,7 +14,7 @@ import threading
 from collections.abc import Sequence
 from contextlib import contextmanager
 from functools import cached_property
-from http.cookiejar import MozillaCookieJar
+from http.cookiejar import CookieJar, MozillaCookieJar
 from importlib import import_module
 from itertools import count
 from os import getenv
@@ -33,11 +33,12 @@ from .constants import (
     DATABASE_FILENAME,
     DEFAULT_OPENAI_CONNECT_TIMEOUT,
     DEFAULT_OPENAI_TIMEOUT,
+    DEFAULT_SITE_LANGUAGE,
     DESKTOP_USER_AGENT,
     LOG_FILENAME,
 )
 from .storage import StorageFacade
-from .utils.cookiejar import HHOnlyCookieJar
+from .utils.cookiejar import HHOnlyCookieJar, set_site_language
 from .utils.log import setup_logger
 from .utils.mixins import MegaTool
 
@@ -229,7 +230,40 @@ class HHApplicantTool(MegaTool):
         if self.cookies_file.exists():
             session.cookies.load(ignore_discard=True, ignore_expires=True)
 
+        # Язык сайта нужен именно в момент запроса отклика: hh.ru
+        # фиксирует язык картинки капчи, когда выдает captcha_url,
+        # поэтому кука должна быть в сессии заранее
+        self._apply_site_language(session.cookies)
+
         return session
+
+    def _apply_site_language(self, jar: CookieJar) -> None:
+        """Просит hh.ru отдавать сайт на нужном языке.
+
+        Язык берется из конфигурации (site_language), по умолчанию
+        английский. На язык картинки капчи эта кука не действует:
+        скрипт задаёт параметр lang у POST /captcha, см. api/captcha.py.
+        Пустое значение в конфиге отключает подмену, чтобы hh.ru сам
+        выбрал язык (например, когда в аккаунте его уже переключили).
+        """
+        language = self.config.get("site_language", DEFAULT_SITE_LANGUAGE)
+        language = (language or "").strip()
+
+        if not language:
+            logger.debug(
+                "site_language в конфиге пустой, язык сайта не меняю",
+            )
+            return
+
+        if not set_site_language(jar, language):
+            logger.warning(
+                "Не удалось выставить язык сайта %s, hh.ru может "
+                "отдать капту на языке аккаунта",
+                language,
+            )
+            return
+
+        logger.info("Язык сайта hh.ru: %s", language)
 
     @cached_property
     def openai_session(self) -> requests.Session:
@@ -346,8 +380,10 @@ class HHApplicantTool(MegaTool):
             raw_config = response.text.split('id="HH-Lux-InitialState">')[
                 1
             ].split("</template>")[0]
-        except IndexError:
-            raise Error(f"Template with config not found on {response.url}")
+        except IndexError as ex:
+            raise Error(
+                f"Template with config not found on {response.url}"
+            ) from ex
 
         # Теперь кавычки всегда превращаются в сущности?
         if raw_config.startswith("{&#34;"):
@@ -402,8 +438,15 @@ class HHApplicantTool(MegaTool):
         return self.get_ai_client(system_prompt, purpose="chat")
 
     def get_captcha_ai(self) -> ai.ChatOpenAI:
+        # Промпт тут короткий и общий: точный промпт распознавания
+        # задаёт solve_captcha, он же требует JSON с двумя словами
+        # и отдельно запрещает менять алфавит картинки на другой.
         return self.get_ai_client(
-            system_prompt="Что написано на картинке?", purpose="captcha"
+            system_prompt=(
+                "You read CAPTCHA images. Return ONLY the text from the "
+                "image, exactly as it is written."
+            ),
+            purpose="captcha",
         )
 
     def get_ai_client(
