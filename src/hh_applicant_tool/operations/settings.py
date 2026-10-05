@@ -36,7 +36,7 @@ def parse_value(v):
 class Operation(BaseOperation):
     """Просмотр и управление настройками"""
 
-    __aliases__: list[str] = ["setting"]
+    __aliases__: list[str] = ["setting", "set"]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
