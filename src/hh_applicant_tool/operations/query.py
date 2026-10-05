@@ -35,7 +35,7 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Выполняет SQL-запрос. Поддерживает вывод в консоль или CSV файл."""
 
-    __aliases__: list[str] = ["sql"]
+    __aliases__: list[str] = ["sql", "db", "q"]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("sql", nargs="?", help="SQL запрос")
