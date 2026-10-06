@@ -26,11 +26,11 @@ from urllib.parse import (
 import requests
 
 from ..ai.base import AIError
-from ..api import BadResponse, Redirect, datatypes
-from ..api.datatypes import PaginatedItems, SearchVacancy
-from ..api.captcha import CaptchaError, CaptchaFlow
-from ..api.errors import ApiError, CaptchaRequired, LimitExceeded
 from ..ai.openai import CAPTCHA_SCRIPT_ANY, CAPTCHA_SCRIPT_BY_LANGUAGE
+from ..api import BadResponse, Redirect, datatypes
+from ..api.captcha import CaptchaError, CaptchaFlow
+from ..api.datatypes import PaginatedItems, SearchVacancy
+from ..api.errors import ApiError, CaptchaRequired, LimitExceeded
 from ..constants import (
     DEFAULT_CAPTCHA_LANGUAGE,
     DEFAULT_COVER_LETTER_SYSTEM_PROMPT,
@@ -38,10 +38,7 @@ from ..constants import (
 )
 from ..main import BaseNamespace, BaseOperation
 from ..storage.repositories.errors import RepositoryError
-from ..utils.cookiejar import (
-    cookies_to_playwright,
-    set_cookies_from_playwright,
-)
+from ..utils.argparse import str_or_file
 from ..utils.datatypes import VacancyTestsData
 from ..utils.find import find_key
 from ..utils.json import JSONDecoder
@@ -181,6 +178,7 @@ class Namespace(BaseNamespace):
     max_responses: int
     send_email: bool
     skip_tests: bool
+    ai_use_contact_details: bool
 
 
 class Operation(BaseOperation):
@@ -229,19 +227,22 @@ class Operation(BaseOperation):
         )
         parser.add_argument(
             "--ai-filter-prompt",
-            help="Системный промпт для AI-фильтра (используется только в режиме custom)",
+            type=str_or_file,
+            help="Системный промпт для AI-фильтра (используется только в режиме custom). Принимает текст или путь до файла",
             default=None,
         )
         parser.add_argument(
             "--system-prompt",
             "--ai-system",
-            help="Системный промпт для AI генерации сопроводительных писем",
+            type=str_or_file,
+            help="Системный промпт для AI генерации сопроводительных писем. Принимает текст или путь до файла",
             default=DEFAULT_COVER_LETTER_SYSTEM_PROMPT,
         )
         parser.add_argument(
             "--message-prompt",
             "--prompt",
-            help="Промпт для генерации сопроводительного письма",
+            type=str_or_file,
+            help="Промпт для генерации сопроводительного письма. Принимает так же путь до файла",
             default="Сгенерируй сопроводительное письмо не более 5-7 предложений от моего имени для вакансии",  # noqa: E501
         )
         parser.add_argument(
@@ -312,6 +313,11 @@ class Operation(BaseOperation):
         parser.add_argument(
             "--skip-tests",
             help="Пропускать тесты при откликах вместо",
+            action=argparse.BooleanOptionalAction,
+        )
+        parser.add_argument(
+            "--ai-use-contact-details",
+            help="Использовать дополнительные контактные данные кроме имени в сопроводительных письмах, генерируемых через нейронку",
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
@@ -513,6 +519,7 @@ class Operation(BaseOperation):
         )
         self.ai_filter = args.ai_filter
         self.ai_filter_prompt = args.ai_filter_prompt
+        self.ai_use_contact_details = args.ai_use_contact_details or False
         self.vacancy_filter_ai = None
         self._resume_analysis_cache: dict[tuple[str | None, str], str] = {}
 
@@ -804,8 +811,8 @@ class Operation(BaseOperation):
     # латиница: язык картинки задаёт сам hh.ru, а браузерный путь не
     # может этим управлять
     SEL_CAPTCHA_ERROR_TEXT = (
-        'text=/неверн|не правильн|ошибка|incorrect|wrong|'
-        'not correct|captcha is not|try again/i'
+        "text=/неверн|не правильн|ошибка|incorrect|wrong|"
+        "not correct|captcha is not|try again/i"
     )
     # Сколько ждем реакции hh.ru на введенный ответ
     CAPTCHA_RESULT_TIMEOUT = 15
@@ -966,7 +973,7 @@ class Operation(BaseOperation):
 
         # Браузер должен работать в той же сессии, что и requests,
         # иначе hh.ru не признает капчу решенной (и ответит капчей снова)
-        session_cookies = cookies_to_playwright(cookiejar)
+        session_cookies = cookiejar.cookies_to_playwright()
         proxy = _playwright_proxy(session.proxies)
 
         async with async_playwright() as pw:
@@ -1059,7 +1066,7 @@ class Operation(BaseOperation):
                 # Делаем это и при отказе: обновленные куки hh.ru
                 # (тот же _xsrf, например) еще пригодятся
                 cookies = await context.cookies()
-                parsed = set_cookies_from_playwright(cookiejar, cookies)
+                parsed = cookiejar.set_cookies_from_playwright(cookies)
                 logger.debug("Получил из браузера %s кук", parsed)
                 if parsed:
                     try:
@@ -1076,9 +1083,9 @@ class Operation(BaseOperation):
         strategy = getattr(self.args, "captcha_strategy", None)
         if not strategy:
             strategy = self.tool.config.get("captcha_strategy")
-        strategy = str(
-            strategy or self.CAPTCHA_STRATEGY_DEFAULT
-        ).strip().lower()
+        strategy = (
+            str(strategy or self.CAPTCHA_STRATEGY_DEFAULT).strip().lower()
+        )
         if strategy not in self.CAPTCHA_STRATEGIES:
             logger.warning(
                 "Неизвестная стратегия капчи %r, беру %s",
@@ -1103,9 +1110,9 @@ class Operation(BaseOperation):
         transport = getattr(self.args, "captcha_transport", None)
         if not transport:
             transport = self.tool.config.get("captcha_transport")
-        transport = str(
-            transport or self.CAPTCHA_TRANSPORT_DEFAULT
-        ).strip().lower()
+        transport = (
+            str(transport or self.CAPTCHA_TRANSPORT_DEFAULT).strip().lower()
+        )
         if transport not in self.CAPTCHA_TRANSPORTS:
             logger.warning(
                 "Неизвестный транспорт капчи %r, беру %s",
@@ -1125,9 +1132,7 @@ class Operation(BaseOperation):
         language = getattr(self.args, "captcha_language", None)
         if not language:
             language = self.tool.config.get("captcha_language")
-        language = str(
-            language or DEFAULT_CAPTCHA_LANGUAGE
-        ).strip().lower()
+        language = str(language or DEFAULT_CAPTCHA_LANGUAGE).strip().lower()
         if language not in CAPTCHA_SCRIPT_BY_LANGUAGE:
             logger.warning(
                 "Неизвестный язык капчи %r, беру %s",
@@ -1198,12 +1203,8 @@ class Operation(BaseOperation):
             return None
 
         print(f"Капча сохранена: {path}", file=sys.stderr)
-        answer = await asyncio.to_thread(
-            input, "Введите текст с капчи: "
-        )
+        answer = await asyncio.to_thread(input, "Введите текст с капчи: ")
         return answer.strip() or None
-
-        return False
 
     async def _add_cookies(
         self,
@@ -1229,7 +1230,8 @@ class Operation(BaseOperation):
             return
 
         logger.debug(
-            "Передал в браузер %s кук из сессии", len(cookies),
+            "Передал в браузер %s кук из сессии",
+            len(cookies),
         )
 
     async def _add_cookies_one_by_one(
@@ -1258,7 +1260,9 @@ class Operation(BaseOperation):
             added += 1
 
         logger.debug(
-            "Передал в браузер %s из %s кук из сессии", added, len(cookies),
+            "Передал в браузер %s из %s кук из сессии",
+            added,
+            len(cookies),
         )
 
     async def _captcha_image_bytes(self, page, element) -> bytes:
@@ -1276,17 +1280,13 @@ class Operation(BaseOperation):
         try:
             src = await element.get_attribute("src")
             if src:
-                response = await page.request.get(
-                    urljoin("https://hh.ru", src)
-                )
+                response = await page.request.get(urljoin("https://hh.ru", src))
                 if response.ok:
                     body = await response.body()
                     if body:
                         return body
         except Exception as ex:
-            logger.debug(
-                "Не удалось скачать картинку капчи: %s", str(ex)[:120]
-            )
+            logger.debug("Не удалось скачать картинку капчи: %s", str(ex)[:120])
 
         logger.debug("Беру картинку капчи скриншотом элемента")
         return await element.screenshot()
@@ -1684,24 +1684,27 @@ class Operation(BaseOperation):
                             "[РЕЗЮМЕ] "
                             + "Название: "
                             + message_placeholders["resume_title"]
-                            + ", "
-                            + "Ссылка на резюме: "
-                            + message_placeholders["resume_url"]
-                            + ", "
+                            # + ", "
+                            # + "Ссылка на резюме: "
+                            # + message_placeholders["resume_url"]
+                            # + ", "
                         )
-                        msg += (
-                            "Имя: "
-                            + message_placeholders["first_name"]
-                            + ", "
-                            + "Фамилия: "
-                            + message_placeholders["last_name"]
-                            + ", "
-                            + "Телефон: "
-                            + message_placeholders["phone"]
-                            + ", "
-                            + "Почта: "
-                            + message_placeholders["email"]
-                        )
+                        msg += "Имя: " + message_placeholders["first_name"]
+
+                        # Я не думаю, что со всеми мошенниками в мире нужно
+                        # делиться своими контактными данными
+                        if self.ai_use_contact_details:
+                            msg += (
+                                ", "
+                                + "Фамилия: "
+                                + message_placeholders["last_name"]
+                                + ", "
+                                + "Телефон: "
+                                + message_placeholders["phone"]
+                                + ", "
+                                + "Почта: "
+                                + message_placeholders["email"]
+                            )
                         ## logger.debug("prompt: %s", msg) ## убираем отладку
                         letter = self.cover_letter_ai.complete(msg)
                     else:
@@ -1829,9 +1832,9 @@ class Operation(BaseOperation):
                             continue
 
                         if not self.dry_run:
-                            res = self.api_client.post(
-                                "/negotiations",
-                                params,
+                            # Отправляем повторно тот же самый запрос
+                            res = self.api_client.send(
+                                requset=ex.request,
                                 delay=random.uniform(1, 3),
                             )
                             assert res == {}

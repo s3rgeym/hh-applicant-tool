@@ -38,7 +38,7 @@ from .constants import (
     LOG_FILENAME,
 )
 from .storage import StorageFacade
-from .utils.cookiejar import HHOnlyCookieJar, set_site_language
+from .utils.cookiejar import HHOnlyCookieJar
 from .utils.log import setup_logger
 from .utils.mixins import MegaTool
 
@@ -60,6 +60,10 @@ class BaseOperation:
         args: BaseNamespace,  # pyright: ignore[reportUnusedParameter]
     ) -> None | int:
         raise NotImplementedError()
+
+
+class HHSession(requests.Session):
+    cookies: HHOnlyCookieJar
 
 
 class BaseNamespace(argparse.Namespace):
@@ -220,7 +224,7 @@ class HHApplicantTool(MegaTool):
         return session
 
     @cached_property
-    def session(self) -> requests.Session:
+    def session(self) -> HHSession:
         session = self._create_http_session(
             self._get_proxies(),
             log_label="requests",
@@ -255,7 +259,7 @@ class HHApplicantTool(MegaTool):
             )
             return
 
-        if not set_site_language(jar, language):
+        if not jar.set_site_language(language):
             logger.warning(
                 "Не удалось выставить язык сайта %s, hh.ru может "
                 "отдать капту на языке аккаунта",

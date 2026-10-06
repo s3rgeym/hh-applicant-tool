@@ -18,7 +18,6 @@ else:
     _PLAYWRIGHT_IMPORT_ERROR = None
 
 from ..main import BaseOperation
-from ..utils.cookiejar import set_cookies_from_playwright
 from ..utils.terminal import print_kitty_image, print_sixel_mage
 
 if TYPE_CHECKING:
@@ -337,4 +336,4 @@ class Operation(BaseOperation):
     def _set_session_cookies(self, cookies: list[dict[str, typing.Any]]):
         # Раньше здесь собирали Cookie руками, в том числе с expires=-1
         # для сессионных кук: requests считает их протухшими и не отправляет
-        set_cookies_from_playwright(self._tool.session.cookies, cookies)
+        self._tool.session.cookies.set_cookies_from_playwright(cookies)

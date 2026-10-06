@@ -11,7 +11,7 @@ from typing import Any, Literal, TypeVar
 from urllib.parse import urlencode, urljoin
 
 import requests
-from requests import Session
+from requests import PreparedRequest, Request, Session
 
 from hh_applicant_tool.api.user_agent import generate_android_useragent
 
@@ -68,6 +68,22 @@ class BaseClient:
             "X-HH-App-Active": "true",
         }
 
+    def _wait_for_delay(self, delay: float | None = None) -> None:
+        """Выдерживает паузу между запросами.
+
+        На серваке какая-то анти-DDOS система, поэтому между запросами
+        должно пройти не меньше `delay` секунд (по умолчанию self.delay).
+        Вызывать нужно под self.lock, т.к. читается _previous_request_time.
+        """
+        wait = (
+            (self.delay if delay is None else delay)
+            - time.monotonic()
+            + self._previous_request_time
+        )
+        if wait > 0:
+            logger.debug("wait %fs before request", wait)
+            time.sleep(wait)
+
     def request(
         self,
         method: AllowedMethods,
@@ -82,26 +98,46 @@ class BaseClient:
         params = dict(params or {})
         params.update(kwargs)
         url = self.resolve_url(endpoint)
+        has_body = method in ["POST", "PUT"]
+        payload = {["data", "json"][as_json] if has_body else "params": params}
+        req = Request(
+            method,
+            url,
+            headers=self._default_headers(),
+            **payload,
+        )
+        return self.send(req, delay=delay)
+
+    def send(
+        self,
+        request: Request | PreparedRequest,
+        delay: float | None = None,
+    ) -> T:
+        """Отправляет уже готовый Request/PreparedRequest.
+
+        Нужен для повторной отправки запроса после ошибки капчи.
+
+        Как-то так:
+
+            BaseClient.send(ex.request)
+        """
+        if isinstance(request, Request):
+            prepared = self.session.prepare_request(request)
+        else:
+            prepared = request
+
         with self.lock:
-            # На серваке какая-то анти-DDOS система
-            if (
-                delay := (self.delay if delay is None else delay)
-                - time.monotonic()
-                + self._previous_request_time
-            ) > 0:
-                logger.debug("wait %fs before request", delay)
-                time.sleep(delay)
-            has_body = method in ["POST", "PUT"]
-            payload = {
-                ["data", "json"][as_json] if has_body else "params": params
-            }
-            # logger.debug(f"request info: {method = }, {url = }, {headers = }, params = {repr(params)[:255]}")
-            response = self.session.request(
-                method,
-                url,
-                **payload,
-                headers=self._default_headers(),
+            self._wait_for_delay(delay)
+
+            # session.send, в отличие от session.request, сам не учитывает
+            # proxies/verify/cert из окружения, поэтому подмешиваем их вручную
+            settings = self.session.merge_environment_settings(
+                prepared.url, {}, None, None, None
+            )
+            response = self.session.send(
+                prepared,
                 allow_redirects=False,
+                **settings,
             )
             try:
                 # У этих лошков сервер не отдает Content-Length, а кривое API
@@ -114,20 +150,22 @@ class BaseClient:
                     rv = response.json() if response.text else {}
                 except json.JSONDecodeError as ex:
                     raise errors.BadResponse(
-                        f"Can't decode JSON: {method} {url} ({response.status_code})"
+                        f"Can't decode JSON: {prepared.method} {prepared.url} "
+                        f"({response.status_code})"
                     ) from ex
             finally:
                 logger.debug(
-                    "%d %s %s with params: %.1000s",
+                    "%d %s %s with body: %.1000s",
                     response.status_code,
-                    method,
-                    url,
-                    params or "-",
+                    prepared.method,
+                    prepared.url,
+                    prepared.body or "-",
                 )
                 self._previous_request_time = time.monotonic()
         errors.ApiError.raise_for_status(response, rv)
         assert 300 > response.status_code >= 200, (
-            f"Unexpected status code for {method} {url}: {response.status_code}"
+            f"Unexpected status code for {prepared.method} {prepared.url}: "
+            f"{response.status_code}"
         )
         return rv
 
