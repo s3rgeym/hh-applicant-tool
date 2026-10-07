@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING
 
 from hh_applicant_tool.api.errors import ApiError
 
-from ..main import BaseNamespace, BaseOperation
+from ..tool import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 
 logger = logging.getLogger(__package__)

@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 from functools import cached_property
 from threading import Lock
-from typing import Any, Literal, TypeVar
+from typing import Any, Callable, TypeVar
 from urllib.parse import urlencode, urljoin
 
 import requests
@@ -27,8 +27,9 @@ __all__ = ("ApiClient", "OAuthClient")
 HH_API_URL = "https://api.hh.ru/"
 HH_OAUTH_URL = "https://hh.ru/oauth/"
 DEFAULT_DELAY = 0.345
+DEFAULT_CAPTCHA_COOLDOWN = 3.0
 
-AllowedMethods = Literal["GET", "POST", "PUT", "DELETE"]
+# AllowedMethods = Literal["GET", "POST", "PUT", "DELETE"]
 T = TypeVar("T")
 
 
@@ -43,11 +44,16 @@ class BaseClient:
     user_agent: str | None = None
     session: Session | None = None
     delay: float | None = None
+    captcha_handler: Callable[[str], bool] | None = None
+    captcha_cooldown: float | None = None
     _previous_request_time: float = 0.0
 
     def __post_init__(self) -> None:
         assert self.base_url.endswith("/"), "base_url must ends with /"
         self.delay = self.delay or DEFAULT_DELAY
+        self.captcha_cooldown = (
+            self.captcha_cooldown or DEFAULT_CAPTCHA_COOLDOWN
+        )
         self.user_agent = self.user_agent or generate_android_useragent()
 
         # logger.debug(f"user agent: {self.user_agent}")
@@ -56,7 +62,7 @@ class BaseClient:
             logger.debug("create new session")
             self.session = requests.session()
 
-        self.lock = Lock()
+        self._lock = Lock()
 
     @property
     def proxies(self):
@@ -86,15 +92,19 @@ class BaseClient:
 
     def request(
         self,
-        method: AllowedMethods,
+        method: str,
         endpoint: str,
         params: dict[str, Any] | None = None,
+        *,
         delay: float | None = None,
         as_json: bool = False,
         **kwargs: Any,
     ) -> T:
-        # Не знаю насколько это "правильно"
-        assert method in AllowedMethods.__args__
+        # # Не знаю насколько это "правильно"
+        # assert method.upper() in AllowedMethods.__args__, (
+        #     f"Method unknown or not allowed: {method!r}"
+        # )
+        method = method.upper()
         params = dict(params or {})
         params.update(kwargs)
         url = self.resolve_url(endpoint)
@@ -111,6 +121,7 @@ class BaseClient:
     def send(
         self,
         request: Request | PreparedRequest,
+        *,
         delay: float | None = None,
     ) -> T:
         """Отправляет уже готовый Request/PreparedRequest.
@@ -126,48 +137,60 @@ class BaseClient:
         else:
             prepared = request
 
-        with self.lock:
-            self._wait_for_delay(delay)
+        while True:
+            with self._lock:
+                self._wait_for_delay(delay)
 
-            # session.send, в отличие от session.request, сам не учитывает
-            # proxies/verify/cert из окружения, поэтому подмешиваем их вручную
-            settings = self.session.merge_environment_settings(
-                prepared.url, {}, None, None, None
-            )
-            response = self.session.send(
-                prepared,
-                allow_redirects=False,
-                **settings,
-            )
-            try:
-                # У этих лошков сервер не отдает Content-Length, а кривое API
-                # отдает пустые ответы, например, при отклике на вакансии,
-                # и мы не можем узнать содержит ли ответ тело
-                # 'Server': 'ddos-guard'
-                # ...
-                # 'Transfer-Encoding': 'chunked'
-                try:
-                    rv = response.json() if response.text else {}
-                except json.JSONDecodeError as ex:
-                    raise errors.BadResponse(
-                        f"Can't decode JSON: {prepared.method} {prepared.url} "
-                        f"({response.status_code})"
-                    ) from ex
-            finally:
-                logger.debug(
-                    "%d %s %s with body: %.1000s",
-                    response.status_code,
-                    prepared.method,
-                    prepared.url,
-                    prepared.body or "-",
+                # session.send, в отличие от session.request, сам не учитывает
+                # proxies/verify/cert из окружения, поэтому подмешиваем их вручную
+                settings = self.session.merge_environment_settings(
+                    prepared.url, {}, None, None, None
                 )
-                self._previous_request_time = time.monotonic()
-        errors.ApiError.raise_for_status(response, rv)
-        assert 300 > response.status_code >= 200, (
-            f"Unexpected status code for {prepared.method} {prepared.url}: "
-            f"{response.status_code}"
-        )
-        return rv
+                response = self.session.send(
+                    prepared,
+                    allow_redirects=False,
+                    **settings,
+                )
+                try:
+                    # У этих лошков сервер не отдает Content-Length, а кривое API
+                    # отдает пустые ответы, например, при отклике на вакансии,
+                    # и мы не можем узнать содержит ли ответ тело
+                    # 'Server': 'ddos-guard'
+                    # ...
+                    # 'Transfer-Encoding': 'chunked'
+                    try:
+                        rv = response.json() if response.text else {}
+                    except json.JSONDecodeError as ex:
+                        raise errors.BadResponse(
+                            f"Can't decode JSON: {prepared.method} {prepared.url} "
+                            f"({response.status_code})"
+                        ) from ex
+                finally:
+                    logger.debug(
+                        "%d %s %s with body: %.1000s",
+                        response.status_code,
+                        prepared.method,
+                        prepared.url,
+                        prepared.body or "-",
+                    )
+                    self._previous_request_time = time.monotonic()
+
+                try:
+                    errors.ApiError.raise_for_status(response, rv)
+                except errors.CaptchaRequired as ex:
+                    if not callable(self.captcha_handler):
+                        raise
+                    if not self.captcha_handler(ex.captcha_url):
+                        raise
+                    time.sleep(self.captcha_cooldown)
+                    continue
+
+            if not (200 <= response.status_code < 300):
+                raise errors.BadResponse(
+                    f"Unexpected status code for {prepared.method} "
+                    f"{prepared.url}: {response.status_code}"
+                )
+            return rv
 
     def get(self, *args, **kwargs) -> T:
         return self.request("GET", *args, **kwargs)
@@ -278,7 +301,7 @@ class ApiClient(BaseClient):
     # Реализовано автоматическое обновление токена
     def request(
         self,
-        method: AllowedMethods,
+        method: str,
         endpoint: str,
         params: dict[str, Any] | None = None,
         delay: float | None = None,
@@ -287,7 +310,13 @@ class ApiClient(BaseClient):
     ) -> T:
         def do_request():
             return BaseClient.request(
-                self, method, endpoint, params, delay, as_json, **kwargs
+                self,
+                method,
+                endpoint,
+                params,
+                delay=delay,
+                as_json=as_json,
+                **kwargs,
             )
 
         try:

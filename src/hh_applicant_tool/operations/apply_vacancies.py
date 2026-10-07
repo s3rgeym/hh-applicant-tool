@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import html
 import logging
 import random
 import re
-import sys
 import time
 from datetime import datetime
 from email.message import EmailMessage
@@ -17,7 +15,6 @@ from urllib.parse import (
     parse_qsl,
     unquote,
     urlencode,
-    urljoin,
     urlparse,
     urlsplit,
     urlunsplit,
@@ -26,18 +23,14 @@ from urllib.parse import (
 import requests
 
 from ..ai.base import AIError
-from ..ai.openai import CAPTCHA_SCRIPT_ANY, CAPTCHA_SCRIPT_BY_LANGUAGE
 from ..api import BadResponse, Redirect, datatypes
-from ..api.captcha import CaptchaError, CaptchaFlow
 from ..api.datatypes import PaginatedItems, SearchVacancy
-from ..api.errors import ApiError, CaptchaRequired, LimitExceeded
+from ..api.errors import ApiError, LimitExceeded
 from ..constants import (
-    DEFAULT_CAPTCHA_LANGUAGE,
     DEFAULT_COVER_LETTER_SYSTEM_PROMPT,
-    DEFAULT_SITE_LANGUAGE,
 )
-from ..main import BaseNamespace, BaseOperation
 from ..storage.repositories.errors import RepositoryError
+from ..tool import BaseNamespace, BaseOperation
 from ..utils.argparse import str_or_file
 from ..utils.datatypes import VacancyTestsData
 from ..utils.find import find_key
@@ -52,7 +45,7 @@ from ..utils.string import (
 )
 
 if TYPE_CHECKING:
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 
 logger = logging.getLogger(__package__)
@@ -244,53 +237,6 @@ class Operation(BaseOperation):
             type=str_or_file,
             help="Промпт для генерации сопроводительного письма. Принимает так же путь до файла",
             default="Сгенерируй сопроводительное письмо не более 5-7 предложений от моего имени для вакансии",  # noqa: E501
-        )
-        parser.add_argument(
-            "--captcha-strategy",
-            help=(
-                "Как читать капчу: consensus — несколько чтений, ответ "
-                "отправляется только при согласии; single — одно дешёвое "
-                "чтение; off — не решать, пропустить вакансию; manual — "
-                "показать картинку и спросить в терминале"
-            ),
-            choices=list(self.CAPTCHA_STRATEGIES),
-            default=None,
-        )
-        parser.add_argument(
-            "--captcha-samples",
-            help="Сколько чтений делать при стратегии consensus",
-            type=int,
-            default=None,
-        )
-        parser.add_argument(
-            "--captcha-min-votes",
-            help=(
-                "Сколько чтений должны совпасть, чтобы отправить ответ. "
-                "Больше порог — меньше риска, но чаще пропуск вакансий"
-            ),
-            type=int,
-            default=None,
-        )
-        parser.add_argument(
-            "--captcha-transport",
-            help=(
-                "Чем решать капчу: http — прямыми запросами в аккаунтной "
-                "сессии, без браузера; browser — страницу капчи в "
-                "Playwright, запасной путь на случай смены протокола "
-                "hh.ru"
-            ),
-            choices=list(self.CAPTCHA_TRANSPORTS),
-            default=None,
-        )
-        parser.add_argument(
-            "--captcha-language",
-            help=(
-                "Язык картинки капчи. Латиница читается заметно лучше "
-                "кириллицы, поэтому по умолчанию en. Скрипт задаёт "
-                "параметр lang у POST /captcha, а не ссылка на страницу"
-            ),
-            choices=sorted(CAPTCHA_SCRIPT_BY_LANGUAGE),
-            default=None,
         )
         parser.add_argument(
             "--total-pages",
@@ -725,6 +671,7 @@ class Operation(BaseOperation):
         return None
 
     # КТО ЭТО ПРОЧИТАЛ ТОТ ПИД@РАС
+    # Сам такой
     def _is_vacancy_suitable_heavy(
         self, vacancy: dict, log_suffix: str = "(heavy)"
     ) -> bool:
@@ -801,554 +748,6 @@ class Operation(BaseOperation):
 Кандидат:
 {resume_analysis}
 """
-
-    SEL_CAPTCHA_IMAGE = 'img[data-qa="account-captcha-picture"]'
-    SEL_CAPTCHA_INPUT = 'input[data-qa="account-captcha-input"]'
-    # playwright не умеет смешивать css и text= в одном селекторе,
-    # поэтому ошибку ищем двумя запросами
-    SEL_CAPTCHA_ERROR = '[data-qa="account-captcha-error"]'
-    # Тексты ошибок на случай, если hh.ru сменит выдачу. И кириллица, и
-    # латиница: язык картинки задаёт сам hh.ru, а браузерный путь не
-    # может этим управлять
-    SEL_CAPTCHA_ERROR_TEXT = (
-        "text=/неверн|не правильн|ошибка|incorrect|wrong|"
-        "not correct|captcha is not|try again/i"
-    )
-    # Сколько ждем реакции hh.ru на введенный ответ
-    CAPTCHA_RESULT_TIMEOUT = 15
-    # Кнопка «Другой текст». Нужна не всегда: после неверного ответа
-    # hh.ru сам выдает новую картинку с новым ключом
-    SEL_CAPTCHA_RENEW = '[data-qa="captcha-renew-text"]'
-    # Сколько картинок готовы попробовать подряд. Слепых повторов быть
-    # не должно: неверный ответ hh.ru записывает как isBot
-    CAPTCHA_MAX_ATTEMPTS = 3
-    # Пауза между попытками, чтобы не долбить hh.ru подряд
-    CAPTCHA_RETRY_DELAY = 2
-    # Как читать картинку. consensus — несколько независимых чтений и
-    # отправка только при согласии, single — одно дешёвое чтение,
-    # off — не пробовать вовсе, manual — отдать картинку человеку
-    CAPTCHA_STRATEGIES = ("consensus", "single", "off", "manual")
-    CAPTCHA_STRATEGY_DEFAULT = "consensus"
-    CAPTCHA_SAMPLES_DEFAULT = 5
-    # Порог 3 из 5, а не 4: замер 2026-10-03 показал, что пять чтений
-    # одной модели расходятся из-за одной неуверенной буквы, и порог 4
-    # недостижим почти всегда. Важно другое: когда все пять совпали,
-    # ответ всё равно может быть неверным — просто модель в этом
-    # уверена. Поэтому согласие здесь не признак правоты, а признак
-    # устойчивости: порог отсекает нестабильные чтения, а не ищет
-    # правильный ответ. Искать правильный должна другая модель.
-    CAPTCHA_MIN_VOTES_DEFAULT = 3
-    # Чем решаем капчу. http — прямыми запросами в аккаунтной сессии,
-    # без браузера; browser — страницу капчи в Playwright. По умолчанию
-    # http: браузер нужен был только чтобы прочитать PNG и отправить
-    # одно поле, а после этого поток всё равно возвращался в requests.
-    # browser остаётся запасным путём на случай, если hh.ru поменяет
-    # протокол выдачи картинки
-    CAPTCHA_TRANSPORTS = ("http", "browser")
-    CAPTCHA_TRANSPORT_DEFAULT = "http"
-    # Вердикт браузерного пути по ответу hh.ru. unknown означает, что
-    # сигнала нет вовсе: ни ошибки, ни ухода со страницы капчи. Считать
-    # такой исход успехом нельзя, иначе зависание hh.ru выглядело бы как
-    # пройденная капча
-    CAPTCHA_VERDICT_ACCEPTED = "accepted"
-    CAPTCHA_VERDICT_REJECTED = "rejected"
-    CAPTCHA_VERDICT_UNKNOWN = "unknown"
-
-    async def _solve_captcha_async(self, captcha_url: str) -> bool:
-        """Решает капчу выбранным транспортом.
-
-        Короткий путь ходит прямо в аккаунтную сессию requests, длинный
-        открывает страницу капчи в браузере. Стратегию и отключение
-        проверяем здесь, до любой из веток: при off ни браузер, ни
-        запросы не нужны.
-        """
-        strategy = self._captcha_strategy()
-        if strategy == "off":
-            logger.info("Стратегия капчи отключена, вакансия пропущена")
-            return False
-
-        if self._captcha_transport() == "browser":
-            return await self._solve_captcha_browser_async(
-                captcha_url, strategy
-            )
-
-        return await self._solve_captcha_http(captcha_url, strategy)
-
-    async def _solve_captcha_http(
-        self, captcha_url: str, strategy: str
-    ) -> bool:
-        """Прямой протокол капчи, без браузера.
-
-        Сессия здесь та же, что и у api_client, поэтому картинка,
-        ответ и последующий отклик идут одним cookie jar. Браузерный
-        путь вынужден заливать куки в Chromium и забирать обратно, и
-        это лишний источник расхождений.
-        """
-        language = self._captcha_language()
-        captcha_ai = self.tool.get_captcha_ai()
-
-        try:
-            flow = CaptchaFlow(
-                self.tool.session, captcha_url, language=language
-            )
-            flow.prime()
-        except CaptchaError as ex:
-            logger.error("Не удалось начать решение капчи: %s", ex)
-            return False
-
-        logger.info(
-            "Решаю капчу прямыми запросами: язык картинки %s, стратегия %s",
-            flow.language,
-            strategy,
-        )
-
-        for attempt in range(1, self.CAPTCHA_MAX_ATTEMPTS + 1):
-            # Каждый fetch отдаёт свежую картинку с новым ключом, поэтому
-            # ни кнопка обновления, ни её ожидание не нужны
-            try:
-                image = flow.fetch()
-            except CaptchaError as ex:
-                logger.error("Не удалось получить картинку капчи: %s", ex)
-                return False
-
-            logger.debug(
-                "Картинка капчи %s/%s: %d байт",
-                attempt,
-                self.CAPTCHA_MAX_ATTEMPTS,
-                len(image.image),
-            )
-
-            captcha_text = await self._captcha_answer(
-                captcha_ai, image.image, strategy, language
-            )
-            if not captcha_text:
-                # Отправлять нечего: либо модель не пришла к согласию,
-                # либо ответ не разобрался. Оба случая стоят новой
-                # картинки, а не отправки наугад
-                await self._captcha_pause(attempt)
-                continue
-
-            logger.info("Распознанный текст капчи: %s", captcha_text)
-
-            try:
-                result = flow.submit(captcha_text, image.key)
-            except CaptchaError as ex:
-                logger.error("Не удалось отправить ответ капчи: %s", ex)
-                return False
-
-            if result.accepted:
-                logger.info("Капча принята hh.ru с %s попытки", attempt)
-                return True
-
-            logger.warning(
-                "Ответ капчи не принят (попытка %s/%s): %s",
-                attempt,
-                self.CAPTCHA_MAX_ATTEMPTS,
-                result.reason,
-            )
-            await self._captcha_pause(attempt)
-
-        logger.error(
-            "Капча не пройдена за %s попыток стратегией %s",
-            self.CAPTCHA_MAX_ATTEMPTS,
-            strategy,
-        )
-        return False
-
-    async def _captcha_pause(self, attempt: int) -> None:
-        """Выдержка перед следующей попыткой, если попытки ещё есть."""
-        if attempt >= self.CAPTCHA_MAX_ATTEMPTS:
-            return
-
-        await asyncio.sleep(self.CAPTCHA_RETRY_DELAY)
-
-    async def _solve_captcha_browser_async(
-        self, captcha_url: str, strategy: str
-    ) -> bool:
-        from playwright.async_api import async_playwright
-
-        captcha_ai = self.tool.get_captcha_ai()
-        session = self.tool.session
-        cookiejar = session.cookies
-
-        # Браузер должен работать в той же сессии, что и requests,
-        # иначе hh.ru не признает капчу решенной (и ответит капчей снова)
-        session_cookies = cookiejar.cookies_to_playwright()
-        proxy = _playwright_proxy(session.proxies)
-
-        async with async_playwright() as pw:
-            try:
-                browser = await pw.chromium.launch(headless=True, proxy=proxy)
-            except Exception as ex:
-                if not proxy:
-                    raise
-                logger.warning(
-                    "Не удалось запустить браузер через прокси %s (%s), "
-                    "пробую без него",
-                    proxy.get("server"),
-                    ex,
-                )
-                browser = await pw.chromium.launch(headless=True)
-            try:
-                context = await browser.new_context(
-                    user_agent=session.headers.get("User-Agent"),
-                )
-                if session_cookies:
-                    await self._add_cookies(context, session_cookies)
-                page = await context.new_page()
-
-                language = self.tool.config.get(
-                    "site_language", DEFAULT_SITE_LANGUAGE
-                )
-                # Язык картинки тут не наш: страницу отдаёт hh.ru, и
-                # скрипт она выбирает сама, поэтому проверять алфавит
-                # ответа нельзя
-                await page.goto(
-                    _with_site_language(captcha_url, language),
-                    timeout=30000,
-                )
-
-                accepted = False
-                for attempt in range(1, self.CAPTCHA_MAX_ATTEMPTS + 1):
-                    if attempt > 1:
-                        logger.info(
-                            "Беру другую картинку (%s/%s): "
-                            "предыдущий ответ hh.ru отверг",
-                            attempt,
-                            self.CAPTCHA_MAX_ATTEMPTS,
-                        )
-                        await self._renew_captcha(page)
-
-                    captcha_element = await page.wait_for_selector(
-                        self.SEL_CAPTCHA_IMAGE, timeout=10000, state="visible"
-                    )
-
-                    img_bytes = await self._captcha_image_bytes(
-                        page, captcha_element
-                    )
-
-                    captcha_text = await self._captcha_answer(
-                        captcha_ai,
-                        img_bytes,
-                        strategy,
-                        language=CAPTCHA_SCRIPT_ANY,
-                    )
-                    if not captcha_text:
-                        # Отправлять нечего: либо модель не пришла к
-                        # согласию, либо ответ не разобрался. Оба случая
-                        # стоят новой картинки, а не отправки наугад
-                        await self._captcha_pause(attempt)
-                        continue
-
-                    logger.info("Распознанный текст капчи: %s", captcha_text)
-
-                    await page.fill(self.SEL_CAPTCHA_INPUT, captcha_text)
-                    await page.press(self.SEL_CAPTCHA_INPUT, "Enter")
-
-                    verdict = await self._captcha_verdict(page)
-                    if verdict == self.CAPTCHA_VERDICT_ACCEPTED:
-                        accepted = True
-                        break
-
-                    # Неизвестный вердикт трактуем как неудачу: новый
-                    # ключ капчи он не испортит, а вот объявлять успехом
-                    # зависший hh.ru нельзя
-                    await self._captcha_pause(attempt)
-
-                if not accepted:
-                    logger.error(
-                        "Капча не пройдена за %s попыток стратегией %s",
-                        self.CAPTCHA_MAX_ATTEMPTS,
-                        strategy,
-                    )
-
-                # Забираем куки из браузера обратно в requests-сессию.
-                # Делаем это и при отказе: обновленные куки hh.ru
-                # (тот же _xsrf, например) еще пригодятся
-                cookies = await context.cookies()
-                parsed = cookiejar.set_cookies_from_playwright(cookies)
-                logger.debug("Получил из браузера %s кук", parsed)
-                if parsed:
-                    try:
-                        self.tool.save_cookies()
-                    except Exception as ex:
-                        logger.warning(f"Не удалось сохранить куки: {ex}")
-
-                return accepted
-            finally:
-                await browser.close()
-
-    def _captcha_strategy(self) -> str:
-        """Флаг важнее config.json, config важнее встроенного умолчания."""
-        strategy = getattr(self.args, "captcha_strategy", None)
-        if not strategy:
-            strategy = self.tool.config.get("captcha_strategy")
-        strategy = (
-            str(strategy or self.CAPTCHA_STRATEGY_DEFAULT).strip().lower()
-        )
-        if strategy not in self.CAPTCHA_STRATEGIES:
-            logger.warning(
-                "Неизвестная стратегия капчи %r, беру %s",
-                strategy,
-                self.CAPTCHA_STRATEGY_DEFAULT,
-            )
-            strategy = self.CAPTCHA_STRATEGY_DEFAULT
-        return strategy
-
-    def _captcha_int(self, name: str, default: int) -> int:
-        """Число настройки: флаг, потом config.json, потом умолчание."""
-        value = getattr(self.args, name, None)
-        if value is None:
-            value = self.tool.config.get(name)
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return default
-
-    def _captcha_transport(self) -> str:
-        """Чем решаем капчу: флаг, потом config.json, потом умолчание."""
-        transport = getattr(self.args, "captcha_transport", None)
-        if not transport:
-            transport = self.tool.config.get("captcha_transport")
-        transport = (
-            str(transport or self.CAPTCHA_TRANSPORT_DEFAULT).strip().lower()
-        )
-        if transport not in self.CAPTCHA_TRANSPORTS:
-            logger.warning(
-                "Неизвестный транспорт капчи %r, беру %s",
-                transport,
-                self.CAPTCHA_TRANSPORT_DEFAULT,
-            )
-            transport = self.CAPTCHA_TRANSPORT_DEFAULT
-        return transport
-
-    def _captcha_language(self) -> str:
-        """Язык картинки капчи.
-
-        Латиница читается заметно лучше кириллицы, поэтому по умолчанию
-        en. Скрипт картинки задаёт параметр lang у POST /captcha, а не
-        ссылка на страницу и не кука session_language.
-        """
-        language = getattr(self.args, "captcha_language", None)
-        if not language:
-            language = self.tool.config.get("captcha_language")
-        language = str(language or DEFAULT_CAPTCHA_LANGUAGE).strip().lower()
-        if language not in CAPTCHA_SCRIPT_BY_LANGUAGE:
-            logger.warning(
-                "Неизвестный язык капчи %r, беру %s",
-                language,
-                DEFAULT_CAPTCHA_LANGUAGE,
-            )
-            language = DEFAULT_CAPTCHA_LANGUAGE
-        return language
-
-    async def _captcha_answer(
-        self,
-        captcha_ai,
-        img_bytes: bytes,
-        strategy: str,
-        language: str = DEFAULT_CAPTCHA_LANGUAGE,
-    ) -> str | None:
-        """Читает картинку выбранной стратегией.
-
-        None означает «отправлять нечего»: модель либо не пришла к
-        согласию, либо её ответ не разобрался.
-        """
-        if strategy == "manual":
-            return await self._ask_human_captcha(img_bytes)
-
-        try:
-            if strategy == "consensus":
-                return await asyncio.to_thread(
-                    captcha_ai.solve_captcha_consensus,
-                    img_bytes,
-                    samples=self._captcha_int(
-                        "captcha_samples", self.CAPTCHA_SAMPLES_DEFAULT
-                    ),
-                    min_votes=self._captcha_int(
-                        "captcha_min_votes", self.CAPTCHA_MIN_VOTES_DEFAULT
-                    ),
-                    language=language,
-                )
-            return await asyncio.to_thread(
-                captcha_ai.solve_captcha, img_bytes, language=language
-            )
-        except Exception as ex:
-            # Модель ответила не в том формате. Считаем попытку
-            # неудачной и берем новую картинку, иначе весь отклик
-            # упал бы на одном странном ответе
-            logger.warning(
-                "AI вернул неразобранный ответ (%s): %s",
-                type(ex).__name__,
-                str(ex)[:200],
-            )
-            return None
-
-    async def _ask_human_captcha(self, img_bytes: bytes) -> str | None:
-        """Сохраняет картинку и ждёт ответа в терминале.
-
-        В фоновом прогоне stdin закрыт, и тогда вакансия просто
-        пропускается: гадать вместо человека нельзя, hh.ru записывает
-        неверный ответ как isBot.
-        """
-        from ..ai.openai import _dump_captcha_debug_image
-
-        path = _dump_captcha_debug_image(img_bytes)
-        if not (sys.stdin and sys.stdin.isatty()):
-            logger.error(
-                "Стратегия manual, но stdin не терминал. Картинка: %s. "
-                "Пропускаю вакансию",
-                path,
-            )
-            return None
-
-        print(f"Капча сохранена: {path}", file=sys.stderr)
-        answer = await asyncio.to_thread(input, "Введите текст с капчи: ")
-        return answer.strip() or None
-
-    async def _add_cookies(
-        self,
-        context,
-        cookies: list[dict[str, Any]],
-    ) -> None:
-        """Заливает куки в браузер, не давая одной плохой куке убить капчу.
-
-        Chromium отвергает всю пачку, если хотя бы одна кука кривая
-        (Invalid cookie fields), поэтому при ошибке ищем виновника и
-        повторяем заливку уже без него.
-        """
-        try:
-            await context.add_cookies(cookies)
-        except Exception as ex:
-            logger.warning(
-                "Браузер отверг пачку из %s кук (%s), "
-                "пробую передать их по одной",
-                len(cookies),
-                str(ex)[:200],
-            )
-            await self._add_cookies_one_by_one(context, cookies)
-            return
-
-        logger.debug(
-            "Передал в браузер %s кук из сессии",
-            len(cookies),
-        )
-
-    async def _add_cookies_one_by_one(
-        self,
-        context,
-        cookies: list[dict[str, Any]],
-    ) -> None:
-        """Заливает куки по одной, пропуская те, что Chromium не принимает.
-
-        Медленнее bisect-а на куках hh.ru (там их десятки), но зато
-        показывает в логе имя каждой отвергнутой куки.
-        """
-        added = 0
-
-        for cookie in cookies:
-            try:
-                await context.add_cookies([cookie])
-            except Exception as ex:
-                logger.warning(
-                    "Кука %s с домена %s не принята браузером (%s), пропускаю",
-                    cookie.get("name"),
-                    cookie.get("domain"),
-                    str(ex)[:200],
-                )
-                continue
-            added += 1
-
-        logger.debug(
-            "Передал в браузер %s из %s кук из сессии",
-            added,
-            len(cookies),
-        )
-
-    async def _captcha_image_bytes(self, page, element) -> bytes:
-        """Отдаёт оригинальные байты картинки капчи.
-
-        Скриншот элемента браузер рисует в размерах, в которых картинка
-        стоит на странице, а сама она меньше: hh.ru отдаёт 250px, на
-        странице она растянута примерно до 346. Растянутое изображение
-        мылится, и модель читает буквы неверно. Проверено на живых
-        капчах: ответ, снятый со скриншота, hh.ru отклонял, а ответ по
-        оригинальным байтам принимал с первой попытки. Поэтому файл
-        забираем напрямую, а на скриншот падаем только как на крайний
-        случай.
-        """
-        try:
-            src = await element.get_attribute("src")
-            if src:
-                response = await page.request.get(urljoin("https://hh.ru", src))
-                if response.ok:
-                    body = await response.body()
-                    if body:
-                        return body
-        except Exception as ex:
-            logger.debug("Не удалось скачать картинку капчи: %s", str(ex)[:120])
-
-        logger.debug("Беру картинку капчи скриншотом элемента")
-        return await element.screenshot()
-
-    async def _renew_captcha(self, page) -> None:
-        """Просит у hh.ru новую картинку после неудачной попытки.
-
-        После неверного ответа hh.ru сам выдаёт новую картинку с новым
-        ключом, поэтому нажатие «Другой текст» — belt-and-braces на тот
-        случай, если новая картинка почему-то не подгрузилась.
-        """
-        button = await page.query_selector(self.SEL_CAPTCHA_RENEW)
-        if button is None:
-            logger.debug("Кнопка обновления капчи не найдена")
-            return
-        try:
-            await button.click(timeout=5000)
-        except Exception as ex:
-            logger.debug("Не удалось обновить капчу: %s", str(ex)[:120])
-            return
-        # Даем браузеру время перерисовать картинку
-        await page.wait_for_timeout(1000)
-
-    async def _captcha_verdict(self, page) -> str:
-        """Ждет реакцию hh.ru на введенный ответ.
-
-        Три исхода, а не два. Раньше по таймауту капча объявлялась
-        решённой, и инструмент уходил откликаться с капчей, которую
-        никто не проходил. Теперь отсутствие сигнала — отдельный исход:
-        он не считается ни успехом, ни отказом ответа.
-        """
-        deadline = time.monotonic() + self.CAPTCHA_RESULT_TIMEOUT
-
-        while True:
-            # Форма исчезла -> hh.ru принял ответ и ушел со страницы капчи.
-            # Проверяем это раньше текста ошибки, иначе под кого-то
-            # попадет любой «ошибка» в подвале на странице вакансии
-            if not await page.query_selector(self.SEL_CAPTCHA_INPUT):
-                return self.CAPTCHA_VERDICT_ACCEPTED
-
-            error = await page.query_selector(self.SEL_CAPTCHA_ERROR)
-            if error is None:
-                error = await page.query_selector(self.SEL_CAPTCHA_ERROR_TEXT)
-            if error:
-                text = ""
-                try:
-                    text = (await error.inner_text()).strip()
-                except Exception:
-                    pass
-                logger.warning(
-                    "Капча не пройдена: %s", text or "hh.ru показал ошибку"
-                )
-                return self.CAPTCHA_VERDICT_REJECTED
-
-            if time.monotonic() >= deadline:
-                logger.warning(
-                    "hh.ru не ответил за %s с, вердикт неизвестен",
-                    self.CAPTCHA_RESULT_TIMEOUT,
-                )
-                return self.CAPTCHA_VERDICT_UNKNOWN
-
-            await page.wait_for_timeout(500)
 
     def _apply_vacancies(self) -> None:
         resumes: list[datatypes.Resume] = self.tool.get_resumes()
@@ -1721,8 +1120,6 @@ class Operation(BaseOperation):
                     vacancy["alternate_url"],
                 )
 
-                test_handled = False
-
                 if vacancy.get("has_test"):
                     logger.debug(
                         "Решаем тест: %s",
@@ -1736,7 +1133,6 @@ class Operation(BaseOperation):
                                 resume_hash=resume["id"],
                                 letter=letter,
                             )
-                            test_handled = True
                             if result.get("success") == "true":
                                 applied_count += 1
                                 print(
@@ -1759,90 +1155,40 @@ class Operation(BaseOperation):
                                     )
                                     break
                                 else:
-                                    status = (
-                                        result.get("_http_status")
-                                        if isinstance(result, dict)
-                                        else None
-                                    )
                                     logger.error(
-                                        "Произошла ошибка при отклике на вакансию с тестом: %s (HTTP %s), result: %s",
+                                        "Произошла ошибка при отклике на вакансию с тестом: %s, result: %.300s",
                                         vacancy["alternate_url"],
-                                        status if status is not None else "?",
-                                        shorten(str(result), 300),
+                                        result,
                                     )
-                        else:
-                            test_handled = True
-                    except ValueError as ex:
-                        if str(ex) == "tests not found.":
-                            logger.warning(
-                                "Не удалось получить тест (%s), пробую откликнуться как на обычную вакансию: %s",
-                                ex,
-                                vacancy["alternate_url"],
-                            )
-                        else:
-                            logger.error(
-                                f"Произошла непредвиденная ошибка: {ex}"
-                            )
-                            continue
+
                     except Exception as ex:
                         logger.error(f"Произошла непредвиденная ошибка: {ex}")
                         continue
 
-                if not test_handled:
-                    params = {
-                        "resume_id": resume["id"],
-                        "vacancy_id": vacancy_id,
-                        "message": letter,
-                    }
-                    try:
-                        if not self.dry_run:
-                            res = self.api_client.post(
-                                "/negotiations",
-                                params,
-                                delay=random.uniform(1, 3),
-                            )
-                            assert res == {}
-                            applied_count += 1
-                            print(
-                                "📨 Отправили отклик на вакансию",
-                                vacancy["alternate_url"],
-                            )
-                    except Redirect:
-                        logger.warning(
-                            f"Игнорирую перенаправление на форму: {vacancy['alternate_url']}"  # noqa: E501
+                params = {
+                    "resume_id": resume["id"],
+                    "vacancy_id": vacancy_id,
+                    "message": letter,
+                }
+
+                try:
+                    if not self.dry_run:
+                        res = self.api_client.post(
+                            "/negotiations",
+                            params,
+                            delay=random.uniform(1, 3),
                         )
-                        continue
-                    except CaptchaRequired as ex:
-                        logger.warning(f"Требуется капча: {ex.captcha_url}")
-                        try:
-                            success = asyncio.run(
-                                self._solve_captcha_async(ex.captcha_url)
-                            )
-                        except Exception as e:
-                            logger.error(f"Ошибка при решении капчи: {e}")
-                            # Одна вакансия не должна убивать всю рассылку
-                            continue
-
-                        if not success:
-                            logger.error(
-                                "Не удалось решить капчу для %s, "
-                                "пропускаю вакансию",
-                                vacancy["alternate_url"],
-                            )
-                            continue
-
-                        if not self.dry_run:
-                            # Отправляем повторно тот же самый запрос
-                            res = self.api_client.send(
-                                requset=ex.request,
-                                delay=random.uniform(1, 3),
-                            )
-                            assert res == {}
-                            applied_count += 1
-                            print(
-                                "📨 Отправили отклик на вакансию после капчи",
-                                vacancy["alternate_url"],
-                            )
+                        assert res == {}
+                        applied_count += 1
+                        print(
+                            "📨 Отправили отклик на вакансию",
+                            vacancy["alternate_url"],
+                        )
+                except Redirect:
+                    logger.warning(
+                        f"Игнорирую перенаправление на форму: {vacancy['alternate_url']}"  # noqa: E501
+                    )
+                    continue
 
                 # Отправка письма на email
                 if self.args.send_email:
@@ -1922,7 +1268,7 @@ class Operation(BaseOperation):
 
     def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData | None:
         """Парсит тесты"""
-        res = self.tool.get_redirect_config(response_url)
+        res = self.tool.fetch_initial_state(response_url)
         return find_key(res, "vacancyTests")
 
     def _solve_vacancy_test(
@@ -2060,9 +1406,6 @@ class Operation(BaseOperation):
                 "Эндпоинт отклика на тест вернул не-JSON ответ "
                 "(возможно, перенаправление на капчу или форму)."
             ) from ex
-
-        if isinstance(data, dict):
-            data["_http_status"] = response.status_code
 
         return data
 

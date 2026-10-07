@@ -46,7 +46,7 @@ def print_kitty_image(data: bytes) -> None:
     print()
 
 
-def print_sixel_mage(image_bytes: bytes) -> None:
+def print_sixel_image(image_bytes: bytes) -> None:
     img = Image.open(io.BytesIO(image_bytes))
 
     # Рекомендуется оставить ограничение размера,

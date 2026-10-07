@@ -7,12 +7,9 @@ CONFIG_FILENAME = "config.json"
 LOG_FILENAME = "log.txt"
 DATABASE_FILENAME = "data"
 COOKIES_FILENAME = "cookies.txt"
-# Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36
-DESKTOP_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/153.0.0.0 Safari/537.36"
-)
+# Та же страница каптчи возвращает 404-ую, если юзер-агент не похож на
+# десктопный
+DESKTOP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 YaBrowser/26.8.0.0 Safari/537.36"
 # Язык сайта hh.ru. Значение используется в куке session_language
 # (ею hh.ru переключает язык интерфейса) и в параметре lang ссылки на
 # страницу капчи, которую hh.ru присылает в ответе 403 на отклик.
@@ -26,7 +23,7 @@ DEFAULT_SITE_LANGUAGE = "en"
 # Язык картинки капчи. Задаётся параметром lang у POST /captcha,
 # значение приходит от hh.ru в верхнем регистре, но понимает и в
 # нижнем
-DEFAULT_CAPTCHA_LANGUAGE = "en"
+DEFAULT_CAPTCHA_LANGUAGE = "RU"
 # Общий таймаут запроса к OpenAI: соединение + чтение ответа
 DEFAULT_OPENAI_TIMEOUT = 30.0
 # Отдельно на установку соединения, чтобы недоступный сервер не съедал

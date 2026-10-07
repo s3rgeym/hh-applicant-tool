@@ -5,7 +5,7 @@ from threading import Timer
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 

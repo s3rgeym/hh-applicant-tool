@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING
 from prettytable import PrettyTable
 
 from ..api.datatypes import PaginatedItems
-from ..main import BaseNamespace, BaseOperation
+from ..tool import BaseNamespace, BaseOperation
 from ..utils.string import shorten
 
 if TYPE_CHECKING:
     from ..api import datatypes
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 
 logger = logging.getLogger(__package__)

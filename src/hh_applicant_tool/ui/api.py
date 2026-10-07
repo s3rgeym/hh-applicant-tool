@@ -12,7 +12,7 @@ from .presets import PresetValidationError, PresetsManager
 from .profiles import ProfileValidationError, ProfilesManager
 
 if TYPE_CHECKING:
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 logger = logging.getLogger(__package__)
 

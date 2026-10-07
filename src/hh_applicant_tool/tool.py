@@ -6,24 +6,23 @@ import json
 import logging
 import os
 import re
-import signal
 import smtplib
 import sqlite3
 import sys
-import threading
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from contextlib import contextmanager
+from dataclasses import dataclass
 from functools import cached_property
-from http.cookiejar import CookieJar, MozillaCookieJar
+from http.cookiejar import MozillaCookieJar
 from importlib import import_module
 from itertools import count
 from os import getenv
 from pathlib import Path
 from pkgutil import iter_modules
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Type, TypedDict
+from urllib.parse import parse_qsl, urljoin, urlsplit
 
 import requests
-import urllib3
 
 from . import ai, api, utils
 from .constants import (
@@ -31,20 +30,35 @@ from .constants import (
     CONFIG_FILENAME,
     COOKIES_FILENAME,
     DATABASE_FILENAME,
+    DEFAULT_CAPTCHA_LANGUAGE,
     DEFAULT_OPENAI_CONNECT_TIMEOUT,
     DEFAULT_OPENAI_TIMEOUT,
-    DEFAULT_SITE_LANGUAGE,
     DESKTOP_USER_AGENT,
     LOG_FILENAME,
 )
 from .storage import StorageFacade
+from .utils.argparse import ArgumentFormatter
 from .utils.cookiejar import HHOnlyCookieJar
 from .utils.log import setup_logger
 from .utils.mixins import MegaTool
+from .utils.terminal import print_kitty_image, print_sixel_image
 
 logger = logging.getLogger(__package__)
 
 OPERATIONS = "operations"
+
+
+class HHLuxInitialState(TypedDict):
+    redirectConfig: dict[str, Any]
+    ...
+
+
+class CaptchaInfo:
+    url: str
+    key: str
+    url: str
+    lang: str
+    image_data: bytes
 
 
 class Error(Exception):
@@ -66,20 +80,47 @@ class HHSession(requests.Session):
     cookies: HHOnlyCookieJar
 
 
-class BaseNamespace(argparse.Namespace):
+class BaseAttrs:
     profile_id: str
     config_dir: Path
     verbosity: int
     api_delay: float
     user_agent: str
     proxy_url: str
+    use_sixel: bool
+    use_kitty: bool
+    manual: bool
+    captcha_lang: str
+    captcha_attempts: int
     openai_proxy_url: str
     openai_timeout: float
     openai_connect_timeout: float
+
+
+class BaseNamespace(argparse.Namespace, BaseAttrs):
     operation_run: Callable[[HHApplicantTool, BaseNamespace], None | int] | None
 
 
-class HHApplicantTool(MegaTool):
+@dataclass
+class BaseAPICaptchaHandler(ABC):
+    tool: HHApplicantTool
+
+    @abstractmethod
+    def __call__(self, captcha_url: str) -> bool:
+        """Этот метод обязан переопределить каждый наследник."""
+        pass
+
+
+class APICaptchaHandler(BaseAPICaptchaHandler):
+    def __call__(self, captcha_url: str) -> bool:
+        return (
+            self.tool.solve_captcha_manual(captcha_url)
+            if self.tool.manual
+            else self.tool.solve_captcha_ai(captcha_url)
+        )
+
+
+class HHApplicantTool(MegaTool, BaseAttrs):
     """Утилита для автоматизации действий соискателя на сайте hh.ru.
 
     Исходники и предложения: <https://github.com/s3rgeym/hh-applicant-tool>
@@ -87,17 +128,11 @@ class HHApplicantTool(MegaTool):
     Группа поддержки: <https://t.me/s3rgeym_chat>
     """
 
-    class ArgumentFormatter(
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.RawDescriptionHelpFormatter,
-    ):
-        pass
-
     @classmethod
     def _create_parser(cls) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
             description=cls.__doc__,
-            formatter_class=cls.ArgumentFormatter,
+            formatter_class=ArgumentFormatter,
         )
         parser.add_argument(
             "-v",
@@ -152,6 +187,36 @@ class HHApplicantTool(MegaTool):
             type=float,
             help="Таймаут соединения с OpenAI в секундах",
         )
+        parser.add_argument(
+            "-m",
+            "--manual",
+            action="store_true",
+            help="Ручной режим ввода (капчи)",
+        )
+        parser.add_argument(
+            "-k",
+            "--use-kitty",
+            "--kitty",
+            action="store_true",
+            help="Вывод капчи в kitty",
+        )
+        parser.add_argument(
+            "-s",
+            "--use-sixel",
+            "--sixel",
+            action="store_true",
+            help="Вывод капчи в sixel",
+        )
+        parser.add_argument(
+            "--captcha-lang",
+            default=DEFAULT_CAPTCHA_LANGUAGE,
+            help="Язык капчи. Некоторые модели распознают лучше текст на английском",
+        )
+        parser.add_argument(
+            "--captcha-attempts",
+            default=3,
+            help="Максимальное количество неудачных попыток автоматического распознания капчи",
+        )
         subparsers = parser.add_subparsers(help="commands")
         package_dir = Path(__file__).resolve().parent / OPERATIONS
         for _, module_name, _ in iter_modules([str(package_dir)]):
@@ -164,15 +229,20 @@ class HHApplicantTool(MegaTool):
                 kebab_name,
                 aliases=getattr(op, "__aliases__", []),
                 description=op.__doc__,
-                formatter_class=cls.ArgumentFormatter,
+                formatter_class=ArgumentFormatter,
             )
             op_parser.set_defaults(operation_run=op.run)
             op.setup_parser(op_parser)
         parser.set_defaults(operation_run=None)
         return parser
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        captcha_handler_class: Type[BaseAPICaptchaHandler] | None = None,
+    ):
         self._parser = self._create_parser()
+        self._captcha_handler_class = captcha_handler_class
 
     @staticmethod
     def _proxy_url_to_dict(proxy_url: str | None) -> dict[str, str]:
@@ -234,40 +304,7 @@ class HHApplicantTool(MegaTool):
         if self.cookies_file.exists():
             session.cookies.load(ignore_discard=True, ignore_expires=True)
 
-        # Язык сайта нужен именно в момент запроса отклика: hh.ru
-        # фиксирует язык картинки капчи, когда выдает captcha_url,
-        # поэтому кука должна быть в сессии заранее
-        self._apply_site_language(session.cookies)
-
         return session
-
-    def _apply_site_language(self, jar: CookieJar) -> None:
-        """Просит hh.ru отдавать сайт на нужном языке.
-
-        Язык берется из конфигурации (site_language), по умолчанию
-        английский. На язык картинки капчи эта кука не действует:
-        скрипт задаёт параметр lang у POST /captcha, см. api/captcha.py.
-        Пустое значение в конфиге отключает подмену, чтобы hh.ru сам
-        выбрал язык (например, когда в аккаунте его уже переключили).
-        """
-        language = self.config.get("site_language", DEFAULT_SITE_LANGUAGE)
-        language = (language or "").strip()
-
-        if not language:
-            logger.debug(
-                "site_language в конфиге пустой, язык сайта не меняю",
-            )
-            return
-
-        if not jar.set_site_language(language):
-            logger.warning(
-                "Не удалось выставить язык сайта %s, hh.ru может "
-                "отдать капту на языке аккаунта",
-                language,
-            )
-            return
-
-        logger.info("Язык сайта hh.ru: %s", language)
 
     @cached_property
     def openai_session(self) -> requests.Session:
@@ -321,6 +358,9 @@ class HHApplicantTool(MegaTool):
             delay=self.api_delay or config.get("api_delay"),
             user_agent=self.user_agent or config.get("user_agent"),
             session=self.session,
+            captcha_handler=self._captcha_handler_class(self)
+            if self._captcha_handler_class
+            else None,
         )
 
     def get_me(self) -> api.datatypes.User:
@@ -372,45 +412,46 @@ class HHApplicantTool(MegaTool):
         # Если пользователь неавторизован содержит поля типа firstName, lastName и тд со значением None (все поля)
         return any(v is not None for v in account.values())
 
-    def parse_redirect_config(
+    def parse_initial_state(
         self, response: requests.Response, check_auth: bool = True
-    ) -> dict[str, Any]:
+    ) -> HHLuxInitialState:
+        """Возвращает декодированное содержимое <template id="HH-Lux-InitialState"></template>"""
         if response.status_code != 200:
             raise Error(
                 f"Неожиданный код ответа: {response.status_code} {response.url}"
             )
 
         try:
-            raw_config = response.text.split('id="HH-Lux-InitialState">')[
+            raw_data = response.text.split('id="HH-Lux-InitialState">')[
                 1
             ].split("</template>")[0]
         except IndexError as ex:
             raise Error(
-                f"Template with config not found on {response.url}"
+                f"Template with initial state data not found on {response.url}"
             ) from ex
 
         # Теперь кавычки всегда превращаются в сущности?
-        if raw_config.startswith("{&#34;"):
-            raw_config = html.unescape(raw_config)
+        if raw_data.startswith("{&#34;"):
+            raw_data = html.unescape(raw_data)
 
         # import tempfile
-        # with tempfile.NamedTemporaryFile('w', delete=False, prefix='hh_config_', suffix='.json', dir='.', encoding='utf-8') as tmp_file:
-        #     tmp_file.write(raw_config)
+        # with tempfile.NamedTemporaryFile('w', delete=False, prefix='hh_initial_state_', suffix='.json', dir='.', encoding='utf-8') as tmp_file:
+        #     tmp_file.write(raw_data)
         #     file_path = tmp_file.name
         #     print(file_path)
 
-        config = json.loads(raw_config)
-        assert type(config) is dict
-        assert "redirectConfig" in config
-        if check_auth and not self._is_authenticated(config):
+        data = json.loads(raw_data)
+        assert type(data) is dict
+        assert "redirectConfig" in data
+        if check_auth and not self._is_authenticated(data):
             raise Error("Авторизация истекла требуется новая!")
 
-        return config
+        return data
 
-    def get_redirect_config(
+    def fetch_initial_state(
         self, url: str, check_auth: bool = True
-    ) -> dict[str, Any]:
-        return self.parse_redirect_config(self.session.get(url), check_auth)
+    ) -> HHLuxInitialState:
+        return self.parse_initial_state(self.session.get(url), check_auth)
 
     # TODO: добавить еще методов или те удалить?
 
@@ -442,9 +483,6 @@ class HHApplicantTool(MegaTool):
         return self.get_ai_client(system_prompt, purpose="chat")
 
     def get_captcha_ai(self) -> ai.ChatOpenAI:
-        # Промпт тут короткий и общий: точный промпт распознавания
-        # задаёт solve_captcha, он же требует JSON с двумя словами
-        # и отдельно запрещает менять алфавит картинки на другой.
         return self.get_ai_client(
             system_prompt=(
                 "You read CAPTCHA images. Return ONLY the text from the "
@@ -594,6 +632,143 @@ class HHApplicantTool(MegaTool):
 
         return server
 
+    def _fetch_captcha(
+        self, captcha_url: str, lang: str = DEFAULT_CAPTCHA_LANGUAGE
+    ) -> CaptchaInfo:
+        """Получает изображение в виде набора байт. Вторым аргументом можно передать язык"""
+        captcha_state = dict(parse_qsl(urlsplit(captcha_url).query))["state"]
+
+        logger.debug("Получаем куки со страницы: %s", captcha_url)
+        # Предполагаю, что на этой странице кука какая-то ставится
+        r = self.session.get(captcha_url)
+        r.raise_for_status()
+
+        # Тут пока ничего не нужно как заглушка используется
+        data = self.parse_initial_state(r)
+        logger.debug("Initial State Keys:  %s", ", ".join(*data))
+        assert data["hhcaptcha"]["captchaState"] == captcha_state
+
+        # Страница, где каптча показывается
+        # Обычно редиректит на страницу города
+        referer_url = r.url
+
+        # Потом кука используется для получения captcha key
+        captcha_key_url = urljoin(referer_url, "/captcha?lang=" + lang)
+        logger.debug(
+            "Отправляем POST-запрос на %s для получения captcha key",
+            captcha_key_url,
+        )
+        js = self.session.post(
+            captcha_key_url,
+            headers={
+                "Referer": referer_url,
+                "X-Xsrftoken": self.xsrf_token,
+                "x-hhtmfrom": "",
+                "x-hhtmsource": "account_captcha",
+                # Я тут опустил кучу заголовков, так как их значения есть в
+                # кукис, и сайт, если тех нет, берех их от туда
+                # Те запрос проходит
+                "X-Requested-With": "XMLHttpRequest",
+            },
+        ).json()
+
+        captcha_key = js["key"]
+
+        captcha_image_url = urljoin(
+            referer_url, "/captcha/picture?key=" + captcha_key
+        )
+
+        logger.debug("Пробуем загрузить каптчу: %s", captcha_image_url)
+        # А с помощью captcha key получаем изображение
+        captcha_image_data = self.session.get(
+            captcha_image_url, headers={"Referer": referer_url}
+        ).content
+
+        assert len(captcha_image_data) > 0, "Ошибка загрузки изображения"
+
+        return {
+            "key": captcha_key,
+            "image_data": captcha_image_data,
+            "state": captcha_state,
+            "url": referer_url,
+            "lang": lang,
+        }
+
+    def _send_captcha(self, url: str, text: str, key: str, state: str) -> bool:
+        target_url: str = urljoin(url, "/account/captcha")
+
+        payload = {
+            "captchaText": text,
+            "captchaKey": key,
+            "captchaState": state,
+            # Я не уверен, что эти параметры обзяательные
+            "backurl": "/",
+            "fialurl": target_url + "?state=" + state,
+        }
+
+        # Там зачем-то payload передается и в теле запроса и в query string
+        # Скорее всего его можно передать только в теле
+        r = self.session.post(
+            target_url,
+            params=payload,
+            data=payload,
+            headers={
+                "Referer": url,
+                "X-Requested-With": "XMLHttpRequest",
+                "X-Xsrftoken": self.xsrf_token,
+                "x-hhtmfrom": "",
+                "x-hhtmsource": "account_captcha",
+            },
+        )
+
+        logger.debug(
+            "Код ответа сервера на отправку текста каптчи: %d", r.status_code
+        )
+        return r.status_code == 200
+
+    def solve_captcha_manual(self, captcha_url: str) -> bool:
+        assert self.use_kitty or self.use_sixel, (
+            "Для ручного решения каптчи нужно использовать один из флагов: --use-sixel/--use-kitty"
+        )
+        try:
+            while True:
+                captcha = self._fetch_captcha(captcha_url, self.captcha_lang)
+                if self.use_kitty:
+                    print_kitty_image(captcha["image_data"])
+                else:
+                    print_sixel_image(captcha["image_data"])
+                text = input("Введите текст с картинки выше: ")
+                if self._send_captcha(
+                    captcha["url"], text, captcha["key"], captcha["state"]
+                ):
+                    return True
+                print("Попробуй еще!")
+        except (KeyboardInterrupt, EOFError):
+            return False
+
+    @cached_property
+    def captcha_ai(self) -> ai.ChatOpenAI:
+        return self.get_captcha_ai()
+
+    def solve_captcha_ai(self, captcha_url: str) -> bool:
+        for attempt in range(1, self.captcha_attempts + 1):
+            logger.debug(
+                "(%d/%d) try solve captcha: %s",
+                attempt,
+                self.captcha_attempts,
+                captcha_url,
+            )
+            captcha = self._fetch_captcha(captcha_url, self.captcha_lang)
+            text = self.captcha_ai.recognize_text(captcha["image_data"])
+            logger.debug("AI answer for %s: %s", captcha_url, text)
+            if self._send_captcha(
+                captcha["url"], text, captcha["key"], captcha["state"]
+            ):
+                logger.debug("Captcha accepted for %s", captcha_url)
+                return True
+        logger.warning("Can't solve captcha for %s", captcha_url)
+        return False
+
     def run(self, argv: Sequence[str] | None = None) -> None | int:
         args = self._parser.parse_args(argv, namespace=BaseNamespace())
         self._assign_args(args)
@@ -616,52 +791,12 @@ class HHApplicantTool(MegaTool):
         utils.setup_terminal()
 
         try:
-            with self._graceful_sigint(args):
-                if not self.operation_run:
-                    self._parser.print_help(file=sys.stderr)
-                    return 2
-                return self._run_operation(args)
+            if not self.operation_run:
+                self._parser.print_help(file=sys.stderr)
+                return 2
+            return self._run_operation(args)
         finally:
-            self._check_system_safe()
-
-    @contextmanager
-    def _graceful_sigint(self, args: BaseNamespace):
-        """Мягкое прерывание по Ctrl+C (SIGINT).
-
-        Первое нажатие останавливает операцию между шагами (через
-        `_cancel_event`), второе — принудительно завершает процесс с кодом 130.
-        Ручной обработчик нужен, чтобы KeyboardInterrupt не превращался в дамп
-        стека внутри сетевого вызова проверки версии в `finally` (там ловится
-        только `Exception`).
-        """
-        cancel_event = threading.Event()
-        op_instance = (
-            getattr(self.operation_run, "__self__", None)
-            if self.operation_run
-            else None
-        )
-        if op_instance is not None:
-            op_instance._cancel_event = cancel_event
-        args._cancel_event = cancel_event
-
-        sigint_count = [0]
-
-        def _handle_sigint(signum, frame):
-            sigint_count[0] += 1
-            if sigint_count[0] == 1:
-                cancel_event.set()
-                logger.warning(
-                    "Выполнение прервано пользователем! Приступаю к Завершению работы. "
-                    "Нажмите ещё раз для принудительного выхода."
-                )
-            else:
-                sys.exit(130)
-
-        previous_handler = signal.signal(signal.SIGINT, _handle_sigint)
-        try:
-            yield
-        finally:
-            signal.signal(signal.SIGINT, previous_handler)
+            self._check_system()
 
     def _run_operation(self, args: BaseNamespace) -> None | int:
         """Запускает выбранную операцию и превращает исключения в сообщения."""
@@ -702,20 +837,6 @@ class HHApplicantTool(MegaTool):
                 logger.error(f"Не удалось сохранить cookies: {ex}")
         return 1
 
-    def _check_system_safe(self) -> None:
-        """Проверка обновлений, никогда не ломающая выход из программы."""
-        try:
-            self._check_system()
-        except KeyboardInterrupt:
-            logger.warning("Выполнение прервано пользователем!")
-        except Exception:
-            pass
-
     def _assign_args(self, args: BaseNamespace) -> None:
         for name, value in vars(args).items():
             setattr(self, name, value)
-
-
-def main(argv: Sequence[str] | None = None) -> None | int:
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    return HHApplicantTool().run(argv)

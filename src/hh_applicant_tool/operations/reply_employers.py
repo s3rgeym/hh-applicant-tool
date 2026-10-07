@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING
 
 from ..ai.base import AIError
 from ..api import ApiError, datatypes
-from ..main import BaseNamespace, BaseOperation
+from ..tool import BaseNamespace, BaseOperation
 from ..utils.date import parse_api_datetime
 from ..utils.string import rand_text
 
 if TYPE_CHECKING:
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 
 try:

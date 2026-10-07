@@ -10,7 +10,7 @@ from ..constants import CONFIG_DIR, CONFIG_FILENAME
 from ..utils.config import Config
 
 if TYPE_CHECKING:
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 DEFAULT_PROFILE_ID = "."
 _PROFILE_ID_RE = re.compile(r"^[\w.-]{1,64}$", re.UNICODE)
