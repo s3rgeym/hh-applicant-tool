@@ -65,7 +65,7 @@ class ChatOpenAI:
     def _request(self, payload: dict) -> requests.Response:
         """Выполнение запроса с минимальным интервалом между запросами.
 
-        Если с прошлого запроса прошло больше `min_request_delay` секунд,
+        Если с прошлого запроса прошло больше `delay` секунд,
         ожидание не выполняется.
         """
         timeout = Timeout(connect=self.connect_timeout, total=self.timeout)
