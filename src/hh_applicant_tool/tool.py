@@ -121,6 +121,7 @@ class BaseNamespace(argparse.Namespace, BaseAttrs):
 #         )
 
 
+@dataclass
 class HHApplicantTool(MegaTool, BaseAttrs):
     """Утилита для автоматизации действий соискателя на сайте hh.ru.
 
