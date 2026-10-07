@@ -454,9 +454,7 @@ class HHApplicantTool(MegaTool, BaseAttrs):
 
         return data
 
-    def fetch_initial_state(
-        self, url: str
-    ) -> HHLuxInitialState:
+    def fetch_initial_state(self, url: str) -> HHLuxInitialState:
         return self.parse_initial_state(self.session.get(url))
 
     # TODO: добавить еще методов или те удалить?
@@ -498,20 +496,21 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         )
 
     OPENAI_ADDITIONAL_SECTIONS: ClassVar[list[str]] = [
-        'cover_letter',
-        'vacancy_filter',
-        'captcha',
-        'chat',
+        "cover_letter",
+        "vacancy_filter",
+        "captcha",
+        "chat",
     ]
 
     def has_openai_config(self) -> bool:
-        if 'openai' in self.config:
+        if "openai" in self.config:
             return True
         return any(
-            key.startswith('openai_') and key[len('openai_'):] in self.OPENAI_ADDITIONAL_SECTIONS
+            key.startswith("openai_")
+            and key[len("openai_") :] in self.OPENAI_ADDITIONAL_SECTIONS
             for key in self.config
         )
-    
+
     def get_ai_client(
         self,
         system_prompt: str,
@@ -519,32 +518,32 @@ class HHApplicantTool(MegaTool, BaseAttrs):
     ) -> ai.ChatOpenAI:
         c = self.config.get("openai", {})
         section_name: str | None = None
-    
+
         if purpose is not None:
             if purpose not in self.OPENAI_ADDITIONAL_SECTIONS:
                 raise ValueError(
                     f"Неизвестная название доп секции `openai`: {purpose}. "
                     f"Допустимые значения: {self.OPENAI_ADDITIONAL_SECTIONS}"
                 )
-    
+
             section_name = f"openai_{purpose}"
             purpose_config = self.config.get(section_name, {})
             # Переписываем значения openai
             c = {**c, **purpose_config}
-    
+
         # Подсказка для сообщений об ошибках: " или 'openai_xxx'." / "."
         or_section = f" или '{section_name}'" if section_name else ""
-    
+
         if (api_key := c.get("api_key")) is None:
             raise ValueError(
                 f"API-ключ не задан. Укажите 'api_key' в секции 'openai'{or_section}."
             )
-    
+
         if (base_url := c.get("base_url")) is None:
             raise ValueError(
                 f"Параметр 'base_url' не задан. Укажите его в секции 'openai'{or_section}."
             )
-    
+
         if (model := c.get("model")) is None:
             raise ValueError(
                 "Параметр 'model' не задан в конфигурации."
@@ -554,7 +553,7 @@ class HHApplicantTool(MegaTool, BaseAttrs):
                     else " Секция 'openai' не содержит этого параметра."
                 )
             )
-    
+
         return ai.ChatOpenAI(
             api_key=api_key,
             model=model,
@@ -575,7 +574,7 @@ class HHApplicantTool(MegaTool, BaseAttrs):
             ),
             session=self.openai_session,
         )
-    
+
     # TODO: вынести в миксин какой
     def get_cookie(self, name: str) -> str | None:
         """Значение cookie по имени из jar на базе {CookieJar} (нет get_dict)."""
