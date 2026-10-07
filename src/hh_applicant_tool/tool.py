@@ -753,7 +753,7 @@ class HHApplicantTool(MegaTool, BaseAttrs):
     def solve_captcha_ai(self, captcha_url: str) -> bool:
         for attempt in range(1, self.captcha_attempts + 1):
             logger.debug(
-                "(%d/%d) try solve captcha: %s",
+                "(%d/%d) try to solve captcha: %s",
                 attempt,
                 self.captcha_attempts,
                 captcha_url,
