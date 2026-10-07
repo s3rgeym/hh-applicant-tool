@@ -286,6 +286,8 @@ class ApiClient(BaseClient):
             client_secret=self.client_secret,
             user_agent=self.user_agent,
             session=self.session,
+            captcha_handler=self.captcha_handler,
+            captcha_cooldown=self.captcha_cooldown,
         )
 
     def _default_headers(
