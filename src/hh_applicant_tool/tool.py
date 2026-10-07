@@ -33,6 +33,7 @@ from .constants import (
     DEFAULT_OPENAI_CONNECT_TIMEOUT,
     DEFAULT_OPENAI_TIMEOUT,
     DESKTOP_USER_AGENT,
+    HH_BASE_URL,
     LOG_FILENAME,
 )
 from .storage import StorageFacade
@@ -576,11 +577,11 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         )
 
     # TODO: вынести в миксин какой
-    def get_cookie(self, name: str) -> str | None:
+    def get_cookie(self, name: str, default: Any = None) -> str | None:
         """Значение cookie по имени из jar на базе {CookieJar} (нет get_dict)."""
         return next(
             (c.value for c in self.session.cookies if c.name == name),
-            None,
+            default,
         )
 
     # Удалить
@@ -592,14 +593,18 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         if not tokens:
             raise ValueError("xsrf token not found")
 
-    @cached_property
+    @property
     def xsrf_token(self) -> str | None:
         return self.get_cookie("_xsrf")
 
     @property
+    def base_url(self) -> str:
+        return "https://" + self.get_cookie("redirect_host", HH_BASE_URL).split('://', 1)[-1].split('/')[0]
+    
+    @property
     def is_logged_in(self) -> bool:
         """Проверяет авторизован ли пользователь через сайт."""
-        return self.session.get("https://hh.ru/settings").status_code == 200
+        return self.session.get(f"{self.base_url}/settings").status_code == 200
 
     @cached_property
     def smtp(self) -> smtplib.SMTP | smtplib.SMTP_SSL:
