@@ -295,7 +295,6 @@ class Operation(BaseOperation):
             return
 
         args = self._args
-
         img_bytes = await captcha_element.screenshot()
 
         if args.manual:
@@ -313,9 +312,11 @@ class Operation(BaseOperation):
             captcha_text = (
                 await asyncio.to_thread(input, "Введите текст с картинки: ")
             ).strip()
-
         else:
-            captcha_text = self._tool.captcha_ai.recognize_text(img_bytes)
+            captcha_text = await asyncio.to_thread(
+                self._tool.captcha_ai.recognize_text,
+                img_bytes,
+            )
             logger.debug("Распознанный текст CAPTCHA: %s", captcha_text)
 
         await page.fill(self.SEL_CAPTCHA_INPUT, captcha_text)
