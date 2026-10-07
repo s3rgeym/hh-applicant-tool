@@ -957,17 +957,18 @@ class Operation(BaseOperation):
                         vacancy["alternate_url"],
                     )
 
-                    self._save_skipped_vacancy(
-                        vacancy, "excluded_filter", resume["id"]
-                    )
+                    if not self.dry_run:
+                        self._save_skipped_vacancy(
+                            vacancy, "excluded_filter", resume["id"]
+                        )
 
-                    self.api_client.put(
-                        f"/vacancies/blacklisted/{vacancy['id']}"
-                    )
-                    logger.info(
-                        "Вакансия добавлена в черный список: %s",
-                        vacancy["alternate_url"],
-                    )
+                        self.api_client.put(
+                            f"/vacancies/blacklisted/{vacancy['id']}"
+                        )
+                        logger.info(
+                            "Вакансия добавлена в черный список: %s",
+                            vacancy["alternate_url"],
+                        )
                     continue
 
                 # AI фильтрация вакансий
