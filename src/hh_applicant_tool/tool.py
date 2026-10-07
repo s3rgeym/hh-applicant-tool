@@ -336,7 +336,7 @@ class HHApplicantTool(MegaTool, BaseAttrs):
 
     @cached_property
     def db(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn = sqlite3.connect(self.db_path)
         return conn
 
     @cached_property
@@ -451,9 +451,9 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         return data
 
     def fetch_initial_state(
-        self, url: str, check_auth: bool = True
+        self, url: str
     ) -> HHLuxInitialState:
-        return self.parse_initial_state(self.session.get(url), check_auth)
+        return self.parse_initial_state(self.session.get(url))
 
     # TODO: добавить еще методов или те удалить?
 
