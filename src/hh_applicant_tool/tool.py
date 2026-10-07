@@ -599,8 +599,13 @@ class HHApplicantTool(MegaTool, BaseAttrs):
 
     @property
     def base_url(self) -> str:
-        return "https://" + self.get_cookie("redirect_host", HH_BASE_URL).split('://', 1)[-1].split('/')[0]
-    
+        return (
+            "https://"
+            + self.get_cookie("redirect_host", HH_BASE_URL)
+            .split("://", 1)[-1]
+            .split("/")[0]
+        )
+
     @property
     def is_logged_in(self) -> bool:
         """Проверяет авторизован ли пользователь через сайт."""
