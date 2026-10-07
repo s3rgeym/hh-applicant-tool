@@ -22,5 +22,7 @@ class Operation(BaseOperation):
         pass
 
     def run(self, tool: HHApplicantTool, args: BaseNamespace) -> None:
+        orig_argv = sys.argv
         sys.argv = ["playwright", "uninstall", "chromium"]
         run_module("playwright", run_name="__main__")
+        sys.argv = orig_argv
