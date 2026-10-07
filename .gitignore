@@ -86,3 +86,4 @@ CLAUDE.md
 .codex/
 uv.lock
 poetry.lock
+test_captcha.py

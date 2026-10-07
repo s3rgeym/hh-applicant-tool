@@ -9,7 +9,6 @@ import re
 import smtplib
 import sqlite3
 import sys
-from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cached_property
@@ -19,7 +18,7 @@ from itertools import count
 from os import getenv
 from pathlib import Path
 from pkgutil import iter_modules
-from typing import Any, Callable, Iterable, Type, TypedDict
+from typing import Any, Callable, Iterable, TypedDict
 from urllib.parse import parse_qsl, urljoin, urlsplit
 
 import requests
@@ -80,44 +79,46 @@ class HHSession(requests.Session):
     cookies: HHOnlyCookieJar
 
 
+@dataclass
 class BaseAttrs:
-    profile_id: str
-    config_dir: Path
-    verbosity: int
-    api_delay: float
-    user_agent: str
-    proxy_url: str
-    use_sixel: bool
-    use_kitty: bool
-    manual: bool
-    captcha_lang: str
-    captcha_attempts: int
-    openai_proxy_url: str
-    openai_timeout: float
-    openai_connect_timeout: float
+    profile_id: str | None = None
+    config_dir: Path | None = None
+    verbosity: int = 0
+    api_delay: float | None = None
+    user_agent: str | None = None
+    proxy_url: str | None = None
+    use_sixel: bool = False
+    use_kitty: bool = False
+    manual: bool = False
+    captcha_lang: str = DEFAULT_CAPTCHA_LANGUAGE
+    captcha_attempts: int = 3
+    openai_proxy_url: str | None = None
+    openai_timeout: float | None = None
+    openai_connect_timeout: float | None = None
 
 
 class BaseNamespace(argparse.Namespace, BaseAttrs):
     operation_run: Callable[[HHApplicantTool, BaseNamespace], None | int] | None
 
 
-@dataclass
-class BaseAPICaptchaHandler(ABC):
-    tool: HHApplicantTool
-
-    @abstractmethod
-    def __call__(self, captcha_url: str) -> bool:
-        """Этот метод обязан переопределить каждый наследник."""
-        pass
-
-
-class APICaptchaHandler(BaseAPICaptchaHandler):
-    def __call__(self, captcha_url: str) -> bool:
-        return (
-            self.tool.solve_captcha_manual(captcha_url)
-            if self.tool.manual
-            else self.tool.solve_captcha_ai(captcha_url)
-        )
+# Сначала это мне показалось хорошей идеей, потом понял, что лишние сущности
+# @dataclass
+# class BaseAPICaptchaHandler(ABC):
+#     tool: HHApplicantTool
+#
+#     @abstractmethod
+#     def __call__(self, captcha_url: str) -> bool:
+#         """Этот метод обязан переопределить каждый наследник."""
+#         pass
+#
+#
+# class APICaptchaHandler(BaseAPICaptchaHandler):
+#     def __call__(self, captcha_url: str) -> bool:
+#         return (
+#             self.tool.solve_captcha_manual(captcha_url)
+#             if self.tool.manual
+#             else self.tool.solve_captcha_ai(captcha_url)
+#         )
 
 
 class HHApplicantTool(MegaTool, BaseAttrs):
@@ -133,6 +134,7 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         parser = argparse.ArgumentParser(
             description=cls.__doc__,
             formatter_class=ArgumentFormatter,
+            argument_default=argparse.SUPPRESS,
         )
         parser.add_argument(
             "-v",
@@ -236,13 +238,8 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         parser.set_defaults(operation_run=None)
         return parser
 
-    def __init__(
-        self,
-        *,
-        captcha_handler_class: Type[BaseAPICaptchaHandler] | None = None,
-    ):
+    def __post_init__(self) -> None:
         self._parser = self._create_parser()
-        self._captcha_handler_class = captcha_handler_class
 
     @staticmethod
     def _proxy_url_to_dict(proxy_url: str | None) -> dict[str, str]:
@@ -345,6 +342,13 @@ class HHApplicantTool(MegaTool, BaseAttrs):
     def storage(self) -> StorageFacade:
         return StorageFacade(self.db)
 
+    def solve_captcha(self, captcha_url: str) -> bool:
+        return (
+            self.solve_captcha_manual(captcha_url)
+            if self.manual
+            else self.solve_captcha_ai(captcha_url)
+        )
+
     @cached_property
     def api_client(self) -> api.client.ApiClient:
         config = self.config
@@ -358,9 +362,7 @@ class HHApplicantTool(MegaTool, BaseAttrs):
             delay=self.api_delay or config.get("api_delay"),
             user_agent=self.user_agent or config.get("user_agent"),
             session=self.session,
-            captcha_handler=self._captcha_handler_class(self)
-            if self._captcha_handler_class
-            else None,
+            captcha_handler=self.solve_captcha,
         )
 
     def get_me(self) -> api.datatypes.User:
@@ -413,7 +415,8 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         return any(v is not None for v in account.values())
 
     def parse_initial_state(
-        self, response: requests.Response, check_auth: bool = True
+        self,
+        response: requests.Response,
     ) -> HHLuxInitialState:
         """Возвращает декодированное содержимое <template id="HH-Lux-InitialState"></template>"""
         if response.status_code != 200:
@@ -443,8 +446,6 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         data = json.loads(raw_data)
         assert type(data) is dict
         assert "redirectConfig" in data
-        if check_auth and not self._is_authenticated(data):
-            raise Error("Авторизация истекла требуется новая!")
 
         return data
 
@@ -645,7 +646,7 @@ class HHApplicantTool(MegaTool, BaseAttrs):
 
         # Тут пока ничего не нужно как заглушка используется
         data = self.parse_initial_state(r)
-        logger.debug("Initial State Keys:  %s", ", ".join(*data))
+        logger.debug("Initial State Keys:  %s", ", ".join(data.keys()))
         assert data["hhcaptcha"]["captchaState"] == captcha_state
 
         # Страница, где каптча показывается
@@ -695,7 +696,8 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         }
 
     def _send_captcha(self, url: str, text: str, key: str, state: str) -> bool:
-        target_url: str = urljoin(url, "/account/captcha")
+        captcha_endpoint = "/account/captcha"
+        target_url: str = urljoin(url, captcha_endpoint)
 
         payload = {
             "captchaText": text,
@@ -703,41 +705,126 @@ class HHApplicantTool(MegaTool, BaseAttrs):
             "captchaState": state,
             # Я не уверен, что эти параметры обзяательные
             "backurl": "/",
-            "fialurl": target_url + "?state=" + state,
+            "fialurl": captcha_endpoint + "?state=" + state,
         }
+
+        headers = {
+            "Referer": url,
+            "X-Requested-With": "XMLHttpRequest",
+            "X-Xsrftoken": self.xsrf_token,
+            "x-hhtmfrom": "",
+            "x-hhtmsource": "account_captcha",
+        }
+
+        logger.debug(
+            "session.post(url=%r, params=%r, headers=%r)",
+            target_url,
+            payload,
+            headers,
+        )
 
         # Там зачем-то payload передается и в теле запроса и в query string
         # Скорее всего его можно передать только в теле
         r = self.session.post(
             target_url,
             params=payload,
-            data=payload,
-            headers={
-                "Referer": url,
-                "X-Requested-With": "XMLHttpRequest",
-                "X-Xsrftoken": self.xsrf_token,
-                "x-hhtmfrom": "",
-                "x-hhtmsource": "account_captcha",
-            },
+            headers=headers,
         )
 
         logger.debug(
             "Код ответа сервера на отправку текста каптчи: %d", r.status_code
         )
-        return r.status_code == 200
+
+        # При вводе неверной капчи показывает Forbidden
+        return r.status_code != 403
+
+    def prompt_captcha_tk(self, image_data: bytes) -> str:
+        """Показывает капчу в окне Tk и возвращает введённый текст.
+
+        Если окно закрыли, не введя текст, бросает KeyboardInterrupt,
+        чтобы solve_captcha_manual корректно завершился.
+        """
+        import base64
+        import tkinter as tk
+        from tkinter import ttk
+
+        placeholder = "Введите текст с картинки"
+        result: list[str] = []
+
+        root = tk.Tk()
+        root.title("Капча")
+        root.resizable(False, False)
+        root.attributes("-topmost", True)
+
+        frame = ttk.Frame(root, padding=12)
+        frame.pack()
+
+        # Ряд 1: картинка
+        photo = tk.PhotoImage(data=base64.b64encode(image_data))
+        image_label = ttk.Label(frame, image=photo)
+        image_label.image = photo  # держим ссылку, иначе картинку удалит GC
+        image_label.pack(pady=(0, 8))
+
+        # Ряд 2: поле ввода с плейсхолдером
+        entry = ttk.Entry(frame, width=30, justify="center", foreground="grey")
+        entry.insert(0, placeholder)
+        entry.pack(fill="x", pady=(0, 8))
+
+        def on_focus_in(_event):
+            if str(entry.cget("foreground")) == "grey":
+                entry.delete(0, "end")
+                entry.configure(foreground="black")
+
+        def on_focus_out(_event):
+            if not entry.get():
+                entry.insert(0, placeholder)
+                entry.configure(foreground="grey")
+
+        entry.bind("<FocusIn>", on_focus_in)
+        entry.bind("<FocusOut>", on_focus_out)
+
+        # Ряд 3: кнопка
+        def submit(_event=None):
+            text = entry.get().strip()
+            if not text or str(entry.cget("foreground")) == "grey":
+                return  # пусто или остался плейсхолдер
+            result.append(text)
+            root.destroy()
+
+        ttk.Button(frame, text="Отправить", command=submit).pack(fill="x")
+        root.bind("<Return>", submit)
+        root.bind("<Escape>", lambda _e: root.destroy())
+
+        # Центрируем окно на экране
+        root.update_idletasks()
+        x = (root.winfo_screenwidth() - root.winfo_width()) // 2
+        y = (root.winfo_screenheight() - root.winfo_height()) // 2
+        root.geometry(f"+{x}+{y}")
+
+        root.focus_force()
+        root.mainloop()
+
+        if not result:
+            raise KeyboardInterrupt  # окно закрыли без ввода
+        return result[0]
 
     def solve_captcha_manual(self, captcha_url: str) -> bool:
-        assert self.use_kitty or self.use_sixel, (
-            "Для ручного решения каптчи нужно использовать один из флагов: --use-sixel/--use-kitty"
-        )
+        # assert self.use_kitty or self.use_sixel, (
+        #     "Для ручного решения каптчи нужно использовать один из флагов: --use-sixel/--use-kitty"
+        # )
         try:
             while True:
                 captcha = self._fetch_captcha(captcha_url, self.captcha_lang)
-                if self.use_kitty:
-                    print_kitty_image(captcha["image_data"])
+
+                if self.use_kitty or self.use_sixel:
+                    if self.use_kitty:
+                        print_kitty_image(captcha["image_data"])
+                    else:
+                        print_sixel_image(captcha["image_data"])
+                    text = input("Введите текст с картинки выше: ")
                 else:
-                    print_sixel_image(captcha["image_data"])
-                text = input("Введите текст с картинки выше: ")
+                    text = self.prompt_captcha_tk(captcha["image_data"])
+
                 if self._send_captcha(
                     captcha["url"], text, captcha["key"], captcha["state"]
                 ):
@@ -769,26 +856,31 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         logger.warning("Can't solve captcha for %s", captcha_url)
         return False
 
-    def run(self, argv: Sequence[str] | None = None) -> None | int:
-        args = self._parser.parse_args(argv, namespace=BaseNamespace())
-        self._assign_args(args)
-
-        # Создаем путь до конфига
+    def setup_logging(
+        self,
+        verbosity: int | None = None,
+        log_file: str | Path | None = None,
+    ):
+        if verbosity is not None:
+            self.verbosity = verbosity
+        if log_file is not None:
+            self.log_file = log_file
+        # Создаем путь до директории с логами
         self.config_path.mkdir(
             parents=True,
             exist_ok=True,
         )
-
         verbosity_level = max(
-            logging.DEBUG,
-            logging.WARNING - self.verbosity * 10,
+            logging.DEBUG, logging.WARNING - self.verbosity * 10
         )
-
         setup_logger(logger, verbosity_level, self.log_file)
-
-        logger.debug("Путь до профиля: %s", self.config_path)
-
         utils.setup_terminal()
+
+    def run(self, argv: Sequence[str] | None = None) -> None | int:
+        args = self._parser.parse_args(argv, namespace=BaseNamespace())
+        self._assign_args(args)
+        self.setup_logging()
+        logger.debug("Путь до профиля: %s", self.config_path)
 
         try:
             if not self.operation_run:
