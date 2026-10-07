@@ -10,10 +10,10 @@ from typing import TYPE_CHECKING
 
 from prettytable import PrettyTable
 
-from ..main import BaseNamespace, BaseOperation
+from ..tool import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 try:
     import readline

@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from ..main import BaseNamespace, BaseOperation
+from ..tool import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 logger = logging.getLogger(__package__)
 

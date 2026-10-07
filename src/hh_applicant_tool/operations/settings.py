@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING
 from prettytable import PrettyTable
 
 from .. import utils
-from ..main import BaseNamespace, BaseOperation
+from ..tool import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 
 MISSING = type("Missing", (), {"__str__": lambda self: "Не установлено"})()

@@ -7,11 +7,11 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
 from ..api import ApiError
-from ..main import BaseNamespace, BaseOperation
+from ..tool import BaseNamespace, BaseOperation
 from ..utils import json
 
 if TYPE_CHECKING:
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 
 logger = logging.getLogger(__package__)

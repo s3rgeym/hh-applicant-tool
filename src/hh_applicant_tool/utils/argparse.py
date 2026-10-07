@@ -1,4 +1,12 @@
+import argparse
 import os
+
+
+class ArgumentFormatter(
+    argparse.ArgumentDefaultsHelpFormatter,
+    argparse.RawDescriptionHelpFormatter,
+):
+    pass
 
 
 def str_or_file(v: str | None) -> str | None:

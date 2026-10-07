@@ -1,5 +1,5 @@
-import hh_applicant_tool.main
+import hh_applicant_tool
 
 # Передаем аргументы как в команду
-tool = hh_applicant_tool.main.HHApplicantTool(["-vv"])
+tool = hh_applicant_tool.HHApplicantTool()
 print(tool.api_client.get("/me"))

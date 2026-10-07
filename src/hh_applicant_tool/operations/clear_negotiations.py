@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING
 import requests
 
 from ..api.errors import ApiError
-from ..main import BaseNamespace, BaseOperation
+from ..tool import BaseNamespace, BaseOperation
 from ..utils.date import parse_api_datetime
 
 if TYPE_CHECKING:
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 logger = logging.getLogger(__package__)
 

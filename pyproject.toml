@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "hh-applicant-tool"
-version = "1.9.7"
+version = "1.9.11"
 description = "HH-Applicant-Tool: An automation utility for HeadHunter (hh.ru) designed to streamline the job search process by auto-applying to relevant vacancies and periodically refreshing resumes to stay at the top of recruiter searches."
 homepage = "https://github.com/s3rgeym/hh-applicant-tool"
 repository = "https://github.com/s3rgeym/hh-applicant-tool"
@@ -48,7 +48,7 @@ pytest = "^7.2.2"
 ruff = "^0.14.9"
 
 [tool.poetry.scripts]
-hh-applicant-tool = "hh_applicant_tool.main:main"
+hh-applicant-tool = "hh_applicant_tool.__main__:main"
 
 # Он заебал агриться на старый код, который был написан до появления агрессивной
 # проверки типов в pyright

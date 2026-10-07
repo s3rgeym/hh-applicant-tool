@@ -17,11 +17,11 @@ except ImportError as exc:
 else:
     _PLAYWRIGHT_IMPORT_ERROR = None
 
-from ..main import BaseOperation
-from ..utils.terminal import print_kitty_image, print_sixel_mage
+from ..tool import BaseOperation
+from ..utils.terminal import print_kitty_image, print_sixel_image
 
 if TYPE_CHECKING:
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 
 HH_ANDROID_SCHEME = "hhandroid"
@@ -62,11 +62,11 @@ class Operation(BaseOperation):
 
     @property
     def is_headless(self) -> bool:
-        return not self._args.no_headless and self.is_automated
+        return not self._args.no_headless
 
     @property
     def is_automated(self) -> bool:
-        return not self._args.manual
+        return self.is_headless
 
     @property
     def selector_timeout(self) -> int | None:
@@ -80,23 +80,6 @@ class Operation(BaseOperation):
             "-n",
             action="store_true",
             help="Показать окно браузера",
-        )
-        parser.add_argument(
-            "-m", "--manual", action="store_true", help="Ручной режим ввода"
-        )
-        parser.add_argument(
-            "-k",
-            "--use-kitty",
-            "--kitty",
-            action="store_true",
-            help="Вывод капчи в kitty",
-        )
-        parser.add_argument(
-            "-s",
-            "--use-sixel",
-            "--sixel",
-            action="store_true",
-            help="Вывод капчи в sixel",
         )
 
     def run(self, tool: HHApplicantTool, args) -> int | None:
@@ -198,9 +181,7 @@ class Operation(BaseOperation):
                         await self._onetime_code_login(page)
                 else:
                     print(
-                        "Откройте окно Chromium и войдите на hh.ru вручную.\n"
-                        "После успешного входа утилита перехватит OAuth-код "
-                        "и закроет браузер."
+                        "Войдите в аккаунт, после успешной авторизации окно закроется само."
                     )
 
                 logger.debug("Ожидание OAuth-кода...")
@@ -314,21 +295,30 @@ class Operation(BaseOperation):
             return
 
         args = self._args
-        if not (args.use_kitty or args.use_sixel):
-            raise RuntimeError(
-                "Требуется ввод капчи! Используйте --kitty или --sixel."
-            )
-
         img_bytes = await captcha_element.screenshot()
-        print("\n[!] Требуется ввод капчи.")
-        if args.use_kitty:
-            print_kitty_image(img_bytes)
-        elif args.use_sixel:
-            print_sixel_mage(img_bytes)
 
-        captcha_text = (
-            await asyncio.to_thread(input, "Введите текст с картинки: ")
-        ).strip()
+        if args.manual:
+            if not (args.use_kitty or args.use_sixel):
+                raise RuntimeError(
+                    "Требуется ввод капчи! Используйте --kitty или --sixel."
+                )
+
+            print("\n[!] Требуется ввод капчи.")
+            if args.use_kitty:
+                print_kitty_image(img_bytes)
+            elif args.use_sixel:
+                print_sixel_image(img_bytes)
+
+            captcha_text = (
+                await asyncio.to_thread(input, "Введите текст с картинки: ")
+            ).strip()
+        else:
+            captcha_text = await asyncio.to_thread(
+                self._tool.captcha_ai.recognize_text,
+                img_bytes,
+            )
+            logger.debug("Распознанный текст CAPTCHA: %s", captcha_text)
+
         await page.fill(self.SEL_CAPTCHA_INPUT, captcha_text)
         await page.press(self.SEL_CAPTCHA_INPUT, "Enter")
         logger.debug("Капча отправлена")

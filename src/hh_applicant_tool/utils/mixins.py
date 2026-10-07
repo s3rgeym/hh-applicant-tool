@@ -4,13 +4,13 @@ from datetime import datetime, timedelta
 from functools import cache
 from importlib.metadata import version
 from logging import getLogger
-from typing import TYPE_CHECKING, Literal
 from pathlib import Path
+from typing import TYPE_CHECKING, Literal
 
 import requests
 
 if TYPE_CHECKING:
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 log = getLogger(__package__)
 
@@ -62,7 +62,7 @@ class MegaTool(VersionChecker):
     def is_docker(self) -> bool:
         """Определяет запущена ли утилита внутри docker"""
         return Path("/.dockerenv").exists()
-    
+
     def _check_system(self: HHApplicantTool):
         if not self.storage.settings.get_value("disable_version_check", False):
             self._check_version()

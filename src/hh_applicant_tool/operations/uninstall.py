@@ -6,10 +6,10 @@ import sys
 from runpy import run_module
 from typing import TYPE_CHECKING
 
-from ..main import BaseNamespace, BaseOperation
+from ..tool import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 
 logger = logging.getLogger(__package__)
@@ -22,5 +22,9 @@ class Operation(BaseOperation):
         pass
 
     def run(self, tool: HHApplicantTool, args: BaseNamespace) -> None:
+        orig_argv = sys.argv
         sys.argv = ["playwright", "uninstall", "chromium"]
-        run_module("playwright", run_name="__main__")
+        try:
+            run_module("playwright", run_name="__main__")
+        finally:
+            sys.argv = orig_argv

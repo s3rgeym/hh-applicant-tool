@@ -15,10 +15,10 @@ from typing import TYPE_CHECKING, Any
 
 from hh_applicant_tool.api.errors import ApiError
 
-from ..main import BaseNamespace, BaseOperation
+from ..tool import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:
-    from ..main import HHApplicantTool
+    from ..tool import HHApplicantTool
 
 
 logger = logging.getLogger(__package__)
@@ -133,7 +133,7 @@ class Operation(BaseOperation):
 
     @cached_property
     def chat_url(self) -> str:
-        rc = self.tool.get_redirect_config("https://hh.ru/applicant/my_resumes")
+        rc = self.tool.fetch_initial_state("https://hh.ru/applicant/my_resumes")
         return rc["config"]["externalMicroFrontendHosts"]["chatik"]
 
     def get_chats(

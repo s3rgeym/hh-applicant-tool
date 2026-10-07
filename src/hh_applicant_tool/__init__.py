@@ -1,1 +1,2 @@
-from .main import HHApplicantTool
+from .main import main
+from .tool import HHApplicantTool
