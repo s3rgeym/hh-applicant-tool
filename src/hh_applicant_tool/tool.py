@@ -18,7 +18,7 @@ from itertools import count
 from os import getenv
 from pathlib import Path
 from pkgutil import iter_modules
-from typing import Any, Callable, Iterable, TypedDict
+from typing import Any, Callable, ClassVar, Iterable, TypedDict
 from urllib.parse import parse_qsl, urljoin, urlsplit
 
 import requests
@@ -347,7 +347,11 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         return (
             self.solve_captcha_manual(captcha_url)
             if self.manual
-            else self.solve_captcha_ai(captcha_url)
+            else (
+                self.solve_captcha_ai(captcha_url)
+                if self.has_openai_config()
+                else False
+            )
         )
 
     @cached_property
@@ -493,57 +497,64 @@ class HHApplicantTool(MegaTool, BaseAttrs):
             purpose="captcha",
         )
 
+    OPENAI_ADDITIONAL_SECTIONS: ClassVar[list[str]] = [
+        'cover_letter',
+        'vacancy_filter',
+        'captcha',
+        'chat',
+    ]
+
+    def has_openai_config(self) -> bool:
+        if 'openai' in self.config:
+            return True
+        return any(
+            key.startswith('openai_') and key[len('openai_'):] in self.OPENAI_ADDITIONAL_SECTIONS
+            for key in self.config
+        )
+    
     def get_ai_client(
         self,
         system_prompt: str,
         purpose: str | None = None,
     ) -> ai.ChatOpenAI:
-        config_sections = {
-            "cover_letter": "openai_cover_letter",
-            "vacancy_filter": "openai_vacancy_filter",
-            "captcha": "openai_captcha",
-            "chat": "openai_chat",
-        }
-
         c = self.config.get("openai", {})
-
+        section_name: str | None = None
+    
         if purpose is not None:
-            if purpose not in config_sections:
+            if purpose not in self.OPENAI_ADDITIONAL_SECTIONS:
                 raise ValueError(
-                    f"Неизвестная цель AI: {purpose}. "
-                    f"Допустимые значения: {list(config_sections.keys())}"
+                    f"Неизвестная название доп секции `openai`: {purpose}. "
+                    f"Допустимые значения: {self.OPENAI_ADDITIONAL_SECTIONS}"
                 )
-
-            purpose_config = self.config.get(config_sections[purpose], {})
+    
+            section_name = f"openai_{purpose}"
+            purpose_config = self.config.get(section_name, {})
             # Переписываем значения openai
             c = {**c, **purpose_config}
-
-        api_key = c.get("api_key")
-        if not api_key:
+    
+        # Подсказка для сообщений об ошибках: " или 'openai_xxx'." / "."
+        or_section = f" или '{section_name}'" if section_name else ""
+    
+        if (api_key := c.get("api_key")) is None:
             raise ValueError(
-                "API-ключ не задан. Укажите 'api_key' в секции 'openai'"
-                + (f" или '{config_sections[purpose]}'." if purpose else ".")
+                f"API-ключ не задан. Укажите 'api_key' в секции 'openai'{or_section}."
             )
-
-        base_url = c.get("base_url")
-        if not base_url:
+    
+        if (base_url := c.get("base_url")) is None:
             raise ValueError(
-                "Параметр 'base_url' не задан. Укажите его в секции 'openai'"
-                + (f" или '{config_sections[purpose]}'." if purpose else ".")
+                f"Параметр 'base_url' не задан. Укажите его в секции 'openai'{or_section}."
             )
-
-        model = c.get("model")
-        if not model:
-            logger.warning(
+    
+        if (model := c.get("model")) is None:
+            raise ValueError(
                 "Параметр 'model' не задан в конфигурации."
                 + (
-                    f" Секции 'openai' и '{config_sections[purpose]}' не содержат "
-                    "этого параметра."
-                    if purpose
+                    f" Секции 'openai' и '{section_name}' не содержат этого параметра."
+                    if section_name
                     else " Секция 'openai' не содержит этого параметра."
                 )
             )
-
+    
         return ai.ChatOpenAI(
             api_key=api_key,
             model=model,
@@ -564,7 +575,7 @@ class HHApplicantTool(MegaTool, BaseAttrs):
             ),
             session=self.openai_session,
         )
-
+    
     # TODO: вынести в миксин какой
     def get_cookie(self, name: str) -> str | None:
         """Значение cookie по имени из jar на базе {CookieJar} (нет get_dict)."""
@@ -573,6 +584,7 @@ class HHApplicantTool(MegaTool, BaseAttrs):
             None,
         )
 
+    # Удалить
     def _extract_xsrf_token(self, content: str) -> str:
         # hh.ru отдает этот блок с HTML-заэкранированными кавычками
         # (внутри HTML-атрибута), поэтому сначала разэкранируем всю страницу
@@ -581,30 +593,9 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         if not tokens:
             raise ValueError("xsrf token not found")
 
-        # На странице hh.ru может быть несколько xsrfToken. Первый из них —
-        # случайное значение, которое ротируется при каждой загрузке и НЕ
-        # соответствует cookie `_xsrf`, из-за чего POST на
-        # /applicant/vacancy_response/popup возвращал 403 (CSRF mismatch).
-        # Сервер сверяет токен именно с cookie `_xsrf`, поэтому отдаем
-        # совпадающее значение, а не первое вхождение.
-        cookie_xsrf = self.get_cookie("_xsrf")
-        if cookie_xsrf and cookie_xsrf in tokens:
-            return cookie_xsrf
-        return tokens[0]
-
-    def _get_xsrf_token(self, url: str | None = None) -> str:
-        """Возвращает XSRF-токен, который выдается на сессию."""
-        # Токен, который сервер реально валидирует, лежит в cookie `_xsrf`.
-        # Если cookie уже есть — используем его и не делаем лишний GET.
-        cookie_xsrf = self.get_cookie("_xsrf")
-        if cookie_xsrf:
-            return cookie_xsrf
-        r = self.session.get(url or "https://hh.ru/")
-        return self._extract_xsrf_token(r.text)
-
     @cached_property
-    def xsrf_token(self) -> str:
-        return self._get_xsrf_token()
+    def xsrf_token(self) -> str | None:
+        return self.get_cookie("_xsrf")
 
     @property
     def is_logged_in(self) -> bool:
@@ -824,7 +815,10 @@ class HHApplicantTool(MegaTool, BaseAttrs):
                         print_sixel_image(captcha["image_data"])
                     text = input("Введите текст с картинки выше: ")
                 else:
-                    text = self.prompt_captcha_tk(captcha["image_data"])
+                    try:
+                        text = self.prompt_captcha_tk(captcha["image_data"])
+                    except ImportError:
+                        return False
 
                 if self._send_captcha(
                     captcha["url"], text, captcha["key"], captcha["state"]
