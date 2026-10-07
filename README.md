@@ -735,6 +735,16 @@ npx @redocly/cli preview -d docs/hhapi
 
 Некоторые модели плохо распознают русский язык, английский для можно установить с помощью передачи `--captcha-lang EN`.
 
+<figure>
+  <img
+    width="406"
+    height="345"
+    alt="Окно с полем для ввода капчи"
+    src="https://github.com/user-attachments/assets/3eb291ef-e8b4-40f2-abc0-eca7dd85be46"
+  />
+  <figcaption>Диалог для ввода капчи</figcaption>
+</figure>
+
 ---
 
 ## Использование AI
