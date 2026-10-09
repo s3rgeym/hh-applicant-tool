@@ -321,6 +321,7 @@ class HHApplicantTool(MegaTool, BaseAttrs):
 
         return session
 
+    @staticmethod
     def get_tool_useragent() -> str:
         return f"{PACKAGE_NAME}/{get_package_version()} (+{REPO_URL})"
 
