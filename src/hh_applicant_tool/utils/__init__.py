@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..api.user_agent import generate_android_useragent
 from .attrdict import AttrDict
-from .config import Config, get_config_path
+from .config import PACKAGE_NAME, Config, get_config_path
 from .date import (
     DATETIME_FORMAT,
     parse_api_datetime,
@@ -11,6 +11,9 @@ from .date import (
 from .misc import calc_hash, print_err
 from .string import bool2str, list2str, rand_text, shorten
 from .terminal import setup_terminal
+
+# TODO: добавить остальное или лучше удалить все
+
 
 # Add all public symbols to __all__ for consistent import behavior
 __all__ = [

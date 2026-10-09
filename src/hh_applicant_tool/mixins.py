@@ -1,27 +1,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from functools import cache
-from importlib.metadata import version
 from logging import getLogger
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import requests
 
+from .utils.package import get_package_version, parse_version
+
 if TYPE_CHECKING:
-    from ..tool import HHApplicantTool
+    from .tool import HHApplicantTool
 
 log = getLogger(__package__)
-
-
-def parse_version(v: str) -> tuple[int, int, int]:
-    return tuple(map(int, v.split(".")))
-
-
-@cache
-def get_package_version() -> str | None:
-    return version("hh-applicant-tool")
 
 
 class VersionChecker:

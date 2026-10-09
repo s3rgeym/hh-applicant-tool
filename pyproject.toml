@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "hh-applicant-tool"
-version = "1.9.11"
+version = "2.0.0"
 description = "HH-Applicant-Tool: An automation utility for HeadHunter (hh.ru) designed to streamline the job search process by auto-applying to relevant vacancies and periodically refreshing resumes to stay at the top of recruiter searches."
 homepage = "https://github.com/s3rgeym/hh-applicant-tool"
 repository = "https://github.com/s3rgeym/hh-applicant-tool"
@@ -22,22 +22,16 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-# Он не работает или устаревший
-# libsixel-python = { version = "^0.5.0", optional = true }
-pillow = { version = "^12.1.0", optional = true }
-# poetry add playwright --optional
-playwright = { version = ">=1.57.0", optional = true }
-prettytable = "^3.6.0"
+cryptography = "^50.0.2"
+pillow = "^12.3.0"
 python = "^3.11"
 pywebview = { version = ">=5.0", optional = true }
 requests = { extras = ["socks"], version = "^2.32.3" }
+tomli-w = "^1.2.0"
+brotli = "^1.2.0"
 
-# poetry install --with playwright,pillow
-# poetry install -E ui
 [tool.poetry.extras]
-# sixel = ["libsixel-python", "pillow"]
-pillow = ["pillow"]
-playwright = ["playwright"]
+# poetry install -E ui
 ui = ["pywebview"]
 
 [tool.poetry.group.dev.dependencies]
@@ -48,7 +42,7 @@ pytest = "^7.2.2"
 ruff = "^0.14.9"
 
 [tool.poetry.scripts]
-hh-applicant-tool = "hh_applicant_tool.__main__:main"
+hh-applicant-tool = "hh_applicant_tool.main:main"
 
 # Он заебал агриться на старый код, который был написан до появления агрессивной
 # проверки типов в pyright

@@ -87,3 +87,4 @@ CLAUDE.md
 uv.lock
 poetry.lock
 test_captcha.py
+direct_login.py

@@ -133,7 +133,9 @@ class Operation(BaseOperation):
 
     @cached_property
     def chat_url(self) -> str:
-        rc = self.tool.fetch_initial_state("https://hh.ru/applicant/my_resumes")
+        rc, _ = self.tool.fetch_initial_state(
+            "https://hh.ru/applicant/my_resumes"
+        )
         return rc["config"]["externalMicroFrontendHosts"]["chatik"]
 
     def get_chats(

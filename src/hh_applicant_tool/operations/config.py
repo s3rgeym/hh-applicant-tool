@@ -27,9 +27,9 @@ class Namespace(BaseNamespace):
 
 def get_value(data: dict[str, Any], path: str) -> Any:
     for key in path.split("."):
-        if isinstance(data, dict):
+        try:
             data = data.get(key)
-        else:
+        except AttributeError:
             return None
     return data
 

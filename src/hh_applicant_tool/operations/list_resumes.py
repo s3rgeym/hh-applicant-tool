@@ -4,11 +4,10 @@ import argparse
 import logging
 from typing import TYPE_CHECKING
 
-from prettytable import PrettyTable
-
 from ..api.datatypes import PaginatedItems
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.string import shorten
+from ..utils.table import print_table
 
 if TYPE_CHECKING:
     from ..api import datatypes
@@ -35,10 +34,8 @@ class Operation(BaseOperation):
         logger.debug(resumes)
         tool.storage.resumes.save_batch(resumes)
 
-        t = PrettyTable(
-            field_names=["ID", "Название", "Статус"], align="l", valign="t"
-        )
-        t.add_rows(
+        print_table(
+            ["ID", "Название", "Статус"],
             [
                 (
                     x["id"],
@@ -46,6 +43,5 @@ class Operation(BaseOperation):
                     x["status"]["name"].title(),
                 )
                 for x in resumes
-            ]
+            ],
         )
-        print(t)

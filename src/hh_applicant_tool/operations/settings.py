@@ -5,16 +5,16 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from prettytable import PrettyTable
-
 from .. import utils
 from ..tool import BaseNamespace, BaseOperation
+from ..utils.table import print_table
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
 
 MISSING = type("Missing", (), {"__str__": lambda self: "Не установлено"})()
+MAX_VALUE_WIDTH = 80
 
 
 logger = logging.getLogger(__package__)
@@ -33,6 +33,21 @@ def parse_value(v):
         return v
 
 
+def _format_value(value: object) -> str:
+    """Короткое однострочное представление значения для таблицы."""
+    if isinstance(value, str):
+        text = value
+    else:
+        try:
+            text = json.dumps(value, ensure_ascii=False)
+        except (TypeError, ValueError):
+            text = str(value)
+    text = text.replace("\n", " ")
+    if len(text) > MAX_VALUE_WIDTH:
+        text = text[: MAX_VALUE_WIDTH - 1] + "…"
+    return text
+
+
 class Operation(BaseOperation):
     """Просмотр и управление настройками"""
 
@@ -43,7 +58,7 @@ class Operation(BaseOperation):
             "-d",
             "--delete",
             action="store_true",
-            help="Удалить настройку по ключу либо удалить все насйтроки, если ключ не передан",
+            help="Удалить настройку по ключу либо удалить все настройки, если ключ не передан",
         )
         parser.add_argument(
             "key", nargs="?", help="Ключ настройки", default=MISSING
@@ -73,22 +88,20 @@ class Operation(BaseOperation):
             # Get value
             value = settings.get_value(args.key, MISSING)
             if value is not MISSING:
-                # print(type(value).__name__, value)
                 print(value)
             else:
                 print(f"⚠️ Настройка '{args.key}' не найдена")
         else:
             # List all settings
-            settings = settings.find()
-            t = PrettyTable(field_names=["Ключ", "Тип", "Значение"], align="l")
-            for setting in settings:
-                if setting.key.startswith("_"):
-                    continue
-                t.add_row(
-                    [
+            print_table(
+                ["Ключ", "Тип", "Значение"],
+                [
+                    (
                         setting.key,
                         type(setting.value).__name__,
-                        setting.value,
-                    ]
-                )
-            print(t)
+                        _format_value(setting.value),
+                    )
+                    for setting in settings.find()
+                    if not setting.key.startswith("_")
+                ],
+            )

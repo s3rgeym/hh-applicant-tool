@@ -33,3 +33,4 @@ class Operation(BaseOperation):
             tool.api_client.delete("/oauth/token")
         except ApiError as ex:
             logger.error(f"Ошибка при выходе из профиля: {ex}")
+        tool.session.cookies.clear()
