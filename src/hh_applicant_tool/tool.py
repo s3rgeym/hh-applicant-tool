@@ -474,7 +474,7 @@ class HHApplicantTool(MegaTool, BaseAttrs):
 
         return data
 
-    def fetch_initial_state(self, url: str) -> HHLuxInitialState:
+    def get_initial_state(self, url: str) -> HHLuxInitialState:
         r = self.session.get(url)
         logger.debug("check initial state: %s %d", r.url, r.status_code)
         return self.parse_initial_state(r)
