@@ -334,7 +334,7 @@ class ApiClient(BaseClient):
         # TODO: добавить класс для ошибок типа AccessTokenExpired
         except errors.Forbidden as ex:
             # тут при получении 403 происходит обновление access token, если
-            # задан и не протуш refresh
+            # задан и не протух refresh
             if not self.is_access_expired or not self.refresh_token:
                 raise ex
             logger.info("try to refresh access_token")
