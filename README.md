@@ -929,12 +929,7 @@ from = "Иван Иванов <your_login@yandex.ru>"
 ```python
 from hh_applicant_tool import HHApplicantTool
 
-tool = HHApplicantTool([
-    # Передаем глобальные настройки как обычно
-    "--proxy-url", "socks5://localhost:1080",
-    "--config-path", "/path/to/config"
-])
-
+tool = HHApplicantTool()
 print(tool.api_client.get('/me'))
 
 # Какую-то вспомогательную информацию можно сохранять в настройках
@@ -950,10 +945,28 @@ tool.save_token()
 Команды тоже можно вызывать:
 
 ```python
->>> from hh_applicant_tool import HHApplicantTool(['auth']).run()
-...
-📨 Код был отправлен. Проверьте почту или SMS.
-📩 Введите полученный код:
+>>> from hh_applicant_tool import HHApplicantTool
+>>> HHApplicantTool().run(["auth", "v.pupkin@mail.ru"])
+```
+
+Если же утилита интегрируется в графические приложения, то как правило должна быть возможность отменить текущую операцию:
+
+```python
+import multiprocessing as mp
+
+from hh_applicant_tool import HHApplicantTool
+
+def worker(argv: list[str]):
+    HHApplicantTool().run(argv)
+
+p = mp.Process(target=worker, args=(['apply-vacancies', ...],))
+p.start()
+
+# Убили процесс
+p.terminate()
+
+# Ждем пока не помрет
+p.join()
 ```
 
 ---

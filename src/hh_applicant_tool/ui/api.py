@@ -8,8 +8,8 @@ import threading
 from contextlib import redirect_stdout
 from typing import TYPE_CHECKING, Any
 
-from .presets import PresetValidationError, PresetsManager
-from .profiles import ProfileValidationError, ProfilesManager
+from .presets import PresetsManager, PresetValidationError
+from .profiles import ProfilesManager, ProfileValidationError
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
@@ -41,11 +41,7 @@ def _mask_secrets(obj: Any) -> Any:
 
 def _strip_masked(obj: Any) -> Any:
     if isinstance(obj, dict):
-        return {
-            k: _strip_masked(v)
-            for k, v in obj.items()
-            if v != MASK_VALUE
-        }
+        return {k: _strip_masked(v) for k, v in obj.items() if v != MASK_VALUE}
     if isinstance(obj, list):
         return [_strip_masked(x) for x in obj]
     return obj
@@ -125,7 +121,10 @@ class Api:
             return {"status": "error", "message": str(e)}
         except Exception as e:
             logger.error("switch_profile error: %s", e)
-            return {"status": "error", "message": "Не удалось переключить профиль"}
+            return {
+                "status": "error",
+                "message": "Не удалось переключить профиль",
+            }
 
     def create_profile(self, profile_id: str) -> dict[str, str]:
         if error := self._profile_change_error():
@@ -163,7 +162,9 @@ class Api:
             logger.error("delete_profile error: %s", e)
             return {"status": "error", "message": "Не удалось удалить профиль"}
 
-    def _send_progress(self, current: int, total: int, message: str = "") -> None:
+    def _send_progress(
+        self, current: int, total: int, message: str = ""
+    ) -> None:
         if self._window:
             try:
                 safe_msg = json.dumps(message)
@@ -186,7 +187,9 @@ class Api:
 
     def _is_invalid_grant(self, exc: BaseException) -> bool:
         msg = str(exc).lower()
-        return "invalid_grant" in msg or "token has already been refreshed" in msg
+        return (
+            "invalid_grant" in msg or "token has already been refreshed" in msg
+        )
 
     def _clear_token(self) -> None:
         try:
@@ -240,7 +243,9 @@ class Api:
 
         self._auth_running = True
         self._clear_token()
-        self._send_auth_event("started", "Запуск браузера для входа на hh.ru...")
+        self._send_auth_event(
+            "started", "Запуск браузера для входа на hh.ru..."
+        )
 
         def _worker() -> None:
             event = "error"
@@ -312,7 +317,10 @@ class Api:
             return {"status": "ok"}
         except Exception as e:
             logger.error("save_config error: %s", e)
-            return {"status": "error", "message": "Ошибка сохранения конфигурации"}
+            return {
+                "status": "error",
+                "message": "Ошибка сохранения конфигурации",
+            }
 
     def list_presets(self) -> list[str]:
         return self._presets.list_names()
@@ -362,10 +370,7 @@ class Api:
                 """
             )
             cols = [d[0] for d in cur.description]
-            return [
-                dict(zip(cols, row, strict=True))
-                for row in cur.fetchall()
-            ]
+            return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
         except Exception as e:
             logger.error("get_negotiations_from_db error: %s", e)
             return []
@@ -395,8 +400,7 @@ class Api:
             stats["by_state"] = dict(cur.fetchall())
 
             cur = conn.execute(
-                "SELECT reason, count(*) FROM skipped_vacancies"
-                " GROUP BY reason"
+                "SELECT reason, count(*) FROM skipped_vacancies GROUP BY reason"
             )
             stats["skipped_by_reason"] = dict(cur.fetchall())
 
@@ -416,12 +420,8 @@ class Api:
             )
             stats["daily_skipped"] = dict(cur.fetchall())
 
-            stats["total_negotiations"] = sum(
-                stats["by_state"].values()
-            )
-            stats["total_skipped"] = sum(
-                stats["skipped_by_reason"].values()
-            )
+            stats["total_negotiations"] = sum(stats["by_state"].values())
+            stats["total_skipped"] = sum(stats["skipped_by_reason"].values())
 
             return stats
         except Exception as e:
@@ -472,6 +472,8 @@ class Api:
                     "status": "error",
                     "message": "Неверные параметры поиска",
                 }
+
+            # Это неправильно совершенно
             args._cancel_event = cancel_event
             op._cancel_event = cancel_event
 
@@ -523,12 +525,15 @@ class Api:
 
     def get_areas(self) -> list[dict]:
         try:
+
             def flatten(nodes: list, result: list, depth: int = 0) -> None:
                 for node in nodes:
-                    result.append({
-                        "id": node["id"],
-                        "name": ("  " * depth) + node["name"],
-                    })
+                    result.append(
+                        {
+                            "id": node["id"],
+                            "name": ("  " * depth) + node["name"],
+                        }
+                    )
                     if node.get("areas"):
                         flatten(node["areas"], result, depth + 1)
 

@@ -17,7 +17,7 @@ from itertools import count
 from os import getenv
 from pathlib import Path
 from pkgutil import iter_modules
-from typing import Any, Callable, ClassVar, Iterable, NamedTuple, TypedDict
+from typing import Any, Callable, Iterable, NamedTuple, TypedDict
 from urllib.parse import parse_qs, urljoin, urlsplit
 
 import requests
@@ -99,7 +99,6 @@ class BaseAttrs:
     use_kitty: bool = False
     use_ai: bool = False
     captcha_lang: str = DEFAULT_CAPTCHA_LANGUAGE
-    captcha_attempts: int = 3
     openai_proxy_url: str | None = None
     openai_timeout: float | None = None
     openai_connect_timeout: float | None = None
@@ -518,21 +517,10 @@ class HHApplicantTool(MegaTool, BaseAttrs):
             purpose="captcha",
         )
 
-    OPENAI_ADDITIONAL_SECTIONS: ClassVar[list[str]] = [
-        "cover_letter",
-        "vacancy_filter",
-        "captcha",
-        "chat",
-    ]
-
     def has_openai_config(self) -> bool:
         if "openai" in self.config:
             return True
-        return any(
-            key.startswith("openai_")
-            and key[len("openai_") :] in self.OPENAI_ADDITIONAL_SECTIONS
-            for key in self.config
-        )
+        return any(key.startswith("openai_") for key in self.config)
 
     def get_ai_client(
         self,
@@ -549,12 +537,6 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         section_name: str | None = None
 
         if purpose is not None:
-            if purpose not in self.OPENAI_ADDITIONAL_SECTIONS:
-                raise ValueError(
-                    f"Неизвестная название доп секции `openai`: {purpose}. "
-                    f"Допустимые значения: {self.OPENAI_ADDITIONAL_SECTIONS}"
-                )
-
             section_name = f"openai_{purpose}"
             purpose_config = self.config.get(section_name, {})
             # Переписываем значения openai
@@ -929,6 +911,24 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         setup_logger(logger, verbosity_level, self.log_file)
         utils.setup_terminal()
 
+    def _assign_args(self, args: BaseNamespace) -> None:
+        # Явное лучше неявного
+        self.profile_id = args.profile_id
+        self.config_dir = args.config_dir
+        self.verbosity = args.verbosity
+        self.api_delay = args.api_delay
+        self.user_agent = args.user_agent
+        self.proxy_url = args.proxy_url
+        self.use_sixel = args.use_sixel
+        self.use_kitty = args.use_kitty
+        self.use_ai = args.use_ai
+        self.captcha_lang = args.captcha_lang
+        self.captcha_attempts = args.captcha_attempts
+        self.openai_proxy_url = args.openai_proxy_url
+        self.openai_timeout = args.openai_timeout
+        self.openai_connect_timeout = args.openai_connect_timeout
+        self.operation_run = args.operation_run
+
     def run(self, argv: Sequence[str] | None = None) -> None | int:
         args = self._parser.parse_args(argv, namespace=BaseNamespace())
         self._assign_args(args)
@@ -959,7 +959,3 @@ class HHApplicantTool(MegaTool, BaseAttrs):
             self._check_system()
 
         return 1
-
-    def _assign_args(self, args: BaseNamespace) -> None:
-        for name, value in vars(args).items():
-            setattr(self, name, value)

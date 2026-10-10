@@ -4,10 +4,10 @@ import dataclasses
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 from threading import Lock
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Literal, TypeVar
 from urllib.parse import urlencode, urljoin
 
 import requests
@@ -29,7 +29,17 @@ HH_OAUTH_URL = "https://hh.ru/oauth/"
 DEFAULT_DELAY = 0.345
 DEFAULT_CAPTCHA_COOLDOWN = 3.0
 
-# AllowedMethods = Literal["GET", "POST", "PUT", "DELETE"]
+AllowedMethods = Literal[
+    "GET",
+    "POST",
+    "PUT",
+    "DELETE",
+    "get",
+    "post",
+    "put",
+    "delete",
+]
+
 T = TypeVar("T")
 
 
@@ -46,7 +56,10 @@ class BaseClient:
     delay: float | None = None
     captcha_handler: Callable[[str], bool] | None = None
     captcha_cooldown: float | None = None
-    _previous_request_time: float = 0.0
+
+    _previous_request_time: float = field(default=0.0, init=False)
+    _lock: Lock = field(default_factory=Lock, init=False)
+    _captcha_lock: Lock = field(default_factory=Lock, init=False)
 
     def __post_init__(self) -> None:
         assert self.base_url.endswith("/"), "base_url must ends with /"
@@ -61,8 +74,6 @@ class BaseClient:
         if not self.session:
             logger.debug("create new session")
             self.session = requests.session()
-
-        self._lock = Lock()
 
     @property
     def proxies(self):
@@ -92,7 +103,7 @@ class BaseClient:
 
     def request(
         self,
-        method: str,
+        method: AllowedMethods,
         endpoint: str,
         params: dict[str, Any] | None = None,
         *,
@@ -175,15 +186,16 @@ class BaseClient:
                     )
                     self._previous_request_time = time.monotonic()
 
-                try:
-                    errors.ApiError.raise_for_status(response, rv)
-                except errors.CaptchaRequired as ex:
-                    if not callable(self.captcha_handler):
-                        raise
+            try:
+                errors.ApiError.raise_for_status(response, rv)
+            except errors.CaptchaRequired as ex:
+                if not callable(self.captcha_handler):
+                    raise
+                with self._captcha_lock:
                     if not self.captcha_handler(ex.captcha_url):
                         raise
                     time.sleep(self.captcha_cooldown)
-                    continue
+                continue
 
             if not (200 <= response.status_code < 300):
                 raise errors.BadResponse(
@@ -334,9 +346,9 @@ class ApiClient(BaseClient):
             return do_request()
 
     def handle_access_token(self, token: AccessToken) -> None:
-        for field in ("access_token", "refresh_token", "access_expires_at"):
-            if field in token and hasattr(self, field):
-                setattr(self, field, token[field])
+        for name in ("access_token", "refresh_token", "access_expires_at"):
+            if name in token and hasattr(self, name):
+                setattr(self, name, token[name])
 
     def refresh_access_token(self) -> None:
         if not self.refresh_token:
