@@ -189,12 +189,14 @@ class HHApplicantTool(MegaTool, BaseAttrs):
             "--openai-timeout",
             "--ai-timeout",
             type=float,
+            default=DEFAULT_OPENAI_TIMEOUT,
             help="Таймаут запроса к OpenAI в секундах: соединение и чтение ответа",
         )
         parser.add_argument(
             "--openai-connect-timeout",
             "--ai-connect-timeout",
             type=float,
+            default=DEFAULT_OPENAI_CONNECT_TIMEOUT,
             help="Таймаут соединения с OpenAI в секундах",
         )
         parser.add_argument(
@@ -499,15 +501,6 @@ class HHApplicantTool(MegaTool, BaseAttrs):
                 f"Сессионные куки имеют неправильный тип: {type(self.session.cookies)}"
             )
 
-    def get_cover_letter_ai(self, system_prompt: str) -> ai.ChatOpenAI:
-        return self.get_ai_client(system_prompt, purpose="cover_letter")
-
-    def get_vacancy_filter_ai(self, system_prompt: str) -> ai.ChatOpenAI:
-        return self.get_ai_client(system_prompt, purpose="vacancy_filter")
-
-    def get_chat_ai(self, system_prompt: str) -> ai.ChatOpenAI:
-        return self.get_ai_client(system_prompt, purpose="chat")
-
     def get_captcha_ai(self) -> ai.ChatOpenAI:
         return self.get_ai_client(
             system_prompt=(
@@ -524,12 +517,16 @@ class HHApplicantTool(MegaTool, BaseAttrs):
 
     def get_ai_client(
         self,
-        system_prompt: str,
+        system_prompt: str | None = None,
+        *,
         purpose: str | None = None,
+        delay: float | None = None,
     ) -> ai.ChatOpenAI:
         config: dict = self.config.get("openai", {})
 
-        # Переменные окружения имеют более низкий приоритет
+        # Значения из конфигов имеют больший приоритет
+        config.setdefault("system_prompt", system_prompt)
+        config.setdefault("delay", delay)
         config.setdefault("base_url", getenv("HH_AI_BASE_URL"))
         config.setdefault("api_key", getenv("HH_AI_API_KEY"))
         config.setdefault("model", getenv("HH_AI_MODEL"))
@@ -569,17 +566,11 @@ class HHApplicantTool(MegaTool, BaseAttrs):
             model=model,
             temperature=config.get("temperature") or 0.0,
             max_completion_tokens=config.get("max_completion_tokens") or 1000,
-            system_prompt=system_prompt,
+            system_prompt=config.get("systemp_prompt"),
             base_url=base_url,
-            timeout=(
-                self.openai_timeout
-                or config.get("timeout")
-                or DEFAULT_OPENAI_TIMEOUT
-            ),
+            timeout=(config.get("timeout", self.openai_timeout)),
             connect_timeout=(
-                self.openai_connect_timeout
-                or config.get("connect_timeout")
-                or DEFAULT_OPENAI_CONNECT_TIMEOUT
+                config.get("connect_timeout", self.openai_connect_timeout)
             ),
             session=self.openai_session,
         )
@@ -699,12 +690,11 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         """Отдельная страница с капчей"""
         captcha_state = parse_qs(urlsplit(captcha_url).query)["state"][0]
 
-        headers = {}
-        if referer_url:
-            headers["Referer"] = referer_url
-
         # Посещаем страницу с капчей
-        r = self.session.get(captcha_url, headers=headers)
+        r = self.session.get(
+            captcha_url,
+            headers={"Referer": referer_url} if referer_url else {},
+        )
         r.raise_for_status()
 
         return self.solve_captcha(
@@ -750,14 +740,9 @@ class HHApplicantTool(MegaTool, BaseAttrs):
         image_url = urljoin(HH_BASE_URL, "/captcha/picture?key=" + captcha_key)
         logger.debug("Пробуем загрузить капчу: %s", image_url)
 
-        headers = {}
-
-        if referer_url:
-            headers |= {"Referer": referer_url}
-
         image_data = self.session.get(
             image_url,
-            headers=headers,
+            headers={"Referer": referer_url} if referer_url else {},
         ).content
 
         assert len(image_data) > 0, "Ошибка загрузки изображения"

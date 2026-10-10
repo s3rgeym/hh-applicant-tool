@@ -322,9 +322,8 @@ class ApiClient(BaseClient):
         as_json: bool = False,
         **kwargs: Any,
     ) -> T:
-        def do_request():
-            return BaseClient.request(
-                self,
+        try:
+            return super().request(
                 method,
                 endpoint,
                 params,
@@ -332,18 +331,17 @@ class ApiClient(BaseClient):
                 as_json=as_json,
                 **kwargs,
             )
-
-        try:
-            return do_request()
         # TODO: добавить класс для ошибок типа AccessTokenExpired
         except errors.Forbidden as ex:
+            # тут при получении 403 происходит обновление access token, если
+            # задан и не протуш refresh
             if not self.is_access_expired or not self.refresh_token:
                 raise ex
             logger.info("try to refresh access_token")
             # Пробуем обновить токен
             self.refresh_access_token()
             # И повторно отправляем запрос
-            return do_request()
+            return self.send(ex.request, delay=delay)
 
     def handle_access_token(self, token: AccessToken) -> None:
         for name in ("access_token", "refresh_token", "access_expires_at"):

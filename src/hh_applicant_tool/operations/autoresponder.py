@@ -83,6 +83,8 @@ class Operation(BaseOperation):
 
     def run(self, tool: HHApplicantTool, args: Namespace) -> None:
         self.tool = tool
+
+        # Этот костыль убрать везде надо
         cancel_event = getattr(args, "_cancel_event", Event())
         logger.info("Автоответчик запущен")
 
@@ -133,10 +135,8 @@ class Operation(BaseOperation):
 
     @cached_property
     def chat_url(self) -> str:
-        rc, _ = self.tool.get_initial_state(
-            "https://hh.ru/applicant/my_resumes"
-        )
-        return rc["config"]["externalMicroFrontendHosts"]["chatik"]
+        r = self.tool.get_initial_state("https://hh.ru/applicant/my_resumes")
+        return r["config"]["externalMicroFrontendHosts"]["chatik"]
 
     def get_chats(
         self,
@@ -530,7 +530,9 @@ class Operation(BaseOperation):
 
         temperature = 0.1 if chat.reply_options else 0.5
 
-        ai_client = self.tool.get_chat_ai(system_prompt)
+        ai_client = self.tool.get_ai_client(
+            system_prompt, purpose="autoresponder"
+        )
         ai_client.temperature = temperature
         ai_client.max_completion_tokens = 512
 

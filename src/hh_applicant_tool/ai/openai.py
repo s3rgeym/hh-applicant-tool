@@ -11,11 +11,12 @@ from threading import Lock
 import requests
 from urllib3.util import Timeout
 
-from ..constants import (
-    DEFAULT_OPENAI_CONNECT_TIMEOUT,
-    DEFAULT_OPENAI_TIMEOUT,
-)
 from .base import AIError
+
+DEFAULT_DELAY = 0.5
+DEFAULT_TIMEOUT = 60.0
+DEFAULT_CONNECT_TIMEOUT = 10.0
+
 
 logger = logging.getLogger(__package__)
 
@@ -33,9 +34,9 @@ class ChatOpenAI:
     base_url: str
     system_prompt: str | None = None
     # Общий таймаут на весь запрос
-    timeout: float = DEFAULT_OPENAI_TIMEOUT
+    timeout: float | None = None
     # Отдельный таймаут только на установку соединения
-    connect_timeout: float = DEFAULT_OPENAI_CONNECT_TIMEOUT
+    connect_timeout: float | None = None
 
     # Параметры для retry логики
     max_retries: int = 3
@@ -46,7 +47,7 @@ class ChatOpenAI:
 
     # Минимальный интервал между запросами (сек). Если с прошлого запроса
     # прошло больше — не ждём.
-    delay: float = 0.5
+    delay: float | None = None
 
     session: requests.Session = field(default_factory=requests.Session)
 
@@ -56,6 +57,9 @@ class ChatOpenAI:
 
     def __post_init__(self) -> None:
         self._lock = Lock()
+        self.delay = self.delay or DEFAULT_DELAY
+        self.timeout = self.timeout or DEFAULT_TIMEOUT
+        self.connect_timeout = self.connect_timeout or DEFAULT_CONNECT_TIMEOUT
 
     def _default_headers(self) -> dict[str, str]:
         return {

@@ -21,12 +21,8 @@ from ..ai.base import AIError
 from ..api import BadResponse, Redirect, datatypes
 from ..api.datatypes import PaginatedItems, SearchVacancy
 from ..api.errors import ApiError, LimitExceeded
-from ..constants import (
-    DEFAULT_COVER_LETTER_SYSTEM_PROMPT,
-)
 from ..storage.repositories.errors import RepositoryError
 from ..tool import BaseNamespace, BaseOperation
-from ..utils.argparse import str_or_file
 from ..utils.datatypes import VacancyTestsData
 from ..utils.mappings import find_key
 from ..utils.string import (
@@ -126,21 +122,18 @@ class Operation(BaseOperation):
         )
         parser.add_argument(
             "--ai-filter-prompt",
-            type=str_or_file,
             help="Системный промпт для AI-фильтра (используется только в режиме custom). Принимает текст или путь до файла",
             default=None,
         )
         parser.add_argument(
             "--system-prompt",
             "--ai-system",
-            type=str_or_file,
             help="Системный промпт для AI генерации сопроводительных писем. Принимает текст или путь до файла",
-            default=DEFAULT_COVER_LETTER_SYSTEM_PROMPT,
+            default="Сгенерируй сопроводительное письмо для отклика на вакансию от имени соискателя",
         )
         parser.add_argument(
             "--message-prompt",
             "--prompt",
-            type=str_or_file,
             help="Промпт для генерации сопроводительного письма. Принимает так же путь до файла",
             default="Сгенерируй сопроводительное письмо не более 5-7 предложений от моего имени для вакансии",  # noqa: E501
         )
@@ -365,7 +358,7 @@ class Operation(BaseOperation):
         self.top_lat = args.top_lat
         self.total_pages = args.total_pages
         self.cover_letter_ai = (
-            tool.get_cover_letter_ai(args.system_prompt)
+            tool.get_ai_client(args.system_prompt, purpose="cover_letter")
             if args.use_ai
             else None
         )
@@ -767,8 +760,9 @@ class Operation(BaseOperation):
                 system_prompt,
             )
 
-            self.vacancy_filter_ai = self.tool.get_vacancy_filter_ai(
-                system_prompt
+            self.vacancy_filter_ai = self.tool.get_ai_client(
+                system_prompt,
+                purpose="vacancy_filter",
             )
 
         for vacancy in self._get_vacancies(resume_id=resume["id"]):
@@ -1434,6 +1428,8 @@ class Operation(BaseOperation):
         for page in range(self.total_pages):
             logger.debug(f"Загружаем вакансии со страницы: {page + 1}")
             params = self._get_search_params(page)
+
+            logger.debug(params)
 
             if self.search:
                 search_endpoint = "/vacancies"
