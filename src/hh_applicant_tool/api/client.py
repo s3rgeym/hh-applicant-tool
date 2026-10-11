@@ -11,9 +11,6 @@ from typing import Any, Callable, Literal, TypeVar
 from urllib.parse import urlencode, urljoin
 
 import requests
-from requests import PreparedRequest, Request, Session
-
-from hh_applicant_tool.api.user_agent import generate_android_useragent
 
 from . import errors
 from .client_keys import (
@@ -21,6 +18,7 @@ from .client_keys import (
     ANDROID_CLIENT_SECRET,
 )
 from .datatypes import AccessToken
+from .user_agent import generate_android_useragent
 
 __all__ = ("ApiClient", "OAuthClient")
 
@@ -28,6 +26,7 @@ HH_API_URL = "https://api.hh.ru/"
 HH_OAUTH_URL = "https://hh.ru/oauth/"
 DEFAULT_DELAY = 0.345
 DEFAULT_CAPTCHA_COOLDOWN = 3.0
+MAX_RETRIES = 3
 
 AllowedMethods = Literal[
     "GET",
@@ -50,11 +49,12 @@ logger = logging.getLogger("hh-applicant-tool")
 class BaseClient:
     base_url: str
     _: dataclasses.KW_ONLY
-    user_agent: str | None = None
-    session: Session | None = None
     delay: float | None = None
     captcha_handler: Callable[[str], bool] | None = None
     captcha_cooldown: float | None = None
+    max_retries: int | None = None
+    session: requests.Session | None = None
+    user_agent: str | None = None
 
     _previous_request_time: float = field(default=0.0, init=False)
     _lock: Lock = field(default_factory=Lock, init=False)
@@ -62,10 +62,11 @@ class BaseClient:
 
     def __post_init__(self) -> None:
         assert self.base_url.endswith("/"), "base_url must ends with /"
-        self.delay = self.delay or DEFAULT_DELAY
         self.captcha_cooldown = (
             self.captcha_cooldown or DEFAULT_CAPTCHA_COOLDOWN
         )
+        self.delay = self.delay or DEFAULT_DELAY
+        self.max_retries = self.max_retries or MAX_RETRIES 
         self.user_agent = self.user_agent or generate_android_useragent()
         logger.debug(
             f"{self.__class__.__qualname__} User-Agent: {self.user_agent}"
@@ -112,102 +113,76 @@ class BaseClient:
         as_json: bool = False,
         **kwargs: Any,
     ) -> T:
-        # # Не знаю насколько это "правильно"
-        # assert method.upper() in AllowedMethods.__args__, (
-        #     f"Method unknown or not allowed: {method!r}"
-        # )
         method = method.upper()
         params = dict(params or {})
         params.update(kwargs)
         url = self.resolve_url(endpoint)
-        has_body = method in ["POST", "PUT"]
-        payload = {["data", "json"][as_json] if has_body else "params": params}
-        req = Request(
-            method,
-            url,
-            headers=self._default_headers(),
-            **payload,
-        )
-        return self.send(req, delay=delay)
-
-    def send(
-        self,
-        request: Request | PreparedRequest,
-        *,
-        delay: float | None = None,
-    ) -> T:
-        """Отправляет уже готовый Request/PreparedRequest.
-
-        Нужен для повторной отправки запроса после ошибки капчи.
-
-        Как-то так:
-
-            BaseClient.send(ex.request)
-        """
-        if isinstance(request, Request):
-            prepared = self.session.prepare_request(request)
+ 
+        if method in ("POST", "PUT"):
+            payload = {"json" if as_json else "data": params}
         else:
-            prepared = request
-
-        while True:
+            payload = {"params": params}
+ 
+        last_exc: Exception | None = None
+ 
+        for attempt in range(1, self.max_retries + 1):
             with self._lock:
                 self._wait_for_delay(delay)
-
-                # session.send, в отличие от session.request, сам не учитывает
-                # proxies/verify/cert из окружения, поэтому подмешиваем их вручную
-                settings = self.session.merge_environment_settings(
-                    prepared.url, {}, None, None, None
-                )
-
                 logger.debug(
-                    "%s %s | headers=%s | body=%r | proxies=%s",
-                    prepared.method,
-                    prepared.url,
-                    dict(prepared.headers),
-                    prepared.body,
-                    settings["proxies"],
+                    "(%d/%d) %s %s %r",
+                    attempt,
+                    self.max_retries,
+                    method,
+                    url,
+                    payload,
                 )
-
-                response = self.session.send(
-                    prepared,
-                    allow_redirects=False,
-                    **settings,
-                )
-
-                logger.debug(
-                    f"{response.request.method} {response.request.url} {response.status_code}"
-                )
-
                 try:
-                    # У этих лошков сервер не отдает Content-Length, а кривое API
-                    # отдает пустые ответы, например, при отклике на вакансии,
-                    # и мы не можем узнать содержит ли ответ тело
-                    # 'Server': 'ddos-guard'
-                    # ...
-                    # 'Transfer-Encoding': 'chunked'
-                    try:
-                        rv = response.json() if response.text else {}
-                    except json.JSONDecodeError as ex:
-                        raise errors.BadResponse(
-                            f"Can't decode JSON: {prepared.method} {prepared.url} "
-                            f"({response.status_code})"
-                        ) from ex
+                    # Заголовки собираются на каждой попытке, чтобы
+                    # подхватывать обновлённый access token.
+                    response = self.session.request(
+                        method,
+                        url,
+                        headers=self._default_headers(),
+                        allow_redirects=False,
+                        **payload,
+                    )
+                except requests.ConnectionError as ex:
+                    logger.warning(
+                        "(%d/%d) connection error: %s %s: %s",
+                        attempt,
+                        self.max_retries,
+                        method,
+                        url,
+                        ex,
+                    )
+                    last_exc = ex
+                    continue
                 finally:
                     self._previous_request_time = time.monotonic()
 
-            try:
-                errors.ApiError.raise_for_status(response, rv)
-            except errors.CaptchaRequired as ex:
-                raise ex
-                # if not callable(self.captcha_handler):
-                #     raise
-                # with self._captcha_lock:
-                #     if not self.captcha_handler(ex.captcha_url):
-                #         raise
-                #     time.sleep(self.captcha_cooldown)
-                # continue
+                logger.debug("%s %s %d", method, url, response.status_code)
 
+                # У этих лошков сервер не отдает Content-Length, а кривое API
+                # отдает пустые ответы, например, при отклике на вакансии,
+                # и мы не можем узнать содержит ли ответ тело
+                # 'Server': 'ddos-guard'
+                # ...
+                # 'Transfer-Encoding': 'chunked'
+                try:
+                    rv = response.json() if response.text else {}
+                except ValueError as ex:  # включая JSONDecodeError
+                    raise errors.BadResponse(
+                        f"Can't decode JSON: {method} {url} "
+                        f"({response.status_code})"
+                    ) from ex
+ 
+            # CaptchaRequired и прочие ошибки пробрасываются наверх
+            errors.ApiError.raise_for_status(response, rv)
             return rv
+ 
+        # Все попытки закончились ошибками соединения
+        assert last_exc is not None
+        raise last_exc
 
     def get(self, *args, **kwargs) -> T:
         return self.request("GET", *args, **kwargs)
@@ -327,7 +302,7 @@ class ApiClient(BaseClient):
         as_json: bool = False,
         **kwargs: Any,
     ) -> T:
-        try:
+        def send_request():
             return super().request(
                 method,
                 endpoint,
@@ -336,6 +311,8 @@ class ApiClient(BaseClient):
                 as_json=as_json,
                 **kwargs,
             )
+        try:
+            return send_request()
         # TODO: добавить класс для ошибок типа AccessTokenExpired
         except errors.Forbidden as ex:
             # тут при получении 403 происходит обновление access token, если
@@ -346,7 +323,7 @@ class ApiClient(BaseClient):
             # Пробуем обновить токен
             self.refresh_access_token()
             # И повторно отправляем запрос
-            return self.send(ex.request, delay=delay)
+            return send_request()
 
     def handle_access_token(self, token: AccessToken) -> None:
         for name in ("access_token", "refresh_token", "access_expires_at"):
