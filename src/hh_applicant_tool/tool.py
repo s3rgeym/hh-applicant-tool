@@ -346,22 +346,91 @@ class HHApplicantTool(BaseAttrs):
     def storage(self) -> StorageFacade:
         return StorageFacade(self.db)
 
+    def get_config_section(
+        self,
+        section: str,
+        **defaults: Any,
+    ) -> dict:
+        """Возвращает параметры секции с учётом наследования.
+    
+        Параметры дочерних секций имеют приоритет над родительскими,
+        а параметры конфигурации — над defaults.
+        Значения None игнорируются.
+        """
+        result = {
+            k: v for k, v in defaults.items()
+            if v is not None
+        }
+    
+        current = self.config
+        sections = []
+    
+        for key in section.split('.'):
+            current = current[key]
+            sections.append(current)
+    
+        for current in reversed(sections):
+            for key, value in current.items():
+                if value is not None:
+                    result.setdefault(key, value)
+    
+        return result
+
     @cached_property
     def api_client(self) -> api.client.ApiClient:
-        config = self.config
+        config = self.get_config_section("api_client", delay=self.api_delay)
+        logging.debug('api client config: %r', config)
         token = config.get("token", {})
         return api.client.ApiClient(
-            client_id=config.get("client_id"),
-            client_secret=config.get("client_secret"),
             access_token=token.get("access_token"),
             refresh_token=token.get("refresh_token"),
             access_expires_at=token.get("access_expires_at"),
-            delay=self.api_delay or config.get("api_delay"),
-            # Это просто тест капчи, если передать браузерный юзер-агент, она
-            # сработает
-            # user_agent=self.user_agent,
-            session=self.session,
             captcha_handler=self.solve_captcha_url,
+            **config,
+        )
+
+    def get_ai_client(
+        self,
+        config_section: str = 'openai',
+        *,
+        delay: float | None = None,
+        timeout: float | None = None,
+        connect_timeout: float | None = None,
+        **kwargs, # system_prompt, max_completion_tokens, temperature и т.д.
+    ) -> ai.ChatOpenAI:
+        # overrides (именованные аргументы) перезаписывают значения конфигов только,
+        # если они не равны None, это надо учитывать при задании значений по умолчанию
+        # парсера
+        config = self.get_config_section(
+            config_section,
+            delay=delay or self.openai_delay, 
+            timeout=timeout or self.openai_timeout,
+            connect_timeout=timeout or self.openai_connect_timeout,
+            **kwargs,
+        )
+
+        logging.debug('%r config: %r', section_name, config)
+
+        def check(name: str):
+            if name not in config:
+                raise ValueError(
+                    f"Значение {name!r} не задано в секции {section_name!r}" + 
+                    (" либо родительских секциях" if "." in section_name else "")
+                )
+
+        check("base_url")
+        сheck("api_key")
+        check("model")
+
+        return ai.ChatOpenAI(**config)
+
+    def get_captcha_ai(self) -> ai.ChatOpenAI:
+        return self.get_ai_client(
+            "openai.captcha",
+            system_prompt=(
+                "You read CAPTCHA images. Return ONLY the text from the "
+                "image, exactly as it is written."
+            ),
         )
 
     def get_me(self) -> api.datatypes.User:
@@ -477,82 +546,6 @@ class HHApplicantTool(BaseAttrs):
             logger.warning(
                 f"Сессионные куки имеют неправильный тип: {type(self.session.cookies)}"
             )
-
-    def get_captcha_ai(self) -> ai.ChatOpenAI:
-        return self.get_ai_client(
-            system_prompt=(
-                "You read CAPTCHA images. Return ONLY the text from the "
-                "image, exactly as it is written."
-            ),
-            purpose="captcha",
-        )
-
-    # def has_openai_config(self) -> bool:
-    #     if "openai" in self.config:
-    #         return True
-    #     return any(key.startswith("openai_") for key in self.config)
-
-    def get_ai_client(
-        self,
-        purpose: str | None = None,
-        *,
-        delay: float | None = None,
-        system_prompt: str | None = None,
-    ) -> ai.ChatOpenAI:
-        # Избегаем модификации конфига, чтобы значения по умолчанию не сохранились в файл
-        config = dict(self.config.get("openai") or {})
-
-        # Значения из конфигов имеют больший приоритет
-        config.setdefault("system_prompt", system_prompt)
-        config.setdefault("delay", delay or self.openai_delay)
-        config.setdefault("timeout", self.openai_timeout)
-        config.setdefault("connect_timeout", self.openai_connect_timeout)
-        config.setdefault("base_url", getenv("HH_AI_BASE_URL"))
-        config.setdefault("api_key", getenv("HH_AI_API_KEY"))
-        config.setdefault("model", getenv("HH_AI_MODEL"))
-
-        section_name: str | None = None
-
-        if purpose is not None:
-            section_name = f"openai_{purpose}"
-            purpose_config = self.config.get(section_name, {})
-            # Переписываем значения openai
-            config = {**config, **purpose_config}
-
-        if (api_key := config.get("api_key")) is None:
-            raise ValueError(
-                "API-ключ не задан. Укажите 'api_key' в секции 'openai'"
-                + (f" или {section_name!r}" if section_name else "")
-            )
-
-        if (base_url := config.get("base_url")) is None:
-            raise ValueError(
-                "Параметр 'base_url' не задан. Укажите его в секции 'openai'"
-                + (f" или {section_name!r}" if section_name else "")
-            )
-
-        if (model := config.get("model")) is None:
-            raise ValueError(
-                "Параметр 'model' не задан в конфигурации."
-                + (
-                    f" Секции 'openai' и '{section_name}' не содержат этого параметра."
-                    if section_name
-                    else " Секция 'openai' не содержит этого параметра."
-                )
-            )
-
-        return ai.ChatOpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            connect_timeout=config["connect_timeout"],
-            delay=config["delay"],
-            max_completion_tokens=config.get("max_completion_tokens"),
-            model=model,
-            session=self.get_openai_session(),
-            system_prompt=config["systemp_prompt"],
-            temperature=config.get("temperature"),
-            timeout=config["timeout"],
-        )
 
     # TODO: вынести в миксин какой
     def get_cookie(self, name: str, default: Any = None) -> str | None:
