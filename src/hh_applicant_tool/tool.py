@@ -499,7 +499,8 @@ class HHApplicantTool(BaseAttrs):
         delay: float | None = None,
         system_prompt: str | None = None,
     ) -> ai.ChatOpenAI:
-        config: dict = self.config.get("openai", {})
+        # Избегаем модификации конфига, чтобы значения по умолчанию не сохранились в файл
+        config = dict(self.config.get("openai") or {})
 
         # Значения из конфигов имеют больший приоритет
         config.setdefault("system_prompt", system_prompt)
