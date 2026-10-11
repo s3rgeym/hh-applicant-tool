@@ -5,7 +5,7 @@ import logging
 from ..models.contacts import VacancyContactsModel
 from .base import BaseRepository
 
-logger = logging.getLogger(__package__)
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 class VacancyContactsRepository(BaseRepository):

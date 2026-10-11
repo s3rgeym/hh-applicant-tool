@@ -17,7 +17,7 @@ MISSING = type("Missing", (), {"__str__": lambda self: "Не установле�
 MAX_VALUE_WIDTH = 80
 
 
-logger = logging.getLogger(__package__)
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 class Namespace(BaseNamespace):
@@ -31,21 +31,6 @@ def parse_value(v):
         return utils.json.loads(v)
     except json.JSONDecodeError:
         return v
-
-
-def _format_value(value: object) -> str:
-    """Короткое однострочное представление значения для таблицы."""
-    if isinstance(value, str):
-        text = value
-    else:
-        try:
-            text = json.dumps(value, ensure_ascii=False)
-        except (TypeError, ValueError):
-            text = str(value)
-    text = text.replace("\n", " ")
-    if len(text) > MAX_VALUE_WIDTH:
-        text = text[: MAX_VALUE_WIDTH - 1] + "…"
-    return text
 
 
 class Operation(BaseOperation):
@@ -94,14 +79,14 @@ class Operation(BaseOperation):
         else:
             # List all settings
             print_table(
-                ["Ключ", "Тип", "Значение"],
-                [
+                headers=["Ключ", "Тип", "Значение"],
+                rows=[
                     (
-                        setting.key,
-                        type(setting.value).__name__,
-                        _format_value(setting.value),
+                        s.key,
+                        type(s.value).__name__,
+                        "None" if s.value is None else s.value,
                     )
-                    for setting in settings.find()
-                    if not setting.key.startswith("_")
+                    for s in settings.find()
+                    if not s.key.startswith("_")
                 ],
             )

@@ -22,24 +22,13 @@ except ImportError:
     readline = None
 
 MAX_RESULTS = 10
-MAX_CELL_WIDTH = 60
 
 
-logger = logging.getLogger(__package__)
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 class Namespace(BaseNamespace):
     pass
-
-
-def _cell(value: object) -> str:
-    """Приводит значение ячейки к строке для вывода в таблицу."""
-    if value is None:
-        return "NULL"
-    text = str(value).replace("\n", " ")
-    if len(text) > MAX_CELL_WIDTH:
-        text = text[: MAX_CELL_WIDTH - 1] + "…"
-    return text
 
 
 class Operation(BaseOperation):
@@ -93,16 +82,13 @@ class Operation(BaseOperation):
                         return None
 
                     print_table(
-                        columns,
-                        [
-                            tuple(_cell(v) for v in row)
-                            for row in rows[:MAX_RESULTS]
-                        ],
+                        rows,
+                        headers=columns,
                     )
 
                     if len(rows) > MAX_RESULTS:
-                        print(
-                            f"⚠️  Warning: Showing only first {MAX_RESULTS} results."
+                        logger.warning(
+                            f"Showing only first {MAX_RESULTS} results."
                         )
                 else:
                     tool.db.commit()

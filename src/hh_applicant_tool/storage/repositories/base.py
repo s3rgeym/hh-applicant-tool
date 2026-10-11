@@ -11,7 +11,7 @@ from .errors import wrap_db_errors
 
 DEFAULT_PRIMARY_KEY = "id"
 
-logger = logging.getLogger(__package__)
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 @dataclass

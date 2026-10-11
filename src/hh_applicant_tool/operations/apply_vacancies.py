@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import json
 import logging
 import random
 import re
@@ -38,7 +39,7 @@ if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
 
-logger = logging.getLogger(__package__)
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 class Namespace(BaseNamespace):
@@ -489,82 +490,47 @@ class Operation(BaseOperation):
         self, prompt: str, vacancy_name: str, log_suffix: str = ""
     ) -> bool:
 
-        MAX_RETRIES = 3
-
         if not self.vacancy_filter_ai:
             return True
 
-        for attempt in range(MAX_RETRIES):
-            try:
-                response = self.vacancy_filter_ai.complete(prompt).strip()
+        response = self.vacancy_filter_ai.complete(prompt).strip()
 
-                if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug(
-                        "AI %s ответ (попытка %d): %s",
-                        log_suffix,
-                        attempt + 1,
-                        response,
-                    )
-
-                result = self._parse_ai_json_response(response)
-                if result is not None:
-                    if result:
-                        return True
-                    logger.info(
-                        "Вакансия %s отклонена AI %s", vacancy_name, log_suffix
-                    )
-                    return False
-
-                # Если не удалось распарсить JSON, повторяем запрос
-                logger.warning(
-                    "AI %s не дал валидный JSON для вакансии %s (попытка %d/%d)",
-                    log_suffix,
-                    vacancy_name,
-                    attempt + 1,
-                    MAX_RETRIES,
-                )
-                continue
-
-            except AIError as e:
-                # ChatOpenAI уже делает retry для 429, поэтому здесь только логируем
-                logger.error("Ошибка AI %s: %s", log_suffix, e)
-                return True
-
-        logger.warning(
-            "AI %s не дал валидный JSON после %d попыток для вакансии %s",
+        logger.debug(
+            "AI %s ответ: %s",
             log_suffix,
-            MAX_RETRIES,
-            vacancy_name,
+            response,
         )
-        return True
 
-    # ПЕРЕПИШИТЕ ЭТО ГОВНО!!!
-    def _parse_ai_json_response(self, response: str) -> bool | None:
-        response = response.strip().lower()
-
-        if response in ("да", "yes", "true"):
-            return True
-        if response in ("нет", "no", "false"):
+        result = self._parse_is_suitable_response(response)
+        if result is not None:
+            if result:
+                return True
+            logger.info("Вакансия %s отклонена AI %s", vacancy_name, log_suffix)
             return False
 
-        import re
-
-        from ..utils import json as utils_json
-
-        if response.startswith("```"):
-            response = re.sub(r"^```(?:json)?\s*", "", response)
-            response = re.sub(r"\s*```$", "", response)
-
-        json_match = re.search(
-            r'\{[^{}]*"suitable"\s*:\s*(true|false)[^{}]*\}',
-            response,
-            re.IGNORECASE,
+        # Если не удалось распарсить JSON, повторяем запрос
+        logger.warning(
+            "AI %s не дал валидный JSON для вакансии %s (попытка %d/%d)",
+            log_suffix,
+            vacancy_name,
         )
-        if json_match:
+
+    # Эта функция какая-то странная
+    def _parse_is_suitable_response(self, response: str) -> bool | None:
+        answer = response.strip().lower()
+
+        if answer in ("да", "yes", "true"):
+            return True
+        if answer in ("нет", "no", "false"):
+            return False
+
+        if "```" in response:
+            payload = response.split("```")[1]
+            _, payload = payload.split("\n", maxsplit=1)
             try:
-                data = utils_json.loads(json_match.group(0))
-                return data.get("suitable")
-            except Exception:
+                payload = json.load(payload)
+                return payload.get("suitable")
+            except json.JSONDecodeError:
                 pass
 
         return None
@@ -1050,6 +1016,10 @@ class Operation(BaseOperation):
                                         vacancy["alternate_url"],
                                         result,
                                     )
+
+                            # Какой-то негодяй тут continue убрал и отклик
+                            # повторно отправлялся
+                            continue
 
                     except Exception as ex:
                         logger.error(f"Произошла непредвиденная ошибка: {ex}")

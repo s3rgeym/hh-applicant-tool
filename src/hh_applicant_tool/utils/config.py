@@ -16,7 +16,7 @@ from .package import PACKAGE_NAME
 
 
 @cache
-def get_config_path() -> Path:
+def get_config_directory() -> Path:
     match platform.system():
         case "Windows":
             return (
@@ -35,9 +35,11 @@ def get_config_path() -> Path:
 
 
 class Config(dict):
+    """Словарь, который может сохраняться на ддиск и загружаться с него"""
+
     def __init__(self, config_path: str | Path | None = None):
         self._config_path = Path(
-            config_path or get_config_path() / "config.toml"
+            config_path or get_config_directory() / "config.toml"
         )
         # Запасной формат (только чтение): JSON рядом с основным файлом.
         self._legacy_path = self._config_path.with_suffix(".json")
@@ -59,17 +61,24 @@ class Config(dict):
         self.update(*args, **kwargs)
         self._config_path.parent.mkdir(exist_ok=True, parents=True)
         with self._lock:
-            with self._config_path.open("wb") as fp:
-                tomli_w.dump(dict(self), fp, indent=2)
+            with self._config_path.open("wb") as f:
+                tomli_w.dump(
+                    dict(self),
+                    f,
+                    multiline_strings=True,
+                    indent=2,
+                )
         if (
             self._legacy_path.exists()
             and self._config_path != self._legacy_path
         ):
             warnings.warn(
-                f"Конфиг старого формата JSON больше не используется. Файл {self._legacy_path!s} можно удалить."
+                f"Конфиг старого формата JSON больше не используется. Файл {self._legacy_path!s} можно удалить.",
+                UserWarning,
+                stacklevel=2,
             )
 
     __getitem__ = dict.get
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return str(self._config_path)

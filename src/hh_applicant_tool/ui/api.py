@@ -14,7 +14,7 @@ from .profiles import ProfilesManager, ProfileValidationError
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
-logger = logging.getLogger(__package__)
+logger = logging.getLogger(__name__.split(".")[0])
 
 MASKED_KEYS = {"client_secret", "token"}
 SENSITIVE_FIELD_NAMES = {

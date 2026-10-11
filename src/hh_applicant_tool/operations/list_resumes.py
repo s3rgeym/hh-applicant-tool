@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 from ..api.datatypes import PaginatedItems
 from ..tool import BaseNamespace, BaseOperation
-from ..utils.string import shorten
 from ..utils.table import print_table
 
 if TYPE_CHECKING:
@@ -14,7 +13,7 @@ if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
 
-logger = logging.getLogger(__package__)
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 class Namespace(BaseNamespace):
@@ -35,11 +34,11 @@ class Operation(BaseOperation):
         tool.storage.resumes.save_batch(resumes)
 
         print_table(
-            ["ID", "Название", "Статус"],
-            [
+            headers=["ID", "Название", "Статус"],
+            rows=[
                 (
                     x["id"],
-                    shorten(x["title"]),
+                    x["title"],
                     x["status"]["name"].title(),
                 )
                 for x in resumes

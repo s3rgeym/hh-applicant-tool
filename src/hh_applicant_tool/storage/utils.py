@@ -8,7 +8,7 @@ QUERIES_PATH: Path = Path(__file__).parent / "queries"
 MIGRATION_PATH: Path = QUERIES_PATH / "migrations"
 
 
-logger: logging.Logger = logging.getLogger(__package__)
+logger: logging.Logger = logging.getLogger(__name__.split(".")[0])
 
 
 def init_db(conn: sqlite3.Connection) -> None:

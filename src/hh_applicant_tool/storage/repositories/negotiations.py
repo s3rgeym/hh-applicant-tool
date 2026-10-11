@@ -5,7 +5,7 @@ from logging import getLogger
 from ..models.negotiation import NegotiationModel
 from .base import BaseRepository
 
-logger = getLogger(__package__)
+logger = getLogger(__name__.split(".")[0])
 
 
 class NegotiationRepository(BaseRepository):

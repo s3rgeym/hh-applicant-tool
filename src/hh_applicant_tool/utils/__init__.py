@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from ..api.user_agent import generate_android_useragent
 from .attrdict import AttrDict
-from .config import PACKAGE_NAME, Config, get_config_path
+from .config import PACKAGE_NAME, Config, get_config_directory
 from .date import (
     DATETIME_FORMAT,
     parse_api_datetime,
     try_parse_datetime,
 )
-from .misc import calc_hash, print_err
+from .misc import print_err
 from .string import bool2str, list2str, rand_text, shorten
 from .terminal import setup_terminal
 
@@ -19,16 +19,17 @@ from .terminal import setup_terminal
 __all__ = [
     "AttrDict",
     "Config",
-    "get_config_path",
     "DATETIME_FORMAT",
-    "parse_api_datetime",
-    "try_parse_datetime",
-    "shorten",
-    "rand_text",
+    "PACKAGE_NAME",
     "bool2str",
-    "list2str",
     "calc_hash",
     "generate_android_useragent",
-    "setup_terminal",
+    "get_config_directory",
+    "list2str",
+    "parse_api_datetime",
     "print_err",
+    "rand_text",
+    "setup_terminal",
+    "shorten",
+    "try_parse_datetime",
 ]

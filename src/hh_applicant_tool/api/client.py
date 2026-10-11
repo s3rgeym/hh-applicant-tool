@@ -42,8 +42,7 @@ AllowedMethods = Literal[
 
 T = TypeVar("T")
 
-
-logger = logging.getLogger(__package__)
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 # Thread-safe
@@ -68,8 +67,9 @@ class BaseClient:
             self.captcha_cooldown or DEFAULT_CAPTCHA_COOLDOWN
         )
         self.user_agent = self.user_agent or generate_android_useragent()
-
-        # logger.debug(f"user agent: {self.user_agent}")
+        logger.debug(
+            f"{self.__class__.__qualname__} User-Agent: {self.user_agent}"
+        )
 
         if not self.session:
             logger.debug("create new session")
@@ -81,6 +81,7 @@ class BaseClient:
 
     def _default_headers(self) -> dict[str, str]:
         return {
+            "Accept": "application/json",
             "User-Agent": self.user_agent,
             "X-HH-App-Active": "true",
         }
@@ -157,11 +158,26 @@ class BaseClient:
                 settings = self.session.merge_environment_settings(
                     prepared.url, {}, None, None, None
                 )
+
+                logger.debug(
+                    "%s %s | headers=%s | body=%r | proxies=%s",
+                    prepared.method,
+                    prepared.url,
+                    dict(prepared.headers),
+                    prepared.body,
+                    settings["proxies"],
+                )
+
                 response = self.session.send(
                     prepared,
                     allow_redirects=False,
                     **settings,
                 )
+
+                logger.debug(
+                    f"{response.request.method} {response.request.url} {response.status_code}"
+                )
+
                 try:
                     # У этих лошков сервер не отдает Content-Length, а кривое API
                     # отдает пустые ответы, например, при отклике на вакансии,
@@ -177,13 +193,6 @@ class BaseClient:
                             f"({response.status_code})"
                         ) from ex
                 finally:
-                    logger.debug(
-                        "%d %s %s with body: %.1000s",
-                        response.status_code,
-                        prepared.method,
-                        prepared.url,
-                        prepared.body or "-",
-                    )
                     self._previous_request_time = time.monotonic()
 
             try:
@@ -197,11 +206,6 @@ class BaseClient:
                     time.sleep(self.captcha_cooldown)
                 continue
 
-            if not (200 <= response.status_code < 300):
-                raise errors.BadResponse(
-                    f"Unexpected status code for {prepared.method} "
-                    f"{prepared.url}: {response.status_code}"
-                )
             return rv
 
     def get(self, *args, **kwargs) -> T:
@@ -235,8 +239,7 @@ class OAuthClient(BaseClient):
         self.client_id = self.client_id or ANDROID_CLIENT_ID
         self.client_secret = self.client_secret or ANDROID_CLIENT_SECRET
 
-    @property
-    def authorize_url(self) -> str:
+    def authorize_url(self, **kwargs: Any) -> str:
         params = dict(
             client_id=self.client_id,
             redirect_uri=self.redirect_uri,
@@ -244,8 +247,9 @@ class OAuthClient(BaseClient):
             scope=self.scope,
             state=self.state,
         )
-        params_qs = urlencode({k: v for k, v in params.items() if v})
-        return self.resolve_url(f"/authorize?{params_qs}")
+        params.update(kwargs)
+        query = urlencode({k: v for k, v in params.items() if v})
+        return self.resolve_url(f"/authorize?{query}")
 
     def request_access_token(
         self, endpoint: str, params: dict[str, Any] | None = None, **kw: Any
@@ -310,7 +314,7 @@ class ApiClient(BaseClient):
             return headers
         # Это очень интересно, что access token'ы начинаются с USER, т.е. API может содержать какую-то уязвимость, связанную с этим
         assert self.access_token.startswith("USER")
-        return headers | {"authorization": f"Bearer {self.access_token}"}
+        return headers | {"Authorization": f"Bearer {self.access_token}"}
 
     # Реализовано автоматическое обновление токена
     def request(

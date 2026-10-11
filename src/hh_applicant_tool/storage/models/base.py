@@ -7,7 +7,7 @@ from typing import Any, Callable, Mapping, Self, dataclass_transform, get_origin
 from hh_applicant_tool.utils import json
 from hh_applicant_tool.utils.date import try_parse_datetime
 
-logger = getLogger(__package__)
+logger = getLogger(__name__.split(".")[0])
 
 MISSING = object()
 

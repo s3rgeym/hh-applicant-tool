@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
 
-logger = logging.getLogger(__package__)
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 class Namespace(BaseNamespace):

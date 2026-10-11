@@ -8,7 +8,7 @@ import re
 import time
 from datetime import datetime
 from typing import TYPE_CHECKING
-from urllib.parse import parse_qs, quote, urljoin, urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 class Operation(BaseOperation):
@@ -60,69 +60,76 @@ class Operation(BaseOperation):
         if not is_email:
             username = self._normalize_phone_number(username)
 
-        authorize_url = api_client.oauth_client.authorize_url
-        logger.debug(authorize_url)
-
-        backurl = authorize_url + "&skip_choose_account=true"
-        fail_url = (
-            "/account/login?backurl="
-            + quote(backurl, safe="")
-            + "&oauth=true&response_type=code"
+        # https://api.hh.ru/openapi/redoc#section/Avtorizaciya/Zapros-avtorizacii-pod-drugim-polzovatelem
+        authorize_url = api_client.oauth_client.authorize_url(
+            force_login="true",
+            role="applicant",
+            force_role="true",
+            skip_choose_account="true",
         )
-
+        logger.debug(f"{authorize_url=}")
         # 1. Страница авторизации -> xsrf и публичный ключ
         r = session.get(authorize_url)
         # Если куки не протушли, то авторизация не пройдет
 
         redirect_url = r.url
+        logger.debug(redirect_url)
+
         data = tool.parse_initial_state(r)
         xsrf = data["xsrfToken"]
 
         try:
             pubkey = data["loginTrustFlagsSecret"]
         except KeyError as ex:
-            raise OperationError(
-                "Что-то пошло не так, возможно, вы уже авторизованы."
-            ) from ex
+            raise OperationError("Что-то пошло не так!") from ex
 
         # Эти заголовки у всех POST-запросов при авторизации
         # У них referer отличается только, но наврядли его гикто не проверяет
-        ajax_headers = {
-            "x-hhtmfrom": "",
-            "x-hhtmsource": "account_login",
-            "x-requested-with": "XMLHttpRequest",
-            "x-xsrftoken": xsrf,
+        login_headers = {
+            "Accept": "application/json",
+            "X-Hhtmfrom": "",
+            "X-Hhtmsource": "account_login",
+            "X-Requested-With": "XMLHttpRequest",
+            "X-Xsrftoken": xsrf,
+            "Referer": redirect_url,
         }
 
         # 2. Запрос кода
         params = {
-            "_xsrf": xsrf,
-            "failUrl": fail_url,
-            "remember": "yes",
-            "username": username,
-            "password": "",
-            "isBot": "false",
             "login": username,
             "otpType": ["phone", "email"][is_email],
             "operationType": "applicant_otp_auth",
             "authScenario": "APPLICANT_AUTH",
+            "formatPhone": "true",
+            "isSignupPage": "false",
             "loginTrustFlags": self._login_trust_flags(pubkey),
+            "captchaText": "",
         }
+
         otp_url = urljoin(redirect_url, "/account/otp_generate")
 
         while True:
-            logger.debug("Пробуем авторизоваться: POST %s %r", otp_url, params)
-            r = session.post(otp_url, params, ajax_headers)
+            logger.debug(
+                "otp generate params: %r | headers: %r", params, login_headers
+            )
+            r = session.post(
+                otp_url,
+                files={k: (None, v) for k, v in params.items()},
+                headers=login_headers,
+            )
+            logger.debug(f"{r.request.method} {r.url} {r.status_code}")
+
             res = r.json()
 
             if res.get("success"):
                 logger.info("Код авторизации был выслан!")
                 break
 
+            # logger.debug(res)
             captcha = res.get("hhcaptcha") or {}
 
             if "captchaState" not in captcha:
-                raise OperationError("Ошибка авторизации!")
+                raise OperationError("Неправильный запрос!")
 
             # isBot еще интересное значение
             if captcha.get("captchaError"):
@@ -130,16 +137,15 @@ class Operation(BaseOperation):
 
             captcha_state = captcha["captchaState"]
 
-            while True:
-                if tool.solve_captcha(
-                    xsrf_token=xsrf,
-                    captcha_state=captcha_state,
-                    referer_url=otp_url,
-                ):
-                    logger.info("Капча принята")
-                    params["captchaState"] = captcha_state
-                    break
-                logger.warning("Неправильная капча!")
+            solution = tool.solve_captcha(
+                xsrf_token=xsrf,
+                captcha_state=captcha_state,
+                referer_url=redirect_url,
+            )
+
+            params["captchaText"] = solution.text
+            params["captchaKey"] = solution.key
+            params["captchaState"] = solution.state
 
         # 3. Ввод кода
         code_from = ["SMS", "Email"][is_email]
@@ -152,14 +158,14 @@ class Operation(BaseOperation):
             raise OperationError("Код подтверждения не может быть пустым.")
 
         params = {
-            "_xsrf": xsrf,
-            "failUrl": fail_url,
-            "remember": "yes",
             "username": username,
-            "password": "",
             "code": code,
-            "backurl": backurl,
+            "backurl": redirect_url,
             "operationType": "applicant_otp_auth",
+            "isApplicantSignup": "false",
+            "remember": "true",
+            # Не знаю от чего их вычислять и нужны ли они тут
+            "loginTrustFlags": self._login_trust_flags(pubkey),
             "authScenario": "APPLICANT_AUTH",
         }
 
@@ -167,15 +173,15 @@ class Operation(BaseOperation):
         r = session.post(
             by_code_url,
             data=params,
-            headers=ajax_headers,
+            headers=login_headers,
         )
 
         logger.debug(f"{r.request.method} {r.url} {r.status_code}")
 
         try:
             res = r.json()
-        except json.JSONDecodeError:
-            raise OperationError("Неизвестная ошибка!")
+        except json.JSONDecodeError as ex:
+            raise OperationError("Неизвестная ошибка!") from ex
 
         logger.debug(res)
 
@@ -186,10 +192,14 @@ class Operation(BaseOperation):
         assert res.get("verification", {}).get("success")
 
         # Теперь нужно проверить заголовки
+        backurl = parse_qs(urlsplit(redirect_url).query)["backurl"][0]
         r = session.get(
-            res["backurl"],
+            urljoin(redirect_url, backurl),
+            headers={"Referer": redirect_url},
             allow_redirects=False,
         )
+
+        logger.debug(f"{r.url} {r.status_code}")
 
         if r.status_code != 302 or not (location := r.headers.get("location")):
             raise OperationError(
@@ -214,19 +224,22 @@ class Operation(BaseOperation):
         # Куки уже лежат в tool.session — копировать ничего не нужно.
         print("🎉 Авторизация прошла успешно!")
 
-    def _normalize_phone_number(self, phone: str) -> str:
+    @staticmethod
+    def _normalize_phone_number(phone: str) -> str:
         # Удаляем всякий мусор типа (, ) и -
         phone = re.sub(r"\D", "", phone)
         if len(phone) == 11 and phone[0] == "8":
             phone = "7" + phone[1:]
         return phone
 
-    def _login_trust_flags(self, pubkey: str) -> str:
+    @staticmethod
+    def _login_trust_flags(pubkey: str, payload: dict[str, Any] = {}) -> str:
         public_key = serialization.load_pem_public_key(pubkey.encode())
         payload = {
-            "emailOrPhone": {"suggest": True, "paste": False},
+            **payload,
             "ts": int(time.time() * 1000),
         }
+        logger.debug("trust login data: %r", payload)
         # JSON.stringify -> компактный вывод, без пробелов
         plaintext = json.dumps(payload, separators=(",", ":")).encode()
         ciphertext = public_key.encrypt(
