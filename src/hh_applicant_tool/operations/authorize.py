@@ -248,14 +248,15 @@ class Operation(BaseOperation):
         pubkey: str,
         payload: dict[str, Any] | None = None,
     ) -> str:
-        public_key = serialization.load_pem_public_key(pubkey.encode())
         payload = {
             **(payload or {}),
+            # Временная метка при шифровании на фронте устанавливается принудительно
             "ts": int(time.time() * 1000),
         }
         logger.debug("trust login data: %r", payload)
         # JSON.stringify -> компактный вывод, без пробелов
         plaintext = json.dumps(payload, separators=(",", ":")).encode()
+        public_key = serialization.load_pem_public_key(pubkey.encode())
         ciphertext = public_key.encrypt(
             plaintext,
             padding.OAEP(
