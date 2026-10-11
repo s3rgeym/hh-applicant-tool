@@ -44,7 +44,7 @@ from .utils.package import PACKAGE_NAME, get_package_version, parse_version
 from .utils.system import is_docker
 from .utils.terminal import print_kitty_image, print_sixel_image
 
-logger = logging.getLogger(__name__.split(".")[0])
+logger = logging.getLogger("hh-applicant-tool")
 
 OPERATIONS = "operations"
 

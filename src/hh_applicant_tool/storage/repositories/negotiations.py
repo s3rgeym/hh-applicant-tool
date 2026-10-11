@@ -5,7 +5,7 @@ from logging import getLogger
 from ..models.negotiation import NegotiationModel
 from .base import BaseRepository
 
-logger = getLogger(__name__.split(".")[0])
+logger = getLogger("hh-applicant-tool")
 
 
 class NegotiationRepository(BaseRepository):

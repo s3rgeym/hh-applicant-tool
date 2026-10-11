@@ -18,7 +18,7 @@ DEFAULT_TIMEOUT = 60.0
 DEFAULT_CONNECT_TIMEOUT = 10.0
 
 
-logger = logging.getLogger(__name__.split(".")[0])
+logger = logging.getLogger("hh-applicant-tool")
 
 
 class OpenAIError(AIError):

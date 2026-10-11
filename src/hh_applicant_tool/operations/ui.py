@@ -8,7 +8,7 @@ from ..tool import BaseNamespace, BaseOperation
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
-logger = logging.getLogger(__name__.split(".")[0])
+logger = logging.getLogger("hh-applicant-tool")
 
 
 class Namespace(BaseNamespace):

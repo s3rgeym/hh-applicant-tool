@@ -5,7 +5,7 @@ import logging
 from ..models.contacts import VacancyContactsModel
 from .base import BaseRepository
 
-logger = logging.getLogger(__name__.split(".")[0])
+logger = logging.getLogger("hh-applicant-tool")
 
 
 class VacancyContactsRepository(BaseRepository):
