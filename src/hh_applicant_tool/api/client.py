@@ -68,12 +68,13 @@ class BaseClient:
         self.delay = self.delay or DEFAULT_DELAY
         self.max_retries = self.max_retries or MAX_RETRIES 
         self.user_agent = self.user_agent or generate_android_useragent()
+        class_name = self.__class__.__name__
         logger.debug(
-            f"{self.__class__.__qualname__} User-Agent: {self.user_agent}"
+            f"{class_name} User-Agent: {self.user_agent}"
         )
 
         if not self.session:
-            logger.debug("create new session")
+            logger.debug(f"Сreate new session for {class_name}")
             self.session = requests.session()
 
     @property
