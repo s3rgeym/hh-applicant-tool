@@ -198,13 +198,14 @@ class BaseClient:
             try:
                 errors.ApiError.raise_for_status(response, rv)
             except errors.CaptchaRequired as ex:
-                if not callable(self.captcha_handler):
-                    raise
-                with self._captcha_lock:
-                    if not self.captcha_handler(ex.captcha_url):
-                        raise
-                    time.sleep(self.captcha_cooldown)
-                continue
+                raise ex
+                # if not callable(self.captcha_handler):
+                #     raise
+                # with self._captcha_lock:
+                #     if not self.captcha_handler(ex.captcha_url):
+                #         raise
+                #     time.sleep(self.captcha_cooldown)
+                # continue
 
             return rv
 

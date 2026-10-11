@@ -7,7 +7,7 @@ import logging
 import re
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urljoin, urlsplit
 
 from cryptography.hazmat.primitives import hashes, serialization
@@ -67,7 +67,9 @@ class Operation(BaseOperation):
             force_role="true",
             skip_choose_account="true",
         )
-        logger.debug(f"{authorize_url=}")
+        logger.info(
+            f"Эту ссылку можно открыть в браузере для изучения процесса авторизации: {authorize_url=}"
+        )
         # 1. Страница авторизации -> xsrf и публичный ключ
         r = session.get(authorize_url)
         # Если куки не протушли, то авторизация не пройдет
@@ -233,10 +235,13 @@ class Operation(BaseOperation):
         return phone
 
     @staticmethod
-    def _login_trust_flags(pubkey: str, payload: dict[str, Any] = {}) -> str:
+    def _login_trust_flags(
+        pubkey: str,
+        payload: dict[str, Any] | None = None,
+    ) -> str:
         public_key = serialization.load_pem_public_key(pubkey.encode())
         payload = {
-            **payload,
+            **(payload or {}),
             "ts": int(time.time() * 1000),
         }
         logger.debug("trust login data: %r", payload)
