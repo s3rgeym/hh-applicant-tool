@@ -4,6 +4,7 @@ import argparse
 import base64
 import json
 import logging
+import random
 import re
 import time
 from datetime import datetime
@@ -78,7 +79,9 @@ class Operation(BaseOperation):
         try:
             pubkey = data["loginTrustFlagsSecret"]
         except KeyError as ex:
-            raise OperationError("Публичный ключ для шифрования параметров loginTrustFlags отсутствует!") from ex
+            raise OperationError(
+                "Публичный ключ для шифрования параметров loginTrustFlags отсутствует!"
+            ) from ex
 
         # Эти заголовки у всех POST-запросов при авторизации
         # У них referer не отличается, но наврядли его кто проверяет
@@ -92,7 +95,7 @@ class Operation(BaseOperation):
         }
 
         # Мне лень делать авторизацию по паролю, так как там и параметры шлются на
-        # другой эндпоинт, так и обработка капчи отличается 
+        # другой эндпоинт, так и обработка капчи отличается
         # Запрос кода
         params = {
             "login": username,
@@ -182,7 +185,9 @@ class Operation(BaseOperation):
             res = r.json()
         except json.JSONDecodeError as ex:
             logger.debug(r.text[:255])
-            raise OperationError("Сервер не вернул JSON в ответ на отправку кода!") from ex
+            raise OperationError(
+                "Сервер не вернул JSON в ответ на отправку кода!"
+            ) from ex
 
         logger.debug(res)
 

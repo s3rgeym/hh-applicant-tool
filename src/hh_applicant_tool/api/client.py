@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import dataclasses
-import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -66,12 +65,10 @@ class BaseClient:
             self.captcha_cooldown or DEFAULT_CAPTCHA_COOLDOWN
         )
         self.delay = self.delay or DEFAULT_DELAY
-        self.max_retries = self.max_retries or MAX_RETRIES 
+        self.max_retries = self.max_retries or MAX_RETRIES
         self.user_agent = self.user_agent or generate_android_useragent()
         class_name = self.__class__.__name__
-        logger.debug(
-            f"{class_name} User-Agent: {self.user_agent}"
-        )
+        logger.debug(f"{class_name} User-Agent: {self.user_agent}")
 
         if not self.session:
             logger.debug(f"Сreate new session for {class_name}")
@@ -118,24 +115,19 @@ class BaseClient:
         params = dict(params or {})
         params.update(kwargs)
         url = self.resolve_url(endpoint)
- 
+
         if method in ("POST", "PUT"):
             payload = {"json" if as_json else "data": params}
         else:
             payload = {"params": params}
- 
+
         last_exc: Exception | None = None
- 
+
         for attempt in range(1, self.max_retries + 1):
             with self._lock:
                 self._wait_for_delay(delay)
                 logger.debug(
-                    "(%d/%d) %s %s %r",
-                    attempt,
-                    self.max_retries,
-                    method,
-                    url,
-                    payload,
+                    f"({attempt}/{self.max_retries}) {method} {endpoint} {params!r}",
                 )
                 try:
                     # Заголовки собираются на каждой попытке, чтобы
@@ -176,11 +168,11 @@ class BaseClient:
                         f"Can't decode JSON: {method} {url} "
                         f"({response.status_code})"
                     ) from ex
- 
+
             # CaptchaRequired и прочие ошибки пробрасываются наверх
             errors.ApiError.raise_for_status(response, rv)
             return rv
- 
+
         # Все попытки закончились ошибками соединения
         assert last_exc is not None
         raise last_exc
@@ -304,7 +296,7 @@ class ApiClient(BaseClient):
         **kwargs: Any,
     ) -> T:
         def send_request():
-            return super().request(
+            return super(ApiClient, self).request(
                 method,
                 endpoint,
                 params,
@@ -312,6 +304,7 @@ class ApiClient(BaseClient):
                 as_json=as_json,
                 **kwargs,
             )
+
         try:
             return send_request()
         # TODO: добавить класс для ошибок типа AccessTokenExpired

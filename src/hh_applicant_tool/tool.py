@@ -8,6 +8,7 @@ import smtplib
 import sqlite3
 import sys
 from collections.abc import Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
@@ -263,7 +264,7 @@ class HHApplicantTool(BaseAttrs):
         # Из какого-нибудь казахстана одинаково hh и ChatGPT работают
         return self._get_proxies()
 
-    def _create_browser_session(
+    def _create_desktop_session(
         self,
         proxies: dict[str, str] | None = None,
     ) -> requests.Session:
@@ -282,13 +283,13 @@ class HHApplicantTool(BaseAttrs):
             }
         )
 
-        logger.debug("Browser Session Headers: %r", session.headers)
+        logger.debug("Desktop Session Headers: %r", session.headers)
 
         return session
 
     @cached_property
     def session(self) -> HHSession:
-        session = self._create_browser_session(
+        session = self._create_desktop_session(
             self._get_proxies(),
         )
 
@@ -352,35 +353,37 @@ class HHApplicantTool(BaseAttrs):
         **defaults: Any,
     ) -> dict:
         """Возвращает параметры секции с учётом наследования.
-    
-        Параметры дочерних секций имеют приоритет над родительскими,
-        а параметры конфигурации — над defaults.
-        Значения None игнорируются.
+
+        Приоритет: целевая секция → родительские секции → defaults.
+        Значения None игнорируются и не переопределяют заданные значения.
         """
         result = {
-            k: v for k, v in defaults.items()
-            if v is not None
+            key: value for key, value in defaults.items() if value is not None
         }
-    
+
         current = self.config
         sections = []
-    
-        for key in section.split('.'):
-            current = current[key]
+
+        for key in section.split("."):
+            current = current.get(key)
+
+            if current is None:
+                break
+
             sections.append(current)
-    
+
         for current in reversed(sections):
             for key, value in current.items():
                 if value is not None:
-                    result.setdefault(key, value)
-    
+                    result.setdefault(key, deepcopy(value))
+
         return result
 
     @cached_property
     def api_client(self) -> api.client.ApiClient:
+        token = self.config.get("token", {})
         config = self.get_config_section("api_client", delay=self.api_delay)
-        logging.debug('api client config: %r', config)
-        token = config.get("token", {})
+        logger.debug("api client config: %r", config)
         return api.client.ApiClient(
             access_token=token.get("access_token"),
             refresh_token=token.get("refresh_token"),
@@ -391,31 +394,32 @@ class HHApplicantTool(BaseAttrs):
 
     def get_ai_client(
         self,
-        config_section: str = 'openai',
+        config_section: str = "openai",
         *,
         delay: float | None = None,
         timeout: float | None = None,
         connect_timeout: float | None = None,
-        **kwargs, # system_prompt, max_completion_tokens, temperature и т.д.
+        **kwargs,  # system_prompt, max_completion_tokens, temperature и т.д.
     ) -> ai.ChatOpenAI:
-        # overrides (именованные аргументы) перезаписывают значения конфигов только,
-        # если они не равны None, это надо учитывать при задании значений по умолчанию
-        # парсера
         config = self.get_config_section(
             config_section,
-            delay=delay or self.openai_delay, 
+            delay=delay or self.openai_delay,
             timeout=timeout or self.openai_timeout,
-            connect_timeout=timeout or self.openai_connect_timeout,
+            connect_timeout=connect_timeout or self.openai_connect_timeout,
             **kwargs,
         )
 
-        logging.debug('%r config: %r', section_name, config)
+        logger.debug("%r config: %r", config_section, config)
 
         def check(name: str):
             if name not in config:
                 raise ValueError(
-                    f"Значение {name!r} не задано в секции {section_name!r}" + 
-                    (" либо родительских секциях" if "." in section_name else "")
+                    f"Значение {name!r} не задано в секции {config_section!r}"
+                    + (
+                        " либо родительских секциях"
+                        if "." in config_section
+                        else ""
+                    )
                 )
 
         check("base_url")

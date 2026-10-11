@@ -24,8 +24,8 @@ from ..api.errors import ApiError, LimitExceeded
 from ..errors import OperationError
 from ..storage.repositories.errors import RepositoryError
 from ..tool import BaseNamespace, BaseOperation
+from ..utils.common import find_key
 from ..utils.datatypes import VacancyTestsData
-from ..utils.mappings import find_key
 from ..utils.string import (
     bool2str,
     rand_text,
@@ -104,9 +104,7 @@ DEFAULT_AI_FILTER_PROMPT = """\
 
 Подходит ли эта вакансия кандидату?"""
 
-DEFAULT_APPLY_MAIL_SUBJECT = (
-    "{Отклик|Резюме} на вакансию %(vacancy_name)s"
-)
+DEFAULT_APPLY_MAIL_SUBJECT = "{Отклик|Резюме} на вакансию %(vacancy_name)s"
 DEFAULT_APPLY_MAIL_BODY = "{Здравствуйте|Добрый день}, {прошу рассмотреть|пожалуйста рассмотрите} мое резюме %(resume_url)s на вакансию %(vacancy_name)s."
 
 # Переменные, доступные в шаблонах. Нужны для проверки шаблонов до рассылки
@@ -295,7 +293,12 @@ class Operation(BaseOperation):
         api_search_filters.add_argument(
             "--experience",
             help="Уровень опыта работы",
-            choices=["noExperience", "between1And3", "between3And6", "moreThan6"],
+            choices=[
+                "noExperience",
+                "between1And3",
+                "between3And6",
+                "moreThan6",
+            ],
         )
         api_search_filters.add_argument(
             "--schedule",
@@ -376,7 +379,7 @@ class Operation(BaseOperation):
         )
         api_search_filters.add_argument(
             "--no-magic",
-            action=argparse.BooleanOptionalAction,
+            action="store_true",
             help="Отключить авторазбор текста запроса",
         )
         api_search_filters.add_argument(
@@ -879,9 +882,7 @@ class Operation(BaseOperation):
                         logger.debug("prompt: %s", prompt)
                         letter = self.cover_letter_ai.complete(prompt)
                     else:
-                        letter = self._render_cover_letter(
-                            message_placeholders
-                        )
+                        letter = self._render_cover_letter(message_placeholders)
 
                     logger.debug(letter)
 

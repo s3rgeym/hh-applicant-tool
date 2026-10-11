@@ -36,18 +36,23 @@ class Operation(BaseOperation):
     def run(self, tool: HHApplicantTool, args: BaseNamespace) -> None:
         api_client = tool.api_client
         result: datatypes.User = api_client.get("me")
-        if result.get('auth_type') != 'applicant':
-            logger.warning("Вы вошли не как соискатель! Попробуйте авторизоваться вручную!!!")
-        full_name = " ".join(
-            filter(
-                None,
-                [
-                    result.get("last_name"),
-                    result.get("first_name"),
-                    result.get("middle_name"),
-                ],
+        if result.get("auth_type") != "applicant":
+            logger.warning(
+                "Вы вошли не как соискатель! Попробуйте авторизоваться вручную!!!"
             )
-        ) or 'Анонимный аккаунт'
+        full_name = (
+            " ".join(
+                filter(
+                    None,
+                    [
+                        result.get("last_name"),
+                        result.get("first_name"),
+                        result.get("middle_name"),
+                    ],
+                )
+            )
+            or "Анонимный аккаунт"
+        )
         with tool.storage.settings as s:
             s.set_value("user.full_name", full_name)
             s.set_value("user.email", result.get("email"))

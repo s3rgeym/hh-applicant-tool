@@ -12,6 +12,7 @@ import tomli_w
 import tomllib
 
 from . import json
+from .common import remove_none
 from .package import PACKAGE_NAME
 
 
@@ -62,12 +63,9 @@ class Config(dict):
         self._config_path.parent.mkdir(exist_ok=True, parents=True)
         with self._lock:
             with self._config_path.open("wb") as f:
-                tomli_w.dump(
-                    dict(self),
-                    f,
-                    multiline_strings=True,
-                    indent=2,
-                )
+                # TOML не поддерживает None
+                d = remove_none(self)
+                tomli_w.dump(d, f, multiline_strings=True, indent=2)
         if (
             self._legacy_path.exists()
             and self._config_path != self._legacy_path

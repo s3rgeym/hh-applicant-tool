@@ -384,10 +384,19 @@ hh-applicant-tool call-api [{GET|POST|PUT|DELETE}] <endpoint> [<key=value> ...]
 
 Для поиска вакансий по региону в `apply-vacancies` нужно указать параметр `area`. Можно его указывать как для страны (каз - 40, бел - 2238), так и отдельного города (мск - 1).
 
-Список **area id** по стране:
+Пример поиска `area id` по стране и названию:
 
 ```sh
-hh-applicant-tool -vv api /areas | jq -r '.[] | select(.name == "Беларусь")'
+$ hh-applicant-tool api /areas | jq -r '.[] | select(.name == "Беларусь") | .. | objects | select(.name == "Барановичи")'
+{
+  "id": "2239",
+  "parent_id": "2233",
+  "name": "Барановичи",
+  "areas": [],
+  "utc_offset": "+03:00",
+  "lat": 53.16592,
+  "lng": 29.00806
+}
 ```
 
 Документация для работы с API соискателей была удалена с ха-ха.сру и его корпоративного репозитория. Можете не искать, они затерли даже историю репозитория. Но я через веб-архив выкачал документацию. Чтобы ее посмотреть, клонируйте этот репозиторий и откройте файл `./docs/hhapi/openapi.yml`, например, с помощью [Swagger Viewer](https://marketplace.visualstudio.com/items?itemName=Arjun.swagger-viewer).

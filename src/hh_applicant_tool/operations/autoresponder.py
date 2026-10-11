@@ -531,7 +531,8 @@ class Operation(BaseOperation):
         temperature = 0.1 if chat.reply_options else 0.5
 
         ai_client = self.tool.get_ai_client(
-            system_prompt, purpose="autoresponder"
+            config_section="openai.autoresponder",
+            system_prompt=system_prompt,
         )
         ai_client.temperature = temperature
         ai_client.max_completion_tokens = 512
