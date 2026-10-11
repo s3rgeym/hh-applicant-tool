@@ -156,7 +156,7 @@ class Operation(BaseOperation):
             params["captchaKey"] = solution.key
             params["captchaState"] = solution.state
 
-        # 3. Ввод кода
+        # Ввод кода
         code_from = ["SMS", "Email"][is_email]
         code_icon = ["📱", "📧"][is_email]
         code = input(
