@@ -90,10 +90,10 @@
   - [✨ Ключевые особенности](#-ключевые-особенности)
   - [Содержание](#содержание)
   - [Установка](#установка)
-  - [Запуск через Docker](#запуск-через-docker)
   - [Авторизация](#авторизация)
   - [Описание команд](#описание-команд)
   - [Капча](#капча)
+  - [Запуск через Docker](#запуск-через-docker)
   - [Использование AI](#использование-ai)
     - [Конфигурация AI](#конфигурация-ai)
     - [AI-фильтрация вакансий](#ai-фильтрация-вакансий)
@@ -212,165 +212,9 @@ pip install hh-applicant-tool
 
 ---
 
-## Запуск через Docker
-
-Это рекомендованный разработчиком способ. Если не работает стандартная установка, то используйте его. Также это самый простой способ запуска и использования утилиты, требующий скопипастить 5 команд.
-
-Для начала нужно установить `docker` и `docker-compose`:
-
-```sh
-sudo apt install docker.io docker-compose-v2
-```
-
-Выкачиваем репозиторий и переходим в каталог:
-
-```sh
-git clone https://github.com/s3rgeym/hh-applicant-tool
-cd hh-applicant-tool
-```
-
-> [!IMPORTANT]
-> Команды с docker-compose нужно запускать строго, находясь в данном каталоге!
-
-Теперь авторизуемся:
-
-```sh
-# Чтобы ввести капчу в терминале укажите флаги --use-sixel/-s или --use-kitty/-k
-# Это названия протоколов, которые исп-ся терминалом для отображения изображений
-# Sixel поддерживается большинством терминалов
-# А вот Windows Terminal поддерживает только Kitty
-docker-compose run -u docker -it hh_applicant_tool \
-  hh-applicant-tool -s -vv auth <username>
-```
-
-Если использовать флаг `--ai`, то капча будет разгадана нейронкой и останется только ввести код подтверждения из SMS/Email.
-
-Подробно про авторизацию можно почитать [здесь](#авторизация).
-
-В случае успешной авторизации можно запускать рассылку откликов по крону:
-
-```sh
-docker-compose up -d
-```
-
-Что будет делать?
-
-- Рассылать отклики со всех опубликованных резюме.
-- Поднимать резюме.
-
-Просмотр логов `cron`:
-
-```sh
-docker compose logs -f
-```
-
-Чтобы прекратить просмотр логов, нажмите `Ctrl-C`.
-
-Информацию об ошибках можно посмотреть в файле `config/log.txt`, а контакты работодателей — в `config/data` с помощью `sqlite3`. В `config/config.toml` хранятся токены, дающие доступ к аккаунту.
-
-Также советую отредактировать файл `letter.txt`.
-
-Запущенные сервисы докер стартуют автоматически после перезагрузки. Остановить их можно выполнив:
-
-```sh
-docker-compose down
-```
-
-Чтобы обновить утилиту, в большинстве случаев достаточно в каталоге выполнить:
-
-```sh
-git pull
-```
-
-В редких случаях нужно пересобрать все:
-
-```sh
-docker compose up -d --build
-```
-
-Чтобы рассылать отклики с нескольких аккаунтов, нужно переписать `docker-compose.yml`:
-
-```yaml
-services:
-  # Не меняем ничего тут
-  hh_applicant_tool:
-    # ...
-
-  # Добавляем новые строки
-
-  # Просто копипастим, меняя имя сервиса, container_name и значение HH_PROFILE_ID
-  hh_second:
-    extends: hh_applicant_tool
-    container_name: hh_second
-    environment:
-      - HH_PROFILE_ID=second
-
-  hh_third:
-    extends: hh_applicant_tool
-    container_name: hh_third
-    environment:
-      - HH_PROFILE_ID=third
-
-  # Общий шаблон для новых профилей
-  уникальное_имя_сервиса:
-    extends: hh_applicant_tool
-    # может совпадать с именем сервиса
-    container_name: уникальное_имя_контейнера
-    environment:
-      - HH_PROFILE_ID=название_профиля
-```
-
-> [!IMPORTANT]
-> В этом файле важны отступы!
-
-Обратите внимание на `HH_PROFILE_ID` — его значение указывается при авторизации, если профиль отличен от дефолтного. Далее нужно авторизоваться в каждом профиле:
-
-```sh
-# Авторизуемся со второго профиля
-docker-compose exec -u docker -it hh_applicant_tool \
-  hh-applicant-tool --profile-id second -k auth
-
-# Авторизуемся с третьего профиля
-docker-compose exec -u docker -it hh_applicant_tool \
-  hh-applicant-tool --profile-id third -k auth
-
-# И так далее
-```
-
-Ну и выполнить `docker-compose up -d`, чтобы запустить новые сервисы.
-
-[Команды](#описание-команд) можно потестировать в запущенном контейнере:
-
-```sh
-$ docker-compose exec -u docker -it hh_applicant_tool bash
-docker@1897bdd7c80b:/app$ hh-applicant-tool config -p
-/app/config/config.toml
-docker@1897bdd7c80b:/app$ hh-applicant-tool refresh-token
-ℹ️ Токен не истек, обновление не требуется.
-docker@1897bdd7c80b:/app$
-```
-
-> [!IMPORTANT]
-> Обратите внимание, что `docker-compose exec`/`docker-compose run` запускаются с аргументами `-u docker`. Только для пользователя `docker` установлен `chromium`, необходимый для авторизации, а также это избавляет от проблем с правами, когда созданные файлы для изменения требуют root-права.
-
-Если хотите команду `apply-vacancies` вызывать с какими-то аргументами, то создайте в корне файл `apply-vacancies.sh`:
-
-```sh
-#!/bin/bash
-
-# Пример с фильтрацией по исключаемым словам
-/usr/local/bin/python -m hh_applicant_tool apply-vacancies \
-  -l letter.txt \
-  --excluded-filter "fullstack|junior|php" # укажите любые аргументы
-```
-
-В файлах `startup.sh` и `crontab` замените `/usr/local/bin/python -m hh_applicant_tool apply-vacancies` на `/bin/sh /app/apply-vacancies.sh`.
-
----
-
 ## Авторизация
 
-Прямая авторизация:
+Авторизация по коду:
 
 ```bash
 hh-applicant-tool authorize '<ваш телефон>'
@@ -383,7 +227,14 @@ $ hh-applicant-tool whoami
 🆔 27405918 Кузнецов Андрей Владимирович [ 📄 1 | 👁️ +115 | ✉️ +28 ]
 ```
 
-В случае успешной авторизации токены будут сохранены в `config.toml`.
+В случае успешной авторизации токены будут сохранены в `config.toml`:
+
+```toml
+[token]
+access_token = "USERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+refresh_token = "USERBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+access_expires_at = 1799999999
+```
 
 Токен доступа выдается на две недели. Он обновляется автоматически. Для его ручного обновления нужно выполнить:
 
@@ -596,6 +447,162 @@ npx @redocly/cli preview -d docs/hhapi
   <br>
   <em>Диалог для ввода капчи</em>
 </p>
+
+---
+
+## Запуск через Docker
+
+Это рекомендованный разработчиком способ. Если не работает стандартная установка, то используйте его. Также это самый простой способ запуска и использования утилиты, требующий скопипастить 5 команд.
+
+Для начала нужно установить `docker` и `docker-compose`:
+
+```sh
+sudo apt install docker.io docker-compose-v2
+```
+
+Выкачиваем репозиторий и переходим в каталог:
+
+```sh
+git clone https://github.com/s3rgeym/hh-applicant-tool
+cd hh-applicant-tool
+```
+
+> [!IMPORTANT]
+> Команды с docker-compose нужно запускать строго, находясь в данном каталоге!
+
+Теперь авторизуемся:
+
+```sh
+# Чтобы ввести капчу в терминале укажите флаги --use-sixel/-s или --use-kitty/-k
+# Это названия протоколов, которые исп-ся терминалом для отображения изображений
+# Sixel поддерживается большинством терминалов
+# А вот Windows Terminal поддерживает только Kitty
+docker-compose run -u docker -it hh_applicant_tool \
+  hh-applicant-tool -s -vv auth <username>
+```
+
+Если использовать флаг `--ai`, то капча будет разгадана нейронкой и останется только ввести код подтверждения из SMS/Email.
+
+Подробно про авторизацию можно почитать [здесь](#авторизация).
+
+В случае успешной авторизации можно запускать рассылку откликов по крону:
+
+```sh
+docker-compose up -d
+```
+
+Что будет делать?
+
+- Рассылать отклики со всех опубликованных резюме.
+- Поднимать резюме.
+
+Просмотр логов `cron`:
+
+```sh
+docker compose logs -f
+```
+
+Чтобы прекратить просмотр логов, нажмите `Ctrl-C`.
+
+Информацию об ошибках можно посмотреть в файле `config/log.txt`, а контакты работодателей — в `config/data` с помощью `sqlite3`. В `config/config.toml` хранятся токены, дающие доступ к аккаунту.
+
+Также советую отредактировать файл `letter.txt`.
+
+Запущенные сервисы докер стартуют автоматически после перезагрузки. Остановить их можно выполнив:
+
+```sh
+docker-compose down
+```
+
+Чтобы обновить утилиту, в большинстве случаев достаточно в каталоге выполнить:
+
+```sh
+git pull
+```
+
+В редких случаях нужно пересобрать все:
+
+```sh
+docker compose up -d --build
+```
+
+Чтобы рассылать отклики с нескольких аккаунтов, нужно переписать `docker-compose.yml`:
+
+```yaml
+services:
+  # Не меняем ничего тут
+  hh_applicant_tool:
+    # ...
+
+  # Добавляем новые строки
+
+  # Просто копипастим, меняя имя сервиса, container_name и значение HH_PROFILE_ID
+  hh_second:
+    extends: hh_applicant_tool
+    container_name: hh_second
+    environment:
+      - HH_PROFILE_ID=second
+
+  hh_third:
+    extends: hh_applicant_tool
+    container_name: hh_third
+    environment:
+      - HH_PROFILE_ID=third
+
+  # Общий шаблон для новых профилей
+  уникальное_имя_сервиса:
+    extends: hh_applicant_tool
+    # может совпадать с именем сервиса
+    container_name: уникальное_имя_контейнера
+    environment:
+      - HH_PROFILE_ID=название_профиля
+```
+
+> [!IMPORTANT]
+> В этом файле важны отступы!
+
+Обратите внимание на `HH_PROFILE_ID` — его значение указывается при авторизации, если профиль отличен от дефолтного. Далее нужно авторизоваться в каждом профиле:
+
+```sh
+# Авторизуемся со второго профиля
+docker-compose exec -u docker -it hh_applicant_tool \
+  hh-applicant-tool --profile-id second -k auth
+
+# Авторизуемся с третьего профиля
+docker-compose exec -u docker -it hh_applicant_tool \
+  hh-applicant-tool --profile-id third -k auth
+
+# И так далее
+```
+
+Ну и выполнить `docker-compose up -d`, чтобы запустить новые сервисы.
+
+[Команды](#описание-команд) можно потестировать в запущенном контейнере:
+
+```sh
+$ docker-compose exec -u docker -it hh_applicant_tool bash
+docker@1897bdd7c80b:/app$ hh-applicant-tool config -p
+/app/config/config.toml
+docker@1897bdd7c80b:/app$ hh-applicant-tool refresh-token
+ℹ️ Токен не истек, обновление не требуется.
+docker@1897bdd7c80b:/app$
+```
+
+> [!IMPORTANT]
+> Обратите внимание, что `docker-compose exec`/`docker-compose run` запускаются с аргументами `-u docker`. Только для пользователя `docker` установлен `chromium`, необходимый для авторизации, а также это избавляет от проблем с правами, когда созданные файлы для изменения требуют root-права.
+
+Если хотите команду `apply-vacancies` вызывать с какими-то аргументами, то создайте в корне файл `apply-vacancies.sh`:
+
+```sh
+#!/bin/bash
+
+# Пример с фильтрацией по исключаемым словам
+/usr/local/bin/python -m hh_applicant_tool apply-vacancies \
+  -l letter.txt \
+  --excluded-filter "fullstack|junior|php" # укажите любые аргументы
+```
+
+В файлах `startup.sh` и `crontab` замените `/usr/local/bin/python -m hh_applicant_tool apply-vacancies` на `/bin/sh /app/apply-vacancies.sh`.
 
 ---
 
