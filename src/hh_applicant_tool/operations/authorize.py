@@ -90,7 +90,7 @@ class Operation(BaseOperation):
             raise OperationError("Публичный ключ для шифрования параметров loginTrustFlags отсутствует!") from ex
 
         # Эти заголовки у всех POST-запросов при авторизации
-        # У них referer отличается только, но наврядли его кто проверяет
+        # У них referer не отличается, но наврядли его кто проверяет
         login_headers = {
             "Accept": "application/json",
             "X-Hhtmfrom": "",
