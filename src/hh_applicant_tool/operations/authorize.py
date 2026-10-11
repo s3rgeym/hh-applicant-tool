@@ -60,7 +60,7 @@ class Operation(BaseOperation):
         logger.info(
             f"Эту ссылку можно открыть в браузере для изучения процесса авторизации: {authorize_url=}"
         )
-        # Страница авторизации -> xsrf и публичный ключ
+        # Переход на страницу нужен для установки cookie xsrf_token
         r = session.get(authorize_url)
         redirect_url = r.url
         logger.debug(redirect_url)
@@ -71,6 +71,9 @@ class Operation(BaseOperation):
             xsrf = data["xsrfToken"]
         except KeyError as ex:
             raise OperationError("xsrfToken отсутствует на странице!")
+
+        # На всякий случай проверим, что значение из cookie совпадает с тем, что на странице
+        assert xsrf == tool.xsrf_token
 
         try:
             pubkey = data["loginTrustFlagsSecret"]
@@ -135,7 +138,6 @@ class Operation(BaseOperation):
             captcha_state = captcha["captchaState"]
 
             solution = tool.solve_captcha(
-                xsrf_token=xsrf,
                 captcha_state=captcha_state,
                 referer_url=redirect_url,
             )
