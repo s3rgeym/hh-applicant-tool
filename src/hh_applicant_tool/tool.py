@@ -487,10 +487,10 @@ class HHApplicantTool(BaseAttrs):
             purpose="captcha",
         )
 
-    def has_openai_config(self) -> bool:
-        if "openai" in self.config:
-            return True
-        return any(key.startswith("openai_") for key in self.config)
+    # def has_openai_config(self) -> bool:
+    #     if "openai" in self.config:
+    #         return True
+    #     return any(key.startswith("openai_") for key in self.config)
 
     def get_ai_client(
         self,
@@ -914,11 +914,6 @@ class HHApplicantTool(BaseAttrs):
                     cur_ver,
                     latest_ver,
                 )
-
-    @property
-    def running_in_docker(self) -> bool:
-        """Определяет запущена ли утилита внутри docker"""
-        return Path("/.dockerenv").exists()
 
     def _check_system(self):
         if not self.storage.settings.get_value("disable_version_check", False):
