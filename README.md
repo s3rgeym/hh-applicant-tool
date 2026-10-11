@@ -1003,7 +1003,7 @@ const _0x3cd982 = {
   '\x74\x73': Date[_0x50c3ac(0x13f, '\x51\x47\x76\x23')](),
 };
 
-// Добавляем и смотрим что шифрует в trustLoginFlags...
+// Добавляем и смотрим что шифруется в trustLoginFlags...
 console.log(_0x3cd982);
 debugger;
 ```
