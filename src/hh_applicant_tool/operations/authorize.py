@@ -70,7 +70,7 @@ class Operation(BaseOperation):
         try:
             xsrf = data["xsrfToken"]
         except KeyError as ex:
-            raise OperationError("xsrfToken отсутствует на странице!")
+            raise OperationError("xsrfToken отсутствует на странице!") from ex
 
         # На всякий случай проверим, что значение из cookie совпадает с тем, что на странице
         assert xsrf == tool.xsrf_token
@@ -108,6 +108,7 @@ class Operation(BaseOperation):
         otp_url = urljoin(redirect_url, "/account/otp_generate")
 
         while True:
+            time.sleep(random.uniform(3.0, 5.0))
             logger.debug(
                 "otp generate params: %r | headers: %r", params, login_headers
             )
