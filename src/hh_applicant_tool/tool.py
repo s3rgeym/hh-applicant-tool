@@ -692,8 +692,8 @@ class HHApplicantTool(BaseAttrs):
                     "Accept": "application/json",
                     "Referer": referer_url,
                     "X-Xsrftoken": xsrf_token or self.xsrf_token,
-                    "x-hhtmfrom": "",
-                    "x-hhtmsource": "account_captcha",
+                    "X-Hhtmfrom": "",
+                    "X-Hhtmsource": "account_captcha",
                     # Я тут опустил кучу заголовков, так как их значения есть в
                     # кукис, и сайт, если тех нет, берех их от туда
                     # Те запрос проходит
