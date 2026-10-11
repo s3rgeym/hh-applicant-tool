@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import html
-import json
 import logging
 import random
 import re
@@ -11,7 +10,7 @@ from datetime import datetime
 from email.message import EmailMessage
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator, Literal
+from typing import TYPE_CHECKING, Any, Iterator
 from urllib.parse import (
     urlparse,
 )
@@ -41,23 +40,120 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("hh-applicant-tool")
 
+# Группа в конфиге, из которой берутся параметры поиска вакансий.
+# Значения из командной строки имеют приоритет над конфигом.
+SEARCH_PARAMS_CONFIG_KEY = "vacancy_search_params"
+
+# Параметры поиска, которые можно задать и флагами, и в конфиге
+SEARCH_PARAM_NAMES = (
+    "text",
+    "search_field",
+    "order_by",
+    "per_page",
+    "experience",
+    "schedule",
+    "work_format",
+    "employment",
+    "area",
+    "metro",
+    "professional_role",
+    "industry",
+    "employer_id",
+    "excluded_employer_id",
+    "currency",
+    "salary",
+    "only_with_salary",
+    "label",
+    "period",
+    "date_from",
+    "date_to",
+    "top_lat",
+    "bottom_lat",
+    "left_lng",
+    "right_lng",
+    "sort_point_lat",
+    "sort_point_lng",
+    "no_magic",
+    "premium",
+)
+
+# Параметры, которые API принимает списком
+LIST_SEARCH_PARAMS = frozenset(
+    {
+        "search_field",
+        "work_format",
+        "employment",
+        "area",
+        "metro",
+        "professional_role",
+        "industry",
+        "employer_id",
+        "excluded_employer_id",
+        "label",
+    }
+)
+
+DEFAULT_PER_PAGE = 100
+
+# Системные промпты - простые строки, не шаблоны
+DEFAULT_COVER_LETTER_SYSTEM_PROMPT = (
+    "Ты помогаешь соискателю писать сопроводительные письма. "
+    "Пиши кратко, вежливо и по делу, не выдумывай фактов."
+)
+DEFAULT_AI_FILTER_SYSTEM_PROMPT = (
+    "Ты определяешь, подходит ли вакансия кандидату. "
+    "Отвечай одним словом: «да» или «нет»."
+)
+
+# Пользовательские промпты - шаблоны, подстановка через %(name)s
+DEFAULT_COVER_LETTER_PROMPT = (
+    "Сгенерируй сопроводительное письмо не более 5-7 предложений "
+    "от моего имени для вакансии «%(vacancy_name)s» "
+    "работодателя «%(employer_name)s». "
+    "Меня зовут %(first_name)s, мое резюме: «%(resume_title)s»."
+)
+DEFAULT_AI_FILTER_PROMPT = """\
+Резюме кандидата:
+Должность: %(resume_title)s
+Навыки: %(resume_skills)s
+
+Вакансия: %(vacancy_name)s
+Ключевые навыки: %(vacancy_key_skills)s
+Описание: %(vacancy_description)s
+
+Подходит ли эта вакансия кандидату?"""
+
+
+def _load_prompt(value: str) -> str:
+    """Возвращает содержимое файла, если value - путь до файла, иначе сам текст."""
+    try:
+        path = Path(value)
+        if path.is_file():
+            return path.read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        pass
+    return value
+
 
 class Namespace(BaseNamespace):
     resume_id: str | None
     letter_file: Path | None
     ignore_employers: Path | None
     force_message: bool
-    ai_filter: Literal["heavy", "light", "custom"] | None
-    ai_filter_prompt: str | None
-    system_prompt: str
-    message_prompt: str
-    order_by: str
-    search: str
-    schedule: str
-    work_format: list[str] | None
+    ai_filter: bool | None
+    ai_filter_system_prompt: str
+    ai_filter_prompt: str
+    cover_letter_system_prompt: str
+    cover_letter_prompt: str
     dry_run: bool
-    # Пошли доп фильтры, которых не было
-    experience: str
+    # Параметры поиска (None - не задано, значит берем из конфига)
+    text: str | None
+    search_field: list[str] | None
+    order_by: str | None
+    per_page: int | None
+    experience: str | None
+    schedule: str | None
+    work_format: list[str] | None
     employment: list[str] | None
     area: list[str] | None
     metro: list[str] | None
@@ -67,7 +163,7 @@ class Namespace(BaseNamespace):
     excluded_employer_id: list[str] | None
     currency: str | None
     salary: int | None
-    only_with_salary: bool
+    only_with_salary: bool | None
     label: list[str] | None
     period: int | None
     date_from: str | None
@@ -78,15 +174,13 @@ class Namespace(BaseNamespace):
     right_lng: float | None
     sort_point_lat: float | None
     sort_point_lng: float | None
-    no_magic: bool
-    premium: bool
-    per_page: int
+    no_magic: bool | None
+    premium: bool | None
     total_pages: int
     excluded_filter: str | None
     max_responses: int
     send_email: bool
     skip_tests: bool
-    ai_use_contact_details: bool
 
 
 class Operation(BaseOperation):
@@ -96,11 +190,6 @@ class Operation(BaseOperation):
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
-        parser.add_argument(
-            "--search",
-            help="Строка поиска для фильтрации вакансий. Если указана, то поиск будет производиться по вакансиям. В остальных случаях отклики будут производиться по списку рекомендованных вакансий.",  # noqa: E501
-            type=str,
-        )
         parser.add_argument(
             "-L",
             "--letter-file",
@@ -116,39 +205,39 @@ class Operation(BaseOperation):
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
+            "--cover-letter-system-prompt",
+            "--system-prompt",
+            "--ai-system",
+            help="Системный промпт для AI генерации сопроводительных писем (простой текст, не шаблон). Принимает текст или путь до файла",
+            default=DEFAULT_COVER_LETTER_SYSTEM_PROMPT,
+        )
+        parser.add_argument(
+            "--cover-letter-prompt",
+            "--message-prompt",
+            "--prompt",
+            help="Шаблон промпта для генерации сопроводительного письма. Доступны переменные %%(vacancy_name)s, %%(vacancy_url)s, %%(employer_name)s, %%(first_name)s, %%(last_name)s, %%(email)s, %%(phone)s, %%(resume_title)s, %%(resume_url)s, %%(resume_hash)s. Принимает текст или путь до файла",
+            default=DEFAULT_COVER_LETTER_PROMPT,
+        )
+        parser.add_argument(
             "--ai-filter",
-            help="Использовать AI для фильтрации вакансий. Режимы: heavy - полный анализ вакансии и резюме, light - быстрый анализ по названию и навыкам, custom - свой системный промпт (--ai-filter-prompt)",
-            choices=["heavy", "light", "custom"],
-            default=None,
+            help="Использовать AI для фильтрации вакансий",
+            action=argparse.BooleanOptionalAction,
+        )
+        parser.add_argument(
+            "--ai-filter-system-prompt",
+            help="Системный промпт для AI-фильтра вакансий (простой текст, не шаблон). Ответ AI должен быть «да» или «нет». Принимает текст или путь до файла",
+            default=DEFAULT_AI_FILTER_SYSTEM_PROMPT,
         )
         parser.add_argument(
             "--ai-filter-prompt",
-            help="Системный промпт для AI-фильтра (используется только в режиме custom). Принимает текст или путь до файла",
-            default=None,
-        )
-        parser.add_argument(
-            "--system-prompt",
-            "--ai-system",
-            help="Системный промпт для AI генерации сопроводительных писем. Принимает текст или путь до файла",
-            default="Сгенерируй сопроводительное письмо для отклика на вакансию от имени соискателя",
-        )
-        parser.add_argument(
-            "--message-prompt",
-            "--prompt",
-            help="Промпт для генерации сопроводительного письма. Принимает так же путь до файла",
-            default="Сгенерируй сопроводительное письмо не более 5-7 предложений от моего имени для вакансии",  # noqa: E501
+            help="Шаблон промпта для AI-фильтра вакансий. Доступны переменные из --cover-letter-prompt, а также %%(resume_skills)s, %%(resume_about)s, %%(resume_experience)s, %%(vacancy_description)s, %%(vacancy_key_skills)s. Принимает текст или путь до файла",
+            default=DEFAULT_AI_FILTER_PROMPT,
         )
         parser.add_argument(
             "--total-pages",
             "--pages",
             help="Количество обрабатываемых страниц поиска",  # noqa: E501
             default=20,
-            type=int,
-        )
-        parser.add_argument(
-            "--per-page",
-            help="Сколько должно быть результатов на странице",  # noqa: E501
-            default=100,
             type=int,
         )
         parser.add_argument(
@@ -159,11 +248,6 @@ class Operation(BaseOperation):
         parser.add_argument(
             "--skip-tests",
             help="Пропускать тесты при откликах вместо",
-            action=argparse.BooleanOptionalAction,
-        )
-        parser.add_argument(
-            "--ai-use-contact-details",
-            help="Использовать дополнительные контактные данные кроме имени в сопроводительных письмах, генерируемых через нейронку",
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
@@ -186,9 +270,23 @@ class Operation(BaseOperation):
         # при поиске подходящих вакансий
         api_search_filters = parser.add_argument_group(
             "Фильтры для поиска вакансий",
-            "Эти параметры напрямую соответствуют фильтрам поиска HeadHunter API",
+            "Эти параметры напрямую соответствуют фильтрам поиска HeadHunter API. "
+            f"Значения по умолчанию можно задать в конфиге в группе {SEARCH_PARAMS_CONFIG_KEY} "
+            "(ключи - имена параметров с подчеркиваниями, например only_with_salary или work_format). "
+            "Параметры командной строки имеют более высокий приоритет, чем значения из конфига.",
         )
 
+        api_search_filters.add_argument(
+            "--text",
+            "--search",
+            help="Строка поиска для фильтрации вакансий. Если указана, то поиск будет производиться по вакансиям. В остальных случаях отклики будут производиться по списку рекомендованных вакансий.",  # noqa: E501
+            type=str,
+        )
+        api_search_filters.add_argument(
+            "--per-page",
+            help=f"Сколько должно быть результатов на странице (по умолчанию {DEFAULT_PER_PAGE})",  # noqa: E501
+            type=int,
+        )
         api_search_filters.add_argument(
             "--order-by",
             help="Сортировка вакансий",
@@ -199,23 +297,22 @@ class Operation(BaseOperation):
                 "relevance",
                 "distance",
             ],
-            # default="relevance",
         )
         api_search_filters.add_argument(
             "--experience",
-            help="Уровень опыта работы (noExperience, between1And3, between3And6, moreThan6)",
-            type=str,
-            default=None,
+            help="Уровень опыта работы",
+            choices=["noExperience", "between1And3", "between3And6", "moreThan6"],
         )
         api_search_filters.add_argument(
             "--schedule",
-            help="Тип графика (fullDay, shift, flexible, remote, flyInFlyOut)",
-            type=str,
+            help="Тип графика",
+            choices=["fullDay", "shift", "flexible", "remote", "flyInFlyOut"],
         )
         api_search_filters.add_argument(
             "--work-format",
             nargs="+",
-            help="Формат работы (REMOTE, HYBRID, ON_SITE, FIELD_WORK)",
+            help="Формат работы",
+            choices=["REMOTE", "HYBRID", "ON_SITE", "FIELD_WORK"],
         )
         api_search_filters.add_argument(
             "--employment", nargs="+", help="Тип занятости"
@@ -239,15 +336,15 @@ class Operation(BaseOperation):
             "--excluded-employer-id", nargs="+", help="Исключить работодателей"
         )
         api_search_filters.add_argument(
-            "--currency", help="Код валюты (RUR, USD, EUR)"
+            "--currency", help="Код валюты", choices=["RUR", "USD", "EUR"]
         )
         api_search_filters.add_argument(
             "--salary", type=int, help="Минимальная зарплата"
         )
         api_search_filters.add_argument(
             "--only-with-salary",
-            default=False,
             action=argparse.BooleanOptionalAction,
+            help="Только вакансии с указанной зарплатой",
         )
         api_search_filters.add_argument(
             "--label", nargs="+", help="Метки вакансий (label)"
@@ -285,12 +382,11 @@ class Operation(BaseOperation):
         )
         api_search_filters.add_argument(
             "--no-magic",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             help="Отключить авторазбор текста запроса",
         )
         api_search_filters.add_argument(
             "--premium",
-            default=False,
             action=argparse.BooleanOptionalAction,
             help="Только премиум вакансии",
         )
@@ -310,6 +406,28 @@ class Operation(BaseOperation):
     def args(self) -> Namespace:
         return self._args
 
+    def _load_search_params(self, args: Namespace) -> None:
+        """Заполняет параметры поиска: сначала флаги, затем конфиг."""
+        # Значения из флагов передаются как defaults: get_config_section
+        # игнорирует None, а не заданные флаги добирает из конфига
+        cli_params = {name: getattr(args, name, None) for name in SEARCH_PARAM_NAMES}
+        params = self.tool.get_config_section(
+            SEARCH_PARAMS_CONFIG_KEY, **cli_params
+        )
+
+        for name in SEARCH_PARAM_NAMES:
+            value = params.get(name)
+            if (
+                value is not None
+                and name in LIST_SEARCH_PARAMS
+                and not isinstance(value, (list, tuple))
+            ):
+                value = [value]
+            setattr(self, name, value)
+
+        if self.per_page is None:
+            self.per_page = DEFAULT_PER_PAGE
+
     def run(
         self,
         tool: HHApplicantTool,
@@ -322,297 +440,125 @@ class Operation(BaseOperation):
             if args.letter_file
             else self.cover_letter
         )
-        self.area = args.area
-        self.bottom_lat = args.bottom_lat
-        self.currency = args.currency
-        self.date_from = args.date_from
-        self.date_to = args.date_to
+        self._load_search_params(args)
         self.dry_run = args.dry_run
-        self.employer_id = args.employer_id
-        self.employment = args.employment
-        self.excluded_employer_id = args.excluded_employer_id
         self.excluded_filter = args.excluded_filter
-        self.experience = args.experience
         self.force_message = args.force_message
-        self.industry = args.industry
-        self.label = args.label
-        self.left_lng = args.left_lng
         self.max_responses = args.max_responses
-        self.metro = args.metro
-        self.no_magic = args.no_magic
-        self.only_with_salary = args.only_with_salary
-        self.order_by = args.order_by
-        self.per_page = args.per_page
-        self.period = args.period
-        self.message_prompt = args.message_prompt
-        self.premium = args.premium
-        self.professional_role = args.professional_role
         self.resume_id = args.resume_id
-        self.right_lng = args.right_lng
-        self.salary = args.salary
-        self.schedule = args.schedule
-        self.work_format = args.work_format
-        self.search = args.search
-        self.search_field = args.search_field
-        self.sort_point_lat = args.sort_point_lat
-        self.sort_point_lng = args.sort_point_lng
-        self.top_lat = args.top_lat
         self.total_pages = args.total_pages
+
+        # Системные промпты - обычный текст, пользовательские - шаблоны
+        self.cover_letter_prompt = _load_prompt(args.cover_letter_prompt)
+        self.ai_filter_prompt = _load_prompt(args.ai_filter_prompt)
         self.cover_letter_ai = (
-            tool.get_ai_client(args.system_prompt, purpose="cover_letter")
+            tool.get_ai_client(
+                "openai.cover_letter",
+                system_prompt=_load_prompt(args.cover_letter_system_prompt),
+            )
             if args.use_ai
             else None
         )
-        self.ai_filter = args.ai_filter
-        self.ai_filter_prompt = args.ai_filter_prompt
-        self.ai_use_contact_details = args.ai_use_contact_details or False
-        self.vacancy_filter_ai = None
-        self._resume_analysis_cache: dict[tuple[str | None, str], str] = {}
+        self.ai_filter = bool(args.ai_filter)
+        self.vacancy_filter_ai = (
+            tool.get_ai_client(
+                "openai.vacancy_filter",
+                system_prompt=_load_prompt(args.ai_filter_system_prompt),
+            )
+            if self.ai_filter
+            else None
+        )
 
         self._apply_vacancies()
 
-    def _get_full_resume(self, resume_id: str) -> dict:
-        return self.api_client.get(f"/resumes/{resume_id}")
+    def _get_resume_info(self, resume_id: str | None) -> dict[str, str]:
+        """Данные резюме для подстановки в шаблон промпта AI-фильтра."""
+        info = {
+            "resume_skills": "",
+            "resume_about": "",
+            "resume_experience": "",
+        }
+        if not resume_id:
+            return info
 
-    def _analyze_resume_heavy(self, resume: dict) -> str:
-        resume_id = resume.get("id")
-        cache_key = (resume_id, "heavy")
-        if cache_key in self._resume_analysis_cache:
-            return self._resume_analysis_cache[cache_key]
-
-        if resume_id:
-            try:
-                full_resume = self._get_full_resume(resume_id)
-
-                parts = []
-
-                title = full_resume.get("title", "")
-                if title:
-                    parts.append(f"Должность: {title}")
-
-                if "skills" in full_resume:
-                    parts.append("\n---------- О СЕБЕ ----------")
-                    # hh.ru отдаёт skills как null, когда поле не заполнено,
-                    # и .get(..., "") тут не спасает: null уже есть в ответе
-                    parts.append(full_resume.get("skills") or "")
-
-                if "skill_set" in full_resume and full_resume["skill_set"]:
-                    parts.append("\n---------- НАВЫКИ ----------")
-                    skills_row = ", ".join(full_resume["skill_set"])
-                    parts.append(skills_row)
-
-                if "experience" in full_resume:
-                    parts.append("\n---------- ОПЫТ РАБОТЫ ----------")
-                    for exp in full_resume.get("experience", []):
-                        company = exp.get("company", "Не указано")
-                        position = exp.get("position", "Не указано")
-                        start = exp.get("start", "")
-                        end = exp.get("end") or "по настоящее время"
-
-                        parts.append(f"\n- {company}")
-                        parts.append(f" Должность: {position}")
-                        parts.append(f" Период: {start} - {end}")
-
-                        description = exp.get("description")
-                        if description:
-                            parts.append(" Описание:")
-                            parts.append(f" {description}")
-
-                result = "\n".join(parts)
-                self._resume_analysis_cache[cache_key] = result
-                return result
-
-            except Exception as e:
-                logger.warning(f"Не удалось получить полное резюме: {e}")
-
-        return ""
-
-    def _analyze_resume_light(self, resume: dict) -> str:
-        resume_id = resume.get("id")
-        cache_key = (resume_id, "light")
-        if cache_key in self._resume_analysis_cache:
-            return self._resume_analysis_cache[cache_key]
-
-        parts = []
-
-        full_resume = self._get_full_resume(resume_id)
-
-        title = full_resume.get("title", "")
-        if title:
-            parts.append(f"Должность: {title}")
-
-        if "skill_set" in full_resume and full_resume["skill_set"]:
-            parts.append("Навыки: ")
-            skills_row = ", ".join(full_resume["skill_set"])
-            parts.append(skills_row)
-
-        result = "\n".join(parts)
-        self._resume_analysis_cache[cache_key] = result
-        return result
-
-    def _get_vacancy_key_skills(self, vacancy_id: str | int) -> str:
         try:
-            full_vacancy = self.api_client.get(f"/vacancies/{vacancy_id}")
-            key_skills_data = full_vacancy.get("key_skills") or []
-            return ", ".join(
-                s["name"] for s in key_skills_data if s.get("name")
-            )
+            full_resume = self.api_client.get(f"/resumes/{resume_id}")
         except Exception as e:
-            logger.warning(
-                "Не удалось получить key_skills вакансии %s: %s", vacancy_id, e
+            logger.warning(f"Не удалось получить полное резюме: {e}")
+            return info
+
+        # hh.ru отдаёт skills как null, когда поле не заполнено,
+        # и .get(..., "") тут не спасает: null уже есть в ответе
+        info["resume_about"] = full_resume.get("skills") or ""
+        info["resume_skills"] = ", ".join(full_resume.get("skill_set") or [])
+
+        lines = []
+        for exp in full_resume.get("experience") or []:
+            end = exp.get("end") or "по настоящее время"
+            lines.append(
+                f"- {exp.get('company') or 'Не указано'}, "
+                f"{exp.get('position') or 'Не указано'} "
+                f"({exp.get('start') or ''} - {end})"
             )
-            return ""
+            if exp.get("description"):
+                lines.append(f"  {exp['description']}")
+        info["resume_experience"] = "\n".join(lines)
 
-    def _build_vacancy_context(
-        self,
-        vacancy: dict,
-        full_vacancy: dict | None = None,
-    ) -> str:
-        parts: list[str] = []
+        return info
 
-        name = vacancy.get("name")
-        if name:
-            parts.append(f"Вакансия: {name}")
+    # Если AI ответил что-то непонятное, лучше не отбрасывать вакансию
+    @staticmethod
+    def _parse_is_suitable_response(response: str) -> bool | None:
+        answer = response.strip().lower().strip(" .!\"'«»")
 
-        if full_vacancy:
-            description = full_vacancy.get("description")
-            if description:
-                parts.append(f"Описание: {strip_tags(description)}")
-        else:
-            if vacancy.get("id"):
-                key_skills = self._get_vacancy_key_skills(vacancy["id"])
-                if key_skills:
-                    parts.append(f"Ключевые навыки: {key_skills}")
-
-        return "\n".join(parts)
-
-    def _ask_ai_suitability(
-        self, prompt: str, vacancy_name: str, log_suffix: str = ""
-    ) -> bool:
-
-        if not self.vacancy_filter_ai:
+        if re.match(r"(да|yes|true)\b", answer):
             return True
-
-        response = self.vacancy_filter_ai.complete(prompt).strip()
-
-        logger.debug(
-            "AI %s ответ: %s",
-            log_suffix,
-            response,
-        )
-
-        result = self._parse_is_suitable_response(response)
-        if result is not None:
-            if result:
-                return True
-            logger.info("Вакансия %s отклонена AI %s", vacancy_name, log_suffix)
+        if re.match(r"(нет|no|false)\b", answer):
             return False
-
-        # Если не удалось распарсить JSON, повторяем запрос
-        logger.warning(
-            "AI %s не дал валидный JSON для вакансии %s (попытка %d/%d)",
-            log_suffix,
-            vacancy_name,
-        )
-
-    # Эта функция какая-то странная
-    def _parse_is_suitable_response(self, response: str) -> bool | None:
-        answer = response.strip().lower()
-
-        if answer in ("да", "yes", "true"):
-            return True
-        if answer in ("нет", "no", "false"):
-            return False
-
-        if "```" in response:
-            payload = response.split("```")[1]
-            _, payload = payload.split("\n", maxsplit=1)
-            try:
-                payload = json.load(payload)
-                return payload.get("suitable")
-            except json.JSONDecodeError:
-                pass
 
         return None
 
-    # КТО ЭТО ПРОЧИТАЛ ТОТ ПИД@РАС
-    # Сам такой
-    def _is_vacancy_suitable_heavy(
-        self, vacancy: dict, log_suffix: str = "(heavy)"
+    def _is_vacancy_suitable(
+        self, vacancy: dict, placeholders: dict[str, str]
     ) -> bool:
-        full_vacancy = None
-        if vacancy.get("id"):
-            full_vacancy = self.api_client.get(f"/vacancies/{vacancy['id']}")
+        if not self.vacancy_filter_ai:
+            return True
 
-        vacancy_info = self._build_vacancy_context(
-            vacancy,
-            full_vacancy=full_vacancy,
-            include_full=True,
+        full_vacancy = (
+            self.api_client.get(f"/vacancies/{vacancy['id']}")
+            if vacancy.get("id")
+            else {}
         )
-        prompt = f"Вакансия: {vacancy_info}"
-        return self._ask_ai_suitability(
-            prompt, vacancy.get("name", ""), log_suffix
-        )
-
-    def _is_vacancy_suitable_light(self, vacancy: dict) -> bool:
-        vacancy_info = self._build_vacancy_context(vacancy, include_full=False)
-        prompt = f"Вакансия: {vacancy_info}"
-        return self._ask_ai_suitability(
-            prompt, vacancy.get("name", ""), "(light)"
+        key_skills = ", ".join(
+            s["name"]
+            for s in (full_vacancy.get("key_skills") or [])
+            if s.get("name")
         )
 
-    def _build_filter_system_prompt_heavy(self, resume_analysis: str) -> str:
-        return f"""
-Определи, подходит ли вакансия кандидату.
+        prompt = render_template(
+            self.ai_filter_prompt,
+            {
+                **placeholders,
+                "vacancy_description": strip_tags(
+                    full_vacancy.get("description") or ""
+                ),
+                "vacancy_key_skills": key_skills,
+            },
+            "промпте AI-фильтра",
+        )
+        response = self.vacancy_filter_ai.complete(prompt)
+        logger.debug("AI ответ фильтра: %s", response)
 
-Смотри в первую очередь на тип работы (роль), а не на технологии.
+        result = self._parse_is_suitable_response(response)
+        if result is None:
+            logger.warning(
+                "AI-фильтр дал непонятный ответ для вакансии %s: %.100s. Считаю вакансию подходящей.",
+                vacancy.get("name", ""),
+                response,
+            )
+            return True
 
-Правила:
-
-1. Если работа по сути другая -> suitable = false
-
-2. Если роль совпадает или очень близкая:
-   - есть пересечения по задачам или навыкам -> suitable = true
-   - даже частичное совпадение допустимо
-
-3. Общие технологии сами по себе ничего не значат.
-   Если работа разная, это не делает вакансию подходящей.
-
-4. Если данных мало:
-   - ориентируйся на название роли
-
-Не пиши объяснения.
-Ответ строго JSON:
-{{"suitable": true}} или {{"suitable": false}}
-
-Кандидат:
-{resume_analysis}
-"""
-
-    def _build_filter_system_prompt_light(self, resume_analysis: str) -> str:
-        return f"""
-Ты делаешь очень грубую проверку: подходит вакансия или нет.
-
-Используй только:
-- название резюме
-- список навыков резюме
-- название вакансии
-- явно указанные ключевые навыки вакансии
-
-Не анализируй описание, обязанности, контекст, домен, уровень, карьерный рост и прочую воду.
-Не додумывай ничего, чего нет в тексте.
-
-Правила:
-- если название вакансии и резюме в одной профессии или близких ролях, и есть хотя бы частичное совпадение по ключевым навыкам -> suitable = true
-- если роли явно разные или совпадений по навыкам почти нет -> suitable = false
-- если данных мало -> ориентируйся только на явные совпадения, без фантазий
-
-Ответ только JSON:
-{{"suitable": true}} или {{"suitable": false}}
-
-Кандидат:
-{resume_analysis}
-"""
+        return result
 
     def _apply_vacancies(self) -> None:
         resumes: list[datatypes.Resume] = self.tool.get_resumes()
@@ -683,53 +629,12 @@ class Operation(BaseOperation):
             "resume_url": resume.get("alternate_url") or "",
         }
 
+        if self.ai_filter:
+            placeholders.update(self._get_resume_info(resume.get("id")))
+
         do_apply = True
         storage = self.tool.storage
         site_emails = {}
-
-        if self.ai_filter:
-            if self.ai_filter in ("heavy", "custom"):
-                resume_analysis = self._analyze_resume_heavy(resume)
-            elif self.ai_filter == "light":
-                resume_analysis = self._analyze_resume_light(resume)
-            else:
-                raise ValueError(
-                    f"Неизвестный режим AI фильтра: {self.ai_filter}"
-                )
-
-            if self.ai_filter == "custom":
-                if not self.ai_filter_prompt:
-                    raise ValueError(
-                        "Режим 'custom' требует --ai-filter-prompt"
-                    )
-                # Кастомный промпт заменяет только инструкции. Анализ резюме
-                # добавляем блоком "Кандидат" в конец (как во встроенных).
-                system_prompt = (
-                    f"{self.ai_filter_prompt}\n\nКандидат:\n{resume_analysis}\n\n"
-                    "Не пиши объяснения.\n"
-                    "Ответ строго JSON:\n"
-                    '{{"suitable": true}} или {{"suitable": false}}'
-                )
-            elif self.ai_filter == "heavy":
-                system_prompt = self._build_filter_system_prompt_heavy(
-                    resume_analysis
-                )
-            else:
-                system_prompt = self._build_filter_system_prompt_light(
-                    resume_analysis
-                )
-
-            logger.debug(
-                "AI системный промпт (%s, custom=%s): %s",
-                self.ai_filter,
-                bool(self.ai_filter_prompt),
-                system_prompt,
-            )
-
-            self.vacancy_filter_ai = self.tool.get_ai_client(
-                system_prompt,
-                purpose="vacancy_filter",
-            )
 
         for vacancy in self._get_vacancies(resume_id=resume["id"]):
             if self.max_responses and applied_count >= self.max_responses:
@@ -839,24 +744,15 @@ class Operation(BaseOperation):
                         )
                         continue
 
-                    if self.ai_filter in ("heavy", "custom"):
-                        is_suitable = self._is_vacancy_suitable_heavy(
-                            vacancy,
-                            "(custom)"
-                            if self.ai_filter == "custom"
-                            else "(heavy)",
-                        )
-                    else:
-                        is_suitable = self._is_vacancy_suitable_light(vacancy)
-
-                    if not is_suitable:
+                    if not self._is_vacancy_suitable(
+                        vacancy, message_placeholders
+                    ):
                         logger.info(
-                            "Вакансия отклонена AI фильтром (%s): %s",
-                            self.ai_filter,
+                            "Вакансия отклонена AI фильтром: %s",
                             vacancy["alternate_url"],
                         )
                         print(
-                            f"🧠 AI ({self.ai_filter}) посчитал неподходящей",
+                            "🧠 AI посчитал неподходящей",
                             vacancy["alternate_url"],
                         )
 
@@ -924,44 +820,13 @@ class Operation(BaseOperation):
                     "response_letter_required"
                 ):
                     if self.cover_letter_ai:
-                        msg = self.message_prompt + "\n"
-                        ## добавляем переменные в контекст AI запроса ##
-                        msg += (
-                            "[ВАКАНСИЯ] "
-                            + "Название: "
-                            + message_placeholders["vacancy_name"]
-                            + ", "
-                            + "Работодатель: "
-                            + message_placeholders["employer_name"]
-                            + "; "
+                        prompt = render_template(
+                            self.cover_letter_prompt,
+                            message_placeholders,
+                            "промпте сопроводительного письма",
                         )
-                        msg += (
-                            "[РЕЗЮМЕ] "
-                            + "Название: "
-                            + message_placeholders["resume_title"]
-                            # + ", "
-                            # + "Ссылка на резюме: "
-                            # + message_placeholders["resume_url"]
-                            # + ", "
-                        )
-                        msg += "Имя: " + message_placeholders["first_name"]
-
-                        # Я не думаю, что со всеми мошенниками в мире нужно
-                        # делиться своими контактными данными
-                        if self.ai_use_contact_details:
-                            msg += (
-                                ", "
-                                + "Фамилия: "
-                                + message_placeholders["last_name"]
-                                + ", "
-                                + "Телефон: "
-                                + message_placeholders["phone"]
-                                + ", "
-                                + "Почта: "
-                                + message_placeholders["email"]
-                            )
-                        ## logger.debug("prompt: %s", msg) ## убираем отладку
-                        letter = self.cover_letter_ai.complete(msg)
+                        logger.debug("prompt: %s", prompt)
+                        letter = self.cover_letter_ai.complete(prompt)
                     else:
                         letter = render_template(
                             rand_text(self.cover_letter),
@@ -1401,9 +1266,9 @@ class Operation(BaseOperation):
 
             logger.debug(params)
 
-            if self.search:
+            if self.text:
                 search_endpoint = "/vacancies"
-                params |= {"text": self.search}
+                params |= {"text": self.text}
             else:
                 search_endpoint = f"/resumes/{resume_id}/similar_vacancies"
             res: PaginatedItems[SearchVacancy] = self.api_client.get(
