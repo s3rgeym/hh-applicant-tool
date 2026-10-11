@@ -31,18 +31,6 @@ class Operation(BaseOperation):
         parser.add_argument("username", nargs="?", help="Email или телефон")
 
     def run(self, tool: HHApplicantTool, args) -> int | None:
-        self._tool = tool
-        self._args = args
-        try:
-            self._run()
-        except KeyboardInterrupt:
-            logger.warning("Операция прервана пользователем")
-            return 1
-        return 0
-
-    def _run(self) -> None:
-        tool = self._tool
-        args = self._args
         api_client = tool.api_client
         storage = tool.storage
         session = tool.session
