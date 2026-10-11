@@ -247,8 +247,8 @@ class OAuthClient(BaseClient):
             response_type="code",
             scope=self.scope,
             state=self.state,
+            **kwargs,
         )
-        params.update(kwargs)
         query = urlencode({k: v for k, v in params.items() if v})
         return self.resolve_url(f"/authorize?{query}")
 
