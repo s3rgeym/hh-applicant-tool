@@ -61,6 +61,8 @@ class Operation(BaseOperation):
             username = self._normalize_phone_number(username)
 
         # https://api.hh.ru/openapi/redoc#section/Avtorizaciya/Zapros-avtorizacii-pod-drugim-polzovatelem
+        # Если аккаунт еще и как работодатель может войти, то по умолчанию перекидывает на авторизацию
+        # в качестве employer
         authorize_url = api_client.oauth_client.authorize_url(
             force_login="true",
             role="applicant",
@@ -70,23 +72,25 @@ class Operation(BaseOperation):
         logger.info(
             f"Эту ссылку можно открыть в браузере для изучения процесса авторизации: {authorize_url=}"
         )
-        # 1. Страница авторизации -> xsrf и публичный ключ
+        # Страница авторизации -> xsrf и публичный ключ
         r = session.get(authorize_url)
-        # Если куки не протушли, то авторизация не пройдет
-
         redirect_url = r.url
         logger.debug(redirect_url)
 
         data = tool.parse_initial_state(r)
-        xsrf = data["xsrfToken"]
+
+        try:
+            xsrf = data["xsrfToken"]
+        except KeyError as ex:
+            raise OperationError("xsrfToken отсутствует на странице!")
 
         try:
             pubkey = data["loginTrustFlagsSecret"]
         except KeyError as ex:
-            raise OperationError("Что-то пошло не так!") from ex
+            raise OperationError("Публичный ключ для шифрования параметров loginTrustFlags отсутствует!") from ex
 
         # Эти заголовки у всех POST-запросов при авторизации
-        # У них referer отличается только, но наврядли его гикто не проверяет
+        # У них referer отличается только, но наврядли его кто проверяет
         login_headers = {
             "Accept": "application/json",
             "X-Hhtmfrom": "",
@@ -96,7 +100,9 @@ class Operation(BaseOperation):
             "Referer": redirect_url,
         }
 
-        # 2. Запрос кода
+        # Мне лень делать авторизацию по паролю, так как там и параметры шлются на
+        # другой эндпоинт, так и обработка капчи отличается 
+        # Запрос кода
         params = {
             "login": username,
             "otpType": ["phone", "email"][is_email],
@@ -116,6 +122,7 @@ class Operation(BaseOperation):
             )
             r = session.post(
                 otp_url,
+                # Просто как образец отправки force multipart
                 files={k: (None, v) for k, v in params.items()},
                 headers=login_headers,
             )
@@ -183,7 +190,8 @@ class Operation(BaseOperation):
         try:
             res = r.json()
         except json.JSONDecodeError as ex:
-            raise OperationError("Неизвестная ошибка!") from ex
+            logger.debug(r.text[:255])
+            raise OperationError("Сервер не вернул JSON в ответ на отправку кода!") from ex
 
         logger.debug(res)
 
@@ -191,7 +199,8 @@ class Operation(BaseOperation):
             error_key = res.get("error", {}).get("key", "UNKNOWN_ERROR")
             raise OperationError(f"Ошибка авторизации: {error_key}")
 
-        assert res.get("verification", {}).get("success")
+        if not res.get("verification", {}).get("success"):
+            raise OperationError("Верификация не пройдена!")
 
         # Теперь нужно проверить заголовки
         backurl = parse_qs(urlsplit(redirect_url).query)["backurl"][0]
