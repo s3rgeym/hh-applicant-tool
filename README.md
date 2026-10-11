@@ -1054,7 +1054,7 @@ console.log('trust login: %o', _0x3cd982);
 ## Связанные проекты
 
 - [Приложение под Android](https://github.com/s3rgeym/hh-resume-automate)
-- [Простенький скрипт только рассылающий отклики](https://github.com/s3rgeym/hh-auto-apply)
+- [Прога, не требующая установки (скачал и запустил), которая рассылает отклики и отвечает в чаты через хуИИ](https://github.com/s3rgeym/hh-ai-responder)
 
 ---
 
