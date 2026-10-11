@@ -21,6 +21,7 @@ from ..ai.base import AIError
 from ..api import BadResponse, Redirect, datatypes
 from ..api.datatypes import PaginatedItems, SearchVacancy
 from ..api.errors import ApiError, LimitExceeded
+from ..errors import OperationError
 from ..storage.repositories.errors import RepositoryError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.datatypes import VacancyTestsData
@@ -40,11 +41,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("hh-applicant-tool")
 
-# Группа в конфиге, из которой берутся параметры поиска вакансий.
-# Значения из командной строки имеют приоритет над конфигом.
-SEARCH_PARAMS_CONFIG_KEY = "vacancy_search_params"
-
-# Параметры поиска, которые можно задать и флагами, и в конфиге
+# Параметры поиска вакансий, задаваемые флагами
 SEARCH_PARAM_NAMES = (
     "text",
     "search_field",
@@ -77,22 +74,6 @@ SEARCH_PARAM_NAMES = (
     "premium",
 )
 
-# Параметры, которые API принимает списком
-LIST_SEARCH_PARAMS = frozenset(
-    {
-        "search_field",
-        "work_format",
-        "employment",
-        "area",
-        "metro",
-        "professional_role",
-        "industry",
-        "employer_id",
-        "excluded_employer_id",
-        "label",
-    }
-)
-
 DEFAULT_PER_PAGE = 100
 
 # Системные промпты - простые строки, не шаблоны
@@ -123,16 +104,31 @@ DEFAULT_AI_FILTER_PROMPT = """\
 
 Подходит ли эта вакансия кандидату?"""
 
+DEFAULT_APPLY_MAIL_SUBJECT = (
+    "{Отклик|Резюме} на вакансию %(vacancy_name)s"
+)
+DEFAULT_APPLY_MAIL_BODY = "{Здравствуйте|Добрый день}, {прошу рассмотреть|пожалуйста рассмотрите} мое резюме %(resume_url)s на вакансию %(vacancy_name)s."
 
-def _load_prompt(value: str) -> str:
-    """Возвращает содержимое файла, если value - путь до файла, иначе сам текст."""
-    try:
-        path = Path(value)
-        if path.is_file():
-            return path.read_text(encoding="utf-8")
-    except (OSError, ValueError):
-        pass
-    return value
+# Переменные, доступные в шаблонах. Нужны для проверки шаблонов до рассылки
+BASE_PLACEHOLDERS = (
+    "first_name",
+    "last_name",
+    "email",
+    "phone",
+    "resume_hash",
+    "resume_title",
+    "resume_url",
+    "vacancy_name",
+    "vacancy_url",
+    "employer_name",
+)
+AI_FILTER_PLACEHOLDERS = BASE_PLACEHOLDERS + (
+    "resume_skills",
+    "resume_about",
+    "resume_experience",
+    "vacancy_description",
+    "vacancy_key_skills",
+)
 
 
 class Namespace(BaseNamespace):
@@ -146,11 +142,11 @@ class Namespace(BaseNamespace):
     cover_letter_system_prompt: str
     cover_letter_prompt: str
     dry_run: bool
-    # Параметры поиска (None - не задано, значит берем из конфига)
+    # Параметры поиска (None - не задано)
     text: str | None
     search_field: list[str] | None
     order_by: str | None
-    per_page: int | None
+    per_page: int
     experience: str | None
     schedule: str | None
     work_format: list[str] | None
@@ -208,14 +204,14 @@ class Operation(BaseOperation):
             "--cover-letter-system-prompt",
             "--system-prompt",
             "--ai-system",
-            help="Системный промпт для AI генерации сопроводительных писем (простой текст, не шаблон). Принимает текст или путь до файла",
+            help="Системный промпт для AI генерации сопроводительных писем (простой текст, не шаблон)",
             default=DEFAULT_COVER_LETTER_SYSTEM_PROMPT,
         )
         parser.add_argument(
             "--cover-letter-prompt",
             "--message-prompt",
             "--prompt",
-            help="Шаблон промпта для генерации сопроводительного письма. Доступны переменные %%(vacancy_name)s, %%(vacancy_url)s, %%(employer_name)s, %%(first_name)s, %%(last_name)s, %%(email)s, %%(phone)s, %%(resume_title)s, %%(resume_url)s, %%(resume_hash)s. Принимает текст или путь до файла",
+            help="Шаблон промпта для генерации сопроводительного письма. Доступны переменные %%(vacancy_name)s, %%(vacancy_url)s, %%(employer_name)s, %%(first_name)s, %%(last_name)s, %%(email)s, %%(phone)s, %%(resume_title)s, %%(resume_url)s, %%(resume_hash)s",
             default=DEFAULT_COVER_LETTER_PROMPT,
         )
         parser.add_argument(
@@ -225,12 +221,12 @@ class Operation(BaseOperation):
         )
         parser.add_argument(
             "--ai-filter-system-prompt",
-            help="Системный промпт для AI-фильтра вакансий (простой текст, не шаблон). Ответ AI должен быть «да» или «нет». Принимает текст или путь до файла",
+            help="Системный промпт для AI-фильтра вакансий (простой текст, не шаблон). Ответ AI должен быть «да» или «нет»",
             default=DEFAULT_AI_FILTER_SYSTEM_PROMPT,
         )
         parser.add_argument(
             "--ai-filter-prompt",
-            help="Шаблон промпта для AI-фильтра вакансий. Доступны переменные из --cover-letter-prompt, а также %%(resume_skills)s, %%(resume_about)s, %%(resume_experience)s, %%(vacancy_description)s, %%(vacancy_key_skills)s. Принимает текст или путь до файла",
+            help="Шаблон промпта для AI-фильтра вакансий. Доступны переменные из --cover-letter-prompt, а также %%(resume_skills)s, %%(resume_about)s, %%(resume_experience)s, %%(vacancy_description)s, %%(vacancy_key_skills)s",
             default=DEFAULT_AI_FILTER_PROMPT,
         )
         parser.add_argument(
@@ -253,7 +249,7 @@ class Operation(BaseOperation):
         parser.add_argument(
             "--excluded-filter",
             type=str,
-            help=r"Исключить вакансии, если название или описание не соответствует шаблону. Например, `--excluded-filter 'junior|стажир|bitrix|дружн\w+ коллектив|полиграф|open\s*space|опенспейс|хакатон|конкурс|тестов\w+ задан'`",
+            help="Исключить вакансии, если название или описание не соответствует шаблону. Например, `--excluded-filter 'junior|стажир|bitrix|дружн\\w+ коллектив|полиграф|open\\s*space|опенспейс|хакатон|конкурс|тестов\\w+ задан'`",
         )
         parser.add_argument(
             "--max-responses",
@@ -270,10 +266,7 @@ class Operation(BaseOperation):
         # при поиске подходящих вакансий
         api_search_filters = parser.add_argument_group(
             "Фильтры для поиска вакансий",
-            "Эти параметры напрямую соответствуют фильтрам поиска HeadHunter API. "
-            f"Значения по умолчанию можно задать в конфиге в группе {SEARCH_PARAMS_CONFIG_KEY} "
-            "(ключи - имена параметров с подчеркиваниями, например only_with_salary или work_format). "
-            "Параметры командной строки имеют более высокий приоритет, чем значения из конфига.",
+            "Эти параметры напрямую соответствуют фильтрам поиска HeadHunter API",
         )
 
         api_search_filters.add_argument(
@@ -284,7 +277,8 @@ class Operation(BaseOperation):
         )
         api_search_filters.add_argument(
             "--per-page",
-            help=f"Сколько должно быть результатов на странице (по умолчанию {DEFAULT_PER_PAGE})",  # noqa: E501
+            help="Сколько должно быть результатов на странице",  # noqa: E501
+            default=DEFAULT_PER_PAGE,
             type=int,
         )
         api_search_filters.add_argument(
@@ -402,59 +396,44 @@ class Operation(BaseOperation):
     def api_client(self):
         return self.tool.api_client
 
-    @property
-    def args(self) -> Namespace:
-        return self._args
-
-    def _load_search_params(self, args: Namespace) -> None:
-        """Заполняет параметры поиска: сначала флаги, затем конфиг."""
-        # Значения из флагов передаются как defaults: get_config_section
-        # игнорирует None, а не заданные флаги добирает из конфига
-        cli_params = {name: getattr(args, name, None) for name in SEARCH_PARAM_NAMES}
-        params = self.tool.get_config_section(
-            SEARCH_PARAMS_CONFIG_KEY, **cli_params
-        )
-
-        for name in SEARCH_PARAM_NAMES:
-            value = params.get(name)
-            if (
-                value is not None
-                and name in LIST_SEARCH_PARAMS
-                and not isinstance(value, (list, tuple))
-            ):
-                value = [value]
-            setattr(self, name, value)
-
-        if self.per_page is None:
-            self.per_page = DEFAULT_PER_PAGE
-
     def run(
         self,
         tool: HHApplicantTool,
         args: Namespace,
     ) -> None:
         self.tool = tool
-        self._args = args
         self.cover_letter = (
             args.letter_file.read_text(encoding="utf-8", errors="ignore")
             if args.letter_file
             else self.cover_letter
         )
-        self._load_search_params(args)
+        for name in SEARCH_PARAM_NAMES:
+            setattr(self, name, getattr(args, name))
         self.dry_run = args.dry_run
-        self.excluded_filter = args.excluded_filter
+        self.excluded_pat = None
+        if args.excluded_filter:
+            try:
+                self.excluded_pat = re.compile(
+                    args.excluded_filter, re.IGNORECASE
+                )
+            except re.error as ex:
+                raise OperationError(
+                    f"Некорректное регулярное выражение в --excluded-filter: {ex}"
+                ) from ex
         self.force_message = args.force_message
         self.max_responses = args.max_responses
         self.resume_id = args.resume_id
+        self.send_email = args.send_email
+        self.skip_tests = args.skip_tests
         self.total_pages = args.total_pages
 
         # Системные промпты - обычный текст, пользовательские - шаблоны
-        self.cover_letter_prompt = _load_prompt(args.cover_letter_prompt)
-        self.ai_filter_prompt = _load_prompt(args.ai_filter_prompt)
+        self.cover_letter_prompt = args.cover_letter_prompt
+        self.ai_filter_prompt = args.ai_filter_prompt
         self.cover_letter_ai = (
             tool.get_ai_client(
                 "openai.cover_letter",
-                system_prompt=_load_prompt(args.cover_letter_system_prompt),
+                system_prompt=args.cover_letter_system_prompt,
             )
             if args.use_ai
             else None
@@ -463,13 +442,89 @@ class Operation(BaseOperation):
         self.vacancy_filter_ai = (
             tool.get_ai_client(
                 "openai.vacancy_filter",
-                system_prompt=_load_prompt(args.ai_filter_system_prompt),
+                system_prompt=args.ai_filter_system_prompt,
             )
             if self.ai_filter
             else None
         )
 
+        self.apply_mail_subject = (
+            tool.config.get("apply_mail_subject") or DEFAULT_APPLY_MAIL_SUBJECT
+        )
+        self.apply_mail_body = (
+            tool.config.get("apply_mail_body") or DEFAULT_APPLY_MAIL_BODY
+        )
+
+        # Ошибки в шаблонах должны вскрыться до начала рассылки
+        self._validate_templates()
+
         self._apply_vacancies()
+
+    def _render_template(
+        self,
+        template: str,
+        placeholders: dict[str, str],
+        name: str,
+        *,
+        randomize: bool = False,
+        unescape: bool = False,
+    ) -> str:
+        """Рендерит шаблон. Любая ошибка в нем прекращает операцию."""
+        try:
+            if randomize:
+                template = rand_text(template)
+            if unescape:
+                template = unescape_string(template)
+            return render_template(template, placeholders, name)
+        except Exception as ex:
+            raise OperationError(f"Ошибка в шаблоне {name}: {ex}") from ex
+
+    def _render_cover_letter(self, placeholders: dict[str, str]) -> str:
+        return self._render_template(
+            self.cover_letter,
+            placeholders,
+            "сопроводительного письма",
+            randomize=True,
+        )
+
+    def _render_mail(self, placeholders: dict[str, str]) -> tuple[str, str]:
+        subject = self._render_template(
+            self.apply_mail_subject,
+            placeholders,
+            "apply_mail_subject",
+            randomize=True,
+        )
+        body = self._render_template(
+            self.apply_mail_body,
+            placeholders,
+            "apply_mail_body",
+            randomize=True,
+            unescape=True,
+        )
+        return subject, body
+
+    def _validate_templates(self) -> None:
+        """Пробный рендер всех используемых шаблонов до начала рассылки."""
+        base = dict.fromkeys(BASE_PLACEHOLDERS, "")
+
+        if self.cover_letter_ai:
+            self._render_template(
+                self.cover_letter_prompt,
+                base,
+                "промпта сопроводительного письма",
+            )
+        else:
+            self._render_cover_letter(base)
+
+        if self.ai_filter:
+            self._render_template(
+                self.ai_filter_prompt,
+                dict.fromkeys(AI_FILTER_PLACEHOLDERS, ""),
+                "промпта AI-фильтра",
+            )
+
+        if self.send_email:
+            self._render_mail(base)
 
     def _get_resume_info(self, resume_id: str | None) -> dict[str, str]:
         """Данные резюме для подстановки в шаблон промпта AI-фильтра."""
@@ -535,7 +590,7 @@ class Operation(BaseOperation):
             if s.get("name")
         )
 
-        prompt = render_template(
+        prompt = self._render_template(
             self.ai_filter_prompt,
             {
                 **placeholders,
@@ -544,7 +599,7 @@ class Operation(BaseOperation):
                 ),
                 "vacancy_key_skills": key_skills,
             },
-            "промпте AI-фильтра",
+            "промпта AI-фильтра",
         )
         response = self.vacancy_filter_ai.complete(prompt)
         logger.debug("AI ответ фильтра: %s", response)
@@ -566,18 +621,14 @@ class Operation(BaseOperation):
             self.tool.storage.resumes.save_batch(resumes)
         except RepositoryError as ex:
             logger.exception(ex)
-        resumes = (
-            list(filter(lambda x: x["id"] == self.resume_id, resumes))
-            if self.resume_id
-            else resumes
-        )
+        if self.resume_id:
+            resumes = [x for x in resumes if x["id"] == self.resume_id]
+            if not resumes:
+                raise OperationError(f"Резюме {self.resume_id} не найдено")
         # Выбираем только опубликованные
-        resumes = list(
-            filter(lambda x: x["status"]["id"] == "published", resumes)
-        )
+        resumes = [x for x in resumes if x["status"]["id"] == "published"]
         if not resumes:
-            logger.warning("У вас нет опубликованных резюме")
-            return
+            raise OperationError("У вас нет опубликованных резюме")
 
         me: datatypes.User = self.tool.get_me()
         seen_employers = set()
@@ -696,7 +747,7 @@ class Operation(BaseOperation):
                     )
                     continue
 
-                if vacancy.get("has_test") and self.args.skip_tests:
+                if vacancy.get("has_test") and self.skip_tests:
                     logger.debug(
                         "Пропускаю вакансию с тестом %s",
                         vacancy["alternate_url"],
@@ -774,7 +825,7 @@ class Operation(BaseOperation):
                         logger.exception(ex)
 
                     # Если есть сайт, то ищем на нем емейлы для отправки письма
-                    if self.args.send_email and (
+                    if self.send_email and (
                         site_url := (
                             employer_profile.get("site_url") or ""
                         ).strip()
@@ -820,18 +871,16 @@ class Operation(BaseOperation):
                     "response_letter_required"
                 ):
                     if self.cover_letter_ai:
-                        prompt = render_template(
+                        prompt = self._render_template(
                             self.cover_letter_prompt,
                             message_placeholders,
-                            "промпте сопроводительного письма",
+                            "промпта сопроводительного письма",
                         )
                         logger.debug("prompt: %s", prompt)
                         letter = self.cover_letter_ai.complete(prompt)
                     else:
-                        letter = render_template(
-                            rand_text(self.cover_letter),
-                            message_placeholders,
-                            "сопроводительном письме",
+                        letter = self._render_cover_letter(
+                            message_placeholders
                         )
 
                     logger.debug(letter)
@@ -916,7 +965,7 @@ class Operation(BaseOperation):
                     continue
 
                 # Отправка письма на email
-                if self.args.send_email:
+                if self.send_email:
                     # fix NoneType has no attribute get
                     # contacts может быть null
                     mail_to: str | list[str] | None = (
@@ -928,27 +977,11 @@ class Operation(BaseOperation):
                             if isinstance(mail_to, list)
                             else mail_to
                         )
-                        # Шаблоны письма рендерим внутри try: ошибка в них
-                        # не должна обрывать рассылку остальных откликов
+                        # Ошибка в шаблонах письма обрывает рассылку
+                        mail_subject, mail_body = self._render_mail(
+                            message_placeholders
+                        )
                         try:
-                            mail_subject = render_template(
-                                rand_text(
-                                    self.tool.config.get("apply_mail_subject")
-                                    or "{Отклик|Резюме} на вакансию %(vacancy_name)s"
-                                ),
-                                message_placeholders,
-                                "apply_mail_subject",
-                            )
-                            mail_body = render_template(
-                                unescape_string(
-                                    rand_text(
-                                        self.tool.config.get("apply_mail_body")
-                                        or "{Здравствуйте|Добрый день}, {прошу рассмотреть|пожалуйста рассмотрите} мое резюме %(resume_url)s на вакансию %(vacancy_name)s."
-                                    )
-                                ),
-                                message_placeholders,
-                                "apply_mail_body",
-                            )
                             self._send_email(mail_to, mail_subject, mail_body)
                             print(
                                 "📧 Отправлено письмо на email по поводу вакансии",
@@ -1286,7 +1319,7 @@ class Operation(BaseOperation):
                 return
 
     def _is_excluded(self, vacancy: SearchVacancy) -> bool:
-        if not self.excluded_filter:
+        if not self.excluded_pat:
             return False
 
         snippet = vacancy.get("snippet", {})
@@ -1303,11 +1336,7 @@ class Operation(BaseOperation):
 
         logger.debug(vacancy_summary)
 
-        excluded_pat: re.Pattern = re.compile(
-            self.excluded_filter, re.IGNORECASE
-        )
-
-        if excluded_pat.search(vacancy_summary):
+        if self.excluded_pat.search(vacancy_summary):
             return True
 
         # Грузим полный текст вакансии только, если предыдущий фильтр не сработал
@@ -1324,7 +1353,7 @@ class Operation(BaseOperation):
 
         description = strip_tags(description)
         logger.debug(description[:2047])
-        return bool(excluded_pat.search(description))
+        return bool(self.excluded_pat.search(description))
 
     def _is_vacancy_already_skipped(
         self, vacancy: SearchVacancy, resume_id: str | None = None
