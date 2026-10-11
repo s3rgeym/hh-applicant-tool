@@ -419,7 +419,7 @@ class HHApplicantTool(BaseAttrs):
                 )
 
         check("base_url")
-        сheck("api_key")
+        check("api_key")
         check("model")
 
         return ai.ChatOpenAI(**config)
