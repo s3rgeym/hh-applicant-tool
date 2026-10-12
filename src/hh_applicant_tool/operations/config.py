@@ -130,7 +130,7 @@ class Operation(BaseOperation):
                 print(value)
             return
 
-        config_path = str(config._config_path)
+        config_path = config.file_name
         if args.show_path:
             print(config_path)
             return

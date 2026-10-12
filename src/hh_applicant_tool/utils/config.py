@@ -30,9 +30,13 @@ class Config(dict, ABC):
 
     def __init__(self, config_path: str | Path):
         super().__init__()
-        self._config_path = Path(config_path)
+        self._path = Path(config_path)
         self._lock = Lock()
         self.load()
+
+    @property
+    def file_name(self) -> Path:
+        return str(self._path)
 
     @abstractmethod
     def _read(self) -> dict[str, Any]:
@@ -51,30 +55,34 @@ class Config(dict, ABC):
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         self.update(*args, **kwargs)
-        self._config_path.parent.mkdir(exist_ok=True, parents=True)
+        self._path.parent.mkdir(exist_ok=True, parents=True)
         with self._lock:
             self._write(dict(self))
         self._after_save()
 
+    def exists(self) -> bool:
+        return self._path.exists()
+
+    def unlink(self) -> None:
+        self._path.unlink(missing_ok=True)
+
     __getitem__ = dict.get
 
     def __str__(self) -> str:
-        return str(self._config_path)
+        return str(self._path)
 
 
 class ConfigJSON(Config):
     """Конфиг в формате JSON."""
 
     def _read(self) -> dict[str, Any]:
-        if not self._config_path.exists():
+        if not self._path.exists():
             return {}
-        with self._config_path.open(
-            "r", encoding="utf-8", errors="replace"
-        ) as f:
+        with self._path.open("r", encoding="utf-8", errors="replace") as f:
             return json.load(f)
 
     def _write(self, data: dict[str, Any]) -> None:
-        with self._config_path.open("w", encoding="utf-8") as f:
+        with self._path.open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=True, separators=(",", ":"))
 
 
@@ -84,11 +92,11 @@ class ConfigTOML(Config):
     @property
     def _legacy_path(self) -> Path:
         # Запасной формат (только чтение): JSON рядом с основным файлом.
-        return self._config_path.with_suffix(".json")
+        return self._path.with_suffix(".json")
 
     def _read(self) -> dict[str, Any]:
-        if self._config_path.exists():
-            with self._config_path.open("rb") as f:
+        if self._path.exists():
+            with self._path.open("rb") as f:
                 return tomllib.load(f)
         if self._legacy_path.exists():
             with self._legacy_path.open(
@@ -98,15 +106,12 @@ class ConfigTOML(Config):
         return {}
 
     def _write(self, data: dict[str, Any]) -> None:
-        with self._config_path.open("wb") as f:
+        with self._path.open("wb") as f:
             # TOML не поддерживает None
             tomli_w.dump(remove_none(data), f, multiline_strings=True, indent=2)
 
     def _after_save(self) -> None:
-        if (
-            self._legacy_path.exists()
-            and self._config_path != self._legacy_path
-        ):
+        if self._legacy_path.exists() and self._path != self._legacy_path:
             warnings.warn(
                 f"Конфиг старого формата JSON больше не используется. Файл {self._legacy_path!s} можно удалить.",
                 UserWarning,

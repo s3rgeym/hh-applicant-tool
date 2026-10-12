@@ -318,7 +318,7 @@ class HHApplicantTool(BaseAttrs):
         return session
 
     @cached_property
-    def config_path(self) -> Path:
+    def config_dir_path(self) -> Path:
         return (
             (self.config_dir or Path(getenv("CONFIG_DIR", CONFIG_DIR)))
             / (self.profile_id or getenv("HH_PROFILE_ID", "."))
@@ -326,23 +326,23 @@ class HHApplicantTool(BaseAttrs):
 
     @cached_property
     def config(self) -> ConfigTOML:
-        return ConfigTOML(self.config_path / CONFIG_FILENAME)
+        return ConfigTOML(self.config_dir_path / CONFIG_FILENAME)
 
     @cached_property
     def auth_config(self) -> ConfigJSON:
-        return ConfigJSON(self.config_path / AUTH_CONFIG_FILENAME)
+        return ConfigJSON(self.config_dir_path / AUTH_CONFIG_FILENAME)
 
     @cached_property
     def log_file(self) -> Path:
-        return self.config_path / LOG_FILENAME
+        return self.config_dir_path / LOG_FILENAME
 
     @cached_property
     def cookies_file(self) -> Path:
-        return self.config_path / COOKIES_FILENAME
+        return self.config_dir_path / COOKIES_FILENAME
 
     @cached_property
     def db_path(self) -> Path:
-        return self.config_path / DATABASE_FILENAME
+        return self.config_dir_path / DATABASE_FILENAME
 
     @cached_property
     def db(self) -> sqlite3.Connection:
@@ -877,14 +877,14 @@ class HHApplicantTool(BaseAttrs):
         return self._get_captcha_ai()
 
     def create_config_dir(self) -> None:
-        self.config_path.mkdir(
+        self.config_dir_path.mkdir(
             parents=True,
             exist_ok=True,
         )
 
     def _save_config_if_needed(self) -> None:
         """Нужен для сохранения загруженного конфига в старом формате в новом"""
-        if self.config and not self.config_path.exists():
+        if self.config and not self.config.exists():
             self.config.save()
 
     def setup_logging(
@@ -900,7 +900,7 @@ class HHApplicantTool(BaseAttrs):
         setup_logger(logger, verbosity_level, self.log_file)
         utils.setup_terminal()
 
-    def __get_latest_version(self) -> Literal[False] | str:
+    def _get_latest_version(self) -> Literal[False] | str:
         try:
             response = self.session.get(
                 "https://pypi.org/pypi/hh-applicant-tool/json", timeout=15
@@ -915,7 +915,7 @@ class HHApplicantTool(BaseAttrs):
         if datetime.now().timestamp() >= self.storage.settings.get_value(
             "_next_version_check", 0
         ):
-            if v := self.__get_latest_version():
+            if v := self._get_latest_version():
                 self.storage.settings.set_value("_latest_version", v)
                 self.storage.settings.set_value(
                     "_next_version_check", datetime.now() + timedelta(hours=1)
@@ -961,7 +961,7 @@ class HHApplicantTool(BaseAttrs):
         self.setup_logging()
         if is_docker():
             logger.debug("Запущено через Docker")
-        logger.debug("Путь до профиля: %s", self.config_path)
+        logger.debug("Путь до профиля: %s", self.config_dir_path)
 
         try:
             if not self.operation_run:
