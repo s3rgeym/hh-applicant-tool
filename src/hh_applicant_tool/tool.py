@@ -347,41 +347,43 @@ class HHApplicantTool(BaseAttrs):
     def storage(self) -> StorageFacade:
         return StorageFacade(self.db)
 
-    def get_section_config(self, section: str) -> dict:
-        keys = section.split(".")
-        current = self.config
-        parents = []
-
-        for key in keys:
-            if not isinstance(current, dict) or key not in current:
-                break
-
-            current = current[key]
-
-            if isinstance(current, dict):
-                parents.append(current)
-
-        if not parents:
-            return {}
-
-        result = deepcopy(parents[-1])
-
-        for parent in reversed(parents[:-1]):
-            for key, value in parent.items():
-                result.setdefault(key, deepcopy(value))
-
-        return result
+    # def get_section_config(self, section: str) -> dict:
+    #     keys = section.split(".")
+    #     current = self.config
+    #     parents = []
+    #
+    #     for key in keys:
+    #         if not isinstance(current, dict) or key not in current:
+    #             break
+    #
+    #         current = current[key]
+    #
+    #         if isinstance(current, dict):
+    #             parents.append(current)
+    #
+    #     if not parents:
+    #         return {}
+    #
+    #     result = deepcopy(parents[-1])
+    #
+    #     for parent in reversed(parents[:-1]):
+    #         for key, value in parent.items():
+    #             result.setdefault(key, deepcopy(value))
+    #
+    #     return result
 
     @cached_property
     def api_client(self) -> api.client.ApiClient:
         token = self.config.get("token", {})
-        config = self.config.get("api_client", {})
+        client_config = (self.config.get("api_client") or {}).copy()
+        # если передан аргумент, то он перекрывает значение из конфига
+        if self.api_delay:
+            client_config["delay"] = self.api_delay
         return api.client.ApiClient(
             access_token=token.get("access_token"),
             refresh_token=token.get("refresh_token"),
             access_expires_at=token.get("access_expires_at"),
-            delay=self.api_delay or config.get("delay"),
-            **config,
+            **client_config,
         )
 
     def get_ai_client(
@@ -391,28 +393,45 @@ class HHApplicantTool(BaseAttrs):
     ) -> ai.ChatOpenAI:
         return ai.ChatOpenAI(system_prompt=system_prompt, **kwargs)
 
-    def get_openai_config(self, section: str) -> dict:
-        def check(name: str):
-            if name not in cfg:
+    def get_openai_config(self, section: str = "main") -> dict:
+        """Возвращает копию конфига openai с учетом наследования от главной"""
+        base_section = "openai"
+        if "." in section:
+            base, section = section.split(".")
+            if base != base_section:
                 raise ValueError(
-                    f"Значение {name!r} не задано в секции {section!r}"
-                    + (" либо родительских секциях" if "." in section else "")
+                    f"Base section must be {base_section!r}: got: {base!r}"
                 )
 
-        cfg = self.get_section_config(section)
+        # if not re.fullmatch(r"[a-z]+", section):
+        #     raise ValueError(f"Bad {base_section!r} section name: {section!r}")
 
-        check("base_url")
-        check("api_key")
-        check("model")
+        def required(name: str) -> None:
+            if name not in c:
+                raise ValueError(
+                    f"Значение {name!r} не задано в секции {base_section + '.' + section!r} либо '{base_section}.main' или '{base_section}.default'"
+                )
+
+        c = self.config.get(base_section) or {}
+        c = deepcopy(
+            {
+                **(c.get("main") or c.get("default") or {}),
+                **(c.get(section) or {}),
+            }
+        )
+
+        required("base_url")
+        required("api_key")
+        required("model")
 
         if self.openai_delay:
-            cfg.setdefault("delay", self.openai_delay)
+            c.setdefault("delay", self.openai_delay)
         if self.openai_timeout:
-            cfg.setdefault("timeout", self.openai_timeout)
+            c.setdefault("timeout", self.openai_timeout)
         if self.openai_connect_timeout:
-            cfg.setdefault("connect_timeout", self.openai_connect_timeout)
+            c.setdefault("connect_timeout", self.openai_connect_timeout)
 
-        return cfg
+        return c
 
     def _get_captcha_ai(self) -> ai.ChatOpenAI:
         c = self.get_openai_config("openai.captcha")
