@@ -84,6 +84,7 @@ Session.vim
 CLAUDE.md
 .serena/
 .codex/
+.vscode/
 uv.lock
 poetry.lock
 test_captcha.py
