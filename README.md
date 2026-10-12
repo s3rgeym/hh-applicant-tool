@@ -211,7 +211,8 @@ pip install hh-applicant-tool
 Авторизация по коду:
 
 ```bash
-hh-applicant-tool authorize '<ваш телефон>'
+$ hh-applicant-tool authorize 79012345678
+📱 Введите полученный код из SMS:
 ```
 
 Проверка авторизации:
