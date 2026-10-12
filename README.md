@@ -670,7 +670,6 @@ base_url = "https://api.hh.ru/"  # адрес API, должен заканчив
 delay = 0.345                    # пауза между запросами, сек
 captcha_cooldown = 3.0           # пауза после решения капчи, сек
 max_retries = 3                  # число попыток при ошибках соединения
-user_agent = "Mozilla/5.0 ..."   # по умолчанию генерируется автоматически
 client_id = "..."                # OAuth client id, по умолчанию как у приложения Android
 client_secret = "..."            # OAuth client secret, по умолчанию как у приложения Android
 
