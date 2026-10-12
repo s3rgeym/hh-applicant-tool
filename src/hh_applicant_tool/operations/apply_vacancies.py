@@ -426,9 +426,18 @@ class Operation(BaseOperation):
         self.skip_tests = args.skip_tests
         self.total_pages = args.total_pages
 
+        # Приоритет: аргумент командной строки -> конфиг -> дефолтная константа
         # Системные промпты - обычный текст, пользовательские - шаблоны
-        self.cover_letter_prompt = args.cover_letter_prompt
-        self.ai_filter_prompt = args.ai_filter_prompt
+        self.cover_letter_prompt = (
+            args.cover_letter_prompt
+            or config.get("cover_letter_prompt")
+            or DEFAULT_COVER_LETTER_PROMPT
+        )
+        self.ai_filter_prompt = (
+            args.ai_filter_prompt
+            or config.get("ai_filter_prompt")
+            or DEFAULT_AI_FILTER_PROMPT
+        )
         self.ai_filter = bool(args.ai_filter)
 
         self.cover_letter_ai = self.vacancy_filter_ai = None
