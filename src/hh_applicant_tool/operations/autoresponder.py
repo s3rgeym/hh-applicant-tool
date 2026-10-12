@@ -1,4 +1,4 @@
-# TODO: дописать. Этот код сгенерирован Chat GPT. Я половину его бреда
+# К удалению
 # переписал, осталось "чуть-чуть"
 # За основу взять этот код
 # https://github.com/s3rgeym/hh-ai-responder/blob/main/main.go
@@ -10,11 +10,11 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import cached_property
-from threading import Event
 from typing import TYPE_CHECKING, Any
 
 from hh_applicant_tool.api.errors import ApiError
 
+from ..errors import OperationCanceled
 from ..tool import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:
@@ -84,20 +84,18 @@ class Operation(BaseOperation):
     def run(self, tool: HHApplicantTool, args: Namespace) -> None:
         self.tool = tool
 
+        self.ai_client = self.tool.get_ai_client()
+
         # Этот костыль убрать везде надо
-        cancel_event = getattr(args, "_cancel_event", Event())
         logger.info("Автоответчик запущен")
 
-        while not cancel_event.is_set():
+        while True:
             try:
                 chats = self.get_chats_awaiting_reply(
                     args.max_pages,
                 )
 
                 for chat in chats:
-                    if cancel_event.is_set():
-                        break
-
                     if chat.is_discard:
                         if args.delete:
                             try:
@@ -124,14 +122,13 @@ class Operation(BaseOperation):
                             ex,
                         )
 
+            except KeyboardInterrupt as ex:
+                logger.info("Автоответчик остановлен")
+                raise OperationCanceled() from ex
             except ApiError as ex:
                 logger.error("Ошибка получения чатов: %s", ex)
             except Exception:
                 logger.exception("Ошибка автоответчика")
-
-            cancel_event.wait(args.interval)
-
-        logger.info("Автоответчик остановлен")
 
     @cached_property
     def chat_url(self) -> str:
@@ -528,16 +525,11 @@ class Operation(BaseOperation):
             messages,
         )
 
-        temperature = 0.1 if chat.reply_options else 0.5
-
-        ai_client = self.tool.get_ai_client(
-            config_section="openai.autoresponder",
+        reply = self.ai_client.complete(
+            message=user_prompt,
             system_prompt=system_prompt,
-        )
-        ai_client.temperature = temperature
-        ai_client.max_completion_tokens = 512
-
-        reply = ai_client.complete(user_prompt).strip()
+            temperature=0.1 if chat.reply_options else 0.5,
+        ).strip()
 
         if not reply:
             logger.warning(

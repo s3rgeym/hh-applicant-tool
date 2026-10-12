@@ -1,3 +1,5 @@
+# Мне не хватило терпения, поэтому я попросил нейрослоп bleed'а и ко удалить
+# Claude
 from __future__ import annotations
 
 import argparse
@@ -131,9 +133,9 @@ AI_FILTER_PLACEHOLDERS = BASE_PLACEHOLDERS + (
 
 class Namespace(BaseNamespace):
     resume_id: str | None
-    letter_file: Path | None
+    cover_letter: str | None
     ignore_employers: Path | None
-    force_message: bool
+    force_letter: bool
     ai_filter: bool | None
     ai_filter_system_prompt: str
     ai_filter_prompt: str
@@ -185,17 +187,16 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
         parser.add_argument(
-            "-L",
-            "--letter-file",
+            "--cover-letter",
             "--letter",
-            help="Путь до файла с текстом сопроводительного письма.",
-            type=Path,
+            "-l",
+            help="Шаблон сопроводительного письма для отклика. Можно указать в `cover_letter` конфига. По умолчанию генерируется стандартное сообщение...",
         )
         parser.add_argument(
             "-f",
-            "--force-message",
+            "--force-letter",
             "--force",
-            help="Всегда отправлять сообщение при отклике",
+            help="Всегда отправлять сопроводительное письмо при отклике",
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
@@ -203,14 +204,12 @@ class Operation(BaseOperation):
             "--system-prompt",
             "--ai-system",
             help="Системный промпт для AI генерации сопроводительных писем (простой текст, не шаблон)",
-            default=DEFAULT_COVER_LETTER_SYSTEM_PROMPT,
         )
         parser.add_argument(
             "--cover-letter-prompt",
             "--message-prompt",
             "--prompt",
             help="Шаблон промпта для генерации сопроводительного письма. Доступны переменные %%(vacancy_name)s, %%(vacancy_url)s, %%(employer_name)s, %%(first_name)s, %%(last_name)s, %%(email)s, %%(phone)s, %%(resume_title)s, %%(resume_url)s, %%(resume_hash)s",
-            default=DEFAULT_COVER_LETTER_PROMPT,
         )
         parser.add_argument(
             "--ai-filter",
@@ -220,12 +219,10 @@ class Operation(BaseOperation):
         parser.add_argument(
             "--ai-filter-system-prompt",
             help="Системный промпт для AI-фильтра вакансий (простой текст, не шаблон). Ответ AI должен быть «да» или «нет»",
-            default=DEFAULT_AI_FILTER_SYSTEM_PROMPT,
         )
         parser.add_argument(
             "--ai-filter-prompt",
             help="Шаблон промпта для AI-фильтра вакансий. Доступны переменные из --cover-letter-prompt, а также %%(resume_skills)s, %%(resume_about)s, %%(resume_experience)s, %%(vacancy_description)s, %%(vacancy_key_skills)s",
-            default=DEFAULT_AI_FILTER_PROMPT,
         )
         parser.add_argument(
             "--total-pages",
@@ -405,10 +402,9 @@ class Operation(BaseOperation):
         args: Namespace,
     ) -> None:
         self.tool = tool
-        self.cover_letter = (
-            args.letter_file.read_text(encoding="utf-8", errors="ignore")
-            if args.letter_file
-            else self.cover_letter
+        config = tool.config
+        self.cover_letter = args.cover_letter or config.get(
+            "cover_letter", self.cover_letter
         )
         for name in SEARCH_PARAM_NAMES:
             setattr(self, name, getattr(args, name))
@@ -423,7 +419,7 @@ class Operation(BaseOperation):
                 raise OperationError(
                     f"Некорректное регулярное выражение в --excluded-filter: {ex}"
                 ) from ex
-        self.force_message = args.force_message
+        self.force_letter = args.force_letter
         self.max_responses = args.max_responses
         self.resume_id = args.resume_id
         self.send_email = args.send_email
@@ -433,23 +429,22 @@ class Operation(BaseOperation):
         # Системные промпты - обычный текст, пользовательские - шаблоны
         self.cover_letter_prompt = args.cover_letter_prompt
         self.ai_filter_prompt = args.ai_filter_prompt
-        self.cover_letter_ai = (
-            tool.get_ai_client(
-                "openai.cover_letter",
-                system_prompt=args.cover_letter_system_prompt,
-            )
-            if args.use_ai
-            else None
-        )
         self.ai_filter = bool(args.ai_filter)
-        self.vacancy_filter_ai = (
-            tool.get_ai_client(
-                "openai.vacancy_filter",
-                system_prompt=args.ai_filter_system_prompt,
-            )
-            if self.ai_filter
-            else None
-        )
+
+        self.cover_letter_ai = self.vacancy_filter_ai = None
+        if args.use_ai:
+            c = tool.get_openai_config("openai.cover_letter")
+            c.setdefault("system_prompt", DEFAULT_COVER_LETTER_SYSTEM_PROMPT)
+            if args.cover_letter_system_prompt:
+                c["system_propmpt"] = args.cover_letter_system_prompt
+            self.cover_letter_ai = tool.get_ai_client(**c)
+
+            if self.ai_filter:
+                c = tool.get_openai_config("openai.vacancy_filter")
+                c.setdefault("system_propmt", DEFAULT_AI_FILTER_PROMPT)
+                if args.ai_filter_system_prompt:
+                    c["system_propmpt"] = args.cover_letter_system_prompt
+                self.vacancy_filter_ai = tool.get_ai_client(**c)
 
         self.apply_mail_subject = (
             tool.config.get("apply_mail_subject") or DEFAULT_APPLY_MAIL_SUBJECT
@@ -870,9 +865,7 @@ class Operation(BaseOperation):
 
                 letter = ""
 
-                if self.force_message or vacancy.get(
-                    "response_letter_required"
-                ):
+                if self.force_letter or vacancy.get("response_letter_required"):
                     if self.cover_letter_ai:
                         prompt = self._render_template(
                             self.cover_letter_prompt,

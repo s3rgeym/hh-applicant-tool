@@ -347,95 +347,83 @@ class HHApplicantTool(BaseAttrs):
     def storage(self) -> StorageFacade:
         return StorageFacade(self.db)
 
-    def get_config_section(
-        self,
-        section: str,
-        **defaults: Any,
-    ) -> dict:
-        """Возвращает параметры секции с учётом наследования.
-
-        Приоритет: целевая секция → родительские секции → defaults.
-        Значения None игнорируются и не переопределяют заданные значения.
-        """
-        result = {
-            key: value for key, value in defaults.items() if value is not None
-        }
-
+    def get_section_config(self, section: str) -> dict:
+        keys = section.split(".")
         current = self.config
-        sections = []
+        parents = []
 
-        for key in section.split("."):
-            current = current.get(key)
-
-            if current is None:
+        for key in keys:
+            if not isinstance(current, dict) or key not in current:
                 break
 
-            sections.append(current)
+            current = current[key]
 
-        for current in reversed(sections):
-            for key, value in current.items():
-                if value is not None:
-                    result.setdefault(key, deepcopy(value))
+            if isinstance(current, dict):
+                parents.append(current)
+
+        if not parents:
+            return {}
+
+        result = deepcopy(parents[-1])
+
+        for parent in reversed(parents[:-1]):
+            for key, value in parent.items():
+                result.setdefault(key, deepcopy(value))
 
         return result
 
     @cached_property
     def api_client(self) -> api.client.ApiClient:
         token = self.config.get("token", {})
-        config = self.get_config_section("api_client", delay=self.api_delay)
-        logger.debug("api client config: %r", config)
+        config = self.config.get("api_client", {})
         return api.client.ApiClient(
             access_token=token.get("access_token"),
             refresh_token=token.get("refresh_token"),
             access_expires_at=token.get("access_expires_at"),
-            captcha_handler=self.solve_captcha_url,
+            delay=self.api_delay or config.get("delay"),
             **config,
         )
 
     def get_ai_client(
         self,
-        config_section: str = "openai",
-        *,
-        delay: float | None = None,
-        timeout: float | None = None,
-        connect_timeout: float | None = None,
-        **kwargs,  # system_prompt, max_completion_tokens, temperature и т.д.
+        system_prompt: str | None = None,
+        **kwargs,
     ) -> ai.ChatOpenAI:
-        config = self.get_config_section(
-            config_section,
-            delay=delay or self.openai_delay,
-            timeout=timeout or self.openai_timeout,
-            connect_timeout=connect_timeout or self.openai_connect_timeout,
-            **kwargs,
-        )
+        return ai.ChatOpenAI(system_prompt=system_prompt, **kwargs)
 
-        logger.debug("%r config: %r", config_section, config)
-
+    def get_openai_config(self, section: str) -> dict:
         def check(name: str):
-            if name not in config:
+            if name not in cfg:
                 raise ValueError(
-                    f"Значение {name!r} не задано в секции {config_section!r}"
-                    + (
-                        " либо родительских секциях"
-                        if "." in config_section
-                        else ""
-                    )
+                    f"Значение {name!r} не задано в секции {section!r}"
+                    + (" либо родительских секциях" if "." in section else "")
                 )
+
+        cfg = self.get_section_config(section)
 
         check("base_url")
         check("api_key")
         check("model")
 
-        return ai.ChatOpenAI(**config)
+        if self.openai_delay:
+            cfg.setdefault("delay", self.openai_delay)
+        if self.openai_timeout:
+            cfg.setdefault("timeout", self.openai_timeout)
+        if self.openai_connect_timeout:
+            cfg.setdefault("connect_timeout", self.openai_connect_timeout)
 
-    def get_captcha_ai(self) -> ai.ChatOpenAI:
-        return self.get_ai_client(
-            "openai.captcha",
-            system_prompt=(
+        return cfg
+
+    def _get_captcha_ai(self) -> ai.ChatOpenAI:
+        c = self.get_openai_config("openai.captcha")
+        c.setdefault(
+            "system_prompt",
+            (
                 "You read CAPTCHA images. Return ONLY the text from the "
                 "image, exactly as it is written."
             ),
         )
+        return self.get_ai_client(**c)
 
     def get_me(self) -> api.datatypes.User:
         return self.api_client.get("/me")
@@ -552,7 +540,7 @@ class HHApplicantTool(BaseAttrs):
             )
 
     # TODO: вынести в миксин какой
-    def get_cookie(self, name: str, default: Any = None) -> str | None:
+    def get_cookie(self, name: str, default: Any = None) -> Any:
         """Значение cookie по имени из jar на базе {CookieJar} (нет get_dict)."""
         return next(
             (c.value for c in self.session.cookies if c.name == name),
@@ -786,11 +774,10 @@ class HHApplicantTool(BaseAttrs):
             logger.debug(r.text[:255])
             return False
 
-    def prompt_captcha_tk(self, image_data: bytes) -> str | None:
+    def prompt_captcha_tk(self, image_data: bytes) -> str:
         """Показывает капчу в окне Tk и возвращает введённый текст.
 
-        Если окно закрыли, не введя текст, бросает KeyboardInterrupt,
-        чтобы solve_captcha_manual корректно завершился.
+        Если окно закрыли, не введя текст, бросает KeyboardInterrupt.
         """
         import base64
         import tkinter as tk
@@ -860,22 +847,21 @@ class HHApplicantTool(BaseAttrs):
 
     @cached_property
     def captcha_ai(self) -> ai.ChatOpenAI:
-        return self.get_captcha_ai()
+        return self._get_captcha_ai()
 
-    def setup_logging(
-        self,
-        verbosity: int | None = None,
-        log_file: str | Path | None = None,
-    ):
-        if verbosity is not None:
-            self.verbosity = verbosity
-        if log_file is not None:
-            self.log_file = log_file
-        # Создаем путь до директории с логами
+    def create_config_dir(self) -> None:
         self.config_path.mkdir(
             parents=True,
             exist_ok=True,
         )
+
+    def setup_logging(
+        self,
+        verbosity: int | None = None,
+    ):
+        if verbosity is not None:
+            self.verbosity = verbosity
+        # Создаем путь до директории с логами
         verbosity_level = max(
             logging.DEBUG, logging.WARNING - self.verbosity * 10
         )
@@ -939,6 +925,7 @@ class HHApplicantTool(BaseAttrs):
     def run(self, argv: Sequence[str] | None = None) -> None | int:
         args = self._parser.parse_args(argv, namespace=BaseNamespace())
         self._assign_args(args)
+        self.create_config_dir()
         self.setup_logging()
         if is_docker():
             logger.debug("Запущено через Docker")
