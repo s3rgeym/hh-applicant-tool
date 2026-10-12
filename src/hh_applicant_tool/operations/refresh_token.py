@@ -18,7 +18,7 @@ class Namespace(BaseNamespace):
 
 
 class Operation(BaseOperation):
-    """Обновляет access_token и refresh_token в случае необходимости."""
+    """Обновляет access_token и refresh_token в случае необходимости. Вызов этой команды как правило не требуется, так как токен обновляется автоматически при запросе к API."""
 
     __aliases__ = ["refresh"]
 
