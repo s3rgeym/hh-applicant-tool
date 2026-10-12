@@ -61,7 +61,7 @@ class Operation(BaseOperation):
             skip_choose_account="true",
         )
         logger.info(
-            f"Эту ссылку можно открыть в браузере для изучения процесса авторизации: {authorize_url=}"
+            f"Эту ссылку можно открыть в браузере для изучения процесса авторизации: {authorize_url}"
         )
         # Переход на страницу нужен для установки cookie xsrf_token
         r = session.get(authorize_url)
