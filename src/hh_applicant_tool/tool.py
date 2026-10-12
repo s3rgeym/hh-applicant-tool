@@ -119,6 +119,7 @@ class HHApplicantTool(BaseAttrs):
         parser = argparse.ArgumentParser(
             description=cls.__doc__,
             formatter_class=ArgumentFormatter,
+            argument_default=argparse.SUPPRESS,
         )
         # TODO: можно переписать описания
         parser.add_argument(
@@ -937,22 +938,8 @@ class HHApplicantTool(BaseAttrs):
 
     # Этот костыль используется в ui. Ему здесь не место
     def _assign_args(self, args: BaseNamespace) -> None:
-        # Явное лучше неявного
-        self.profile_id = args.profile_id
-        self.config_dir = args.config_dir
-        self.verbosity = args.verbosity
-        self.api_delay = args.api_delay
-        self.user_agent = args.user_agent
-        self.proxy_url = args.proxy_url
-        self.use_sixel = args.use_sixel
-        self.use_kitty = args.use_kitty
-        self.use_ai = args.use_ai
-        self.captcha_lang = args.captcha_lang
-        self.openai_proxy_url = args.openai_proxy_url
-        self.openai_delay = args.openai_delay
-        self.openai_timeout = args.openai_timeout
-        self.openai_connect_timeout = args.openai_connect_timeout
-        self.operation_run = args.operation_run
+        for k, v in vars(args).items():
+            setattr(self, k, v)
 
     def run(self, argv: Sequence[str] | None = None) -> None | int:
         args = self._parser.parse_args(argv, namespace=BaseNamespace())
