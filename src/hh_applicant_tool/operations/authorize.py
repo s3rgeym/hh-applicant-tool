@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
 
+MAX_RETRIES = 10
+
 logger = logging.getLogger("hh-applicant-tool")
 
 
@@ -110,6 +112,7 @@ class Operation(BaseOperation):
 
         otp_url = urljoin(redirect_url, "/account/otp_generate")
 
+        tries = 0
         while True:
             time.sleep(random.uniform(3.0, 5.0))
             logger.debug(
@@ -138,6 +141,10 @@ class Operation(BaseOperation):
             # isBot еще интересное значение
             if captcha.get("captchaError"):
                 logger.warning("Капча была введена неверно!")
+
+            tries += 1
+            if tries >= MAX_RETRIES:
+                raise OpeartionError("Исчерпано количество неверных попыток!")
 
             captcha_state = captcha["captchaState"]
 
