@@ -435,6 +435,7 @@ class Operation(BaseOperation):
         if args.use_ai:
             c = tool.get_openai_config("openai.cover_letter")
             c.setdefault("system_prompt", DEFAULT_COVER_LETTER_SYSTEM_PROMPT)
+            c.setdefault("temperatre", 0.8)
             if args.cover_letter_system_prompt:
                 c["system_propmpt"] = args.cover_letter_system_prompt
             self.cover_letter_ai = tool.get_ai_client(**c)

@@ -144,7 +144,7 @@ class Operation(BaseOperation):
 
             tries += 1
             if tries >= MAX_RETRIES:
-                raise OpeartionError("Исчерпано количество неверных попыток!")
+                raise OperationError("Исчерпано количество неверных попыток!")
 
             captcha_state = captcha["captchaState"]
 
