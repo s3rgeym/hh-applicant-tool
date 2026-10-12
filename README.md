@@ -718,6 +718,20 @@ model = "..."
 
 [openai.reply_chat]
 # И тут что-нибудь можно изменить
+
+# И пример передачи истории чата
+[openai.cover_letter]
+base_url = "https://api.openai.com/v1/chat/completions"
+model = "gpt-4o-mini"
+system_prompt = "Ты помогаешь писать сопроводительные письма."
+
+[[openai.cover_letter.history]]
+role = "user"
+content = "Меня зовут Иван, я Python-разработчик."
+
+[[openai.cover_letter.history]]
+role = "assistant"
+content = "Приятно познакомиться, Иван. Чем помочь?"
 ```
 
 Часть настроек скрыта. Некоторые настройки передаются как аргумент конструктора, поэтому если увидите сообщение типа:
