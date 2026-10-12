@@ -33,6 +33,9 @@ class ChatOpenAI:
 
     base_url: str
     system_prompt: str | None = None
+    # Базовая история диалога, которая подставляется в каждый запрос
+    # перед history из вызова complete()/recognize_text()
+    history: list[dict] = field(default_factory=list)
     # Общий таймаут на весь запрос
     timeout: float | None = None
     # Отдельный таймаут только на установку соединения
@@ -117,7 +120,8 @@ class ChatOpenAI:
         system_prompt: str | None = None,
         history: list[dict] | None = None,
     ) -> list[dict]:
-        """Сборка списка messages: system -> history -> текущее сообщение.
+        """Сборка списка messages:
+        system -> self.history -> history -> текущее сообщение.
 
         Если system_prompt не передан (None), берётся self.system_prompt.
         Пустой системный промпт не добавляется.
@@ -129,6 +133,11 @@ class ChatOpenAI:
 
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
+
+        # Порядок: system -> история из конструктора -> история из вызова
+        # -> текущее сообщение
+        if self.history:
+            messages.extend(self.history)
 
         if history:
             messages.extend(history)
@@ -227,6 +236,7 @@ class ChatOpenAI:
 
         history — предыдущие сообщения диалога в формате
         [{"role": "user" | "assistant", "content": "..."}, ...].
+        Добавляется после self.history (истории из конструктора).
         """
         messages = self._build_messages(message, system_prompt, history)
 
@@ -237,7 +247,7 @@ class ChatOpenAI:
         logger.debug(
             "AI запрос: %s (сообщений в истории: %d)",
             message,
-            len(history or []),
+            len(self.history) + len(history or []),
         )
 
         return self._post_chat(
