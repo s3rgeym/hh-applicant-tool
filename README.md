@@ -98,6 +98,7 @@
   - [Запуск через Docker](#запуск-через-docker)
   - [Настройки и данные приложения](#настройки-и-данные-приложения)
     - [Конфигурационный файл](#конфигурационный-файл)
+    - [auth.json](#auth-json)
     - [Логи](#логи)
     - [База данных](#база-данных)
     - [cookies.txt](#cookiestxt)
@@ -220,14 +221,7 @@ $ hh-applicant-tool whoami
 🆔 27405918 Кузнецов Андрей Владимирович [ 📄 1 | 👁️ +115 | ✉️ +28 ]
 ```
 
-В случае успешной авторизации токены будут сохранены в `config.toml`:
-
-```toml
-[token]
-access_token = "USERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-refresh_token = "USERBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
-access_expires_at = 1799999999
-```
+В случае успешной авторизации токены будут сохранены в [auth.json](#auth-json):
 
 Токен доступа выдается на две недели. Он обновляется автоматически. Для его ручного обновления нужно выполнить:
 
@@ -288,9 +282,11 @@ $ hh-applicant-tool config -e
 $ hh-applicant-tool config -k token.access_token
 
 # Установить значение в конфиге, например, socks-прокси
+# Учтите, что при таком способе изменения конфига, исчезнут все комментарии в нем!!!
 $ hh-applicant-tool config -s proxy_url socks5h://localhost:1080
 
 # Удалить значение из конфига
+# Эта операция тоже форматирует конфиг, удаляя из него комментарии
 $ hh-applicant-tool config -u proxy_url
 
 # Утилита все данные об откликах хранит в SQLite
@@ -470,7 +466,7 @@ cd hh-applicant-tool
 ```
 
 > [!IMPORTANT]
-> Команды с docker-compose нужно запускать строго, находясь в данном каталоге!
+> Команды с docker compose нужно запускать строго, находясь в данном каталоге!
 
 Теперь авторизуемся:
 
@@ -479,7 +475,7 @@ cd hh-applicant-tool
 # Это названия протоколов, которые исп-ся терминалом для отображения изображений
 # Sixel поддерживается большинством терминалов
 # А вот Windows Terminal поддерживает только Kitty
-docker-compose run -u docker -it hh_applicant_tool \
+docker compose run -u docker -it hh_applicant_tool \
   hh-applicant-tool -s -vv auth <username>
 ```
 
@@ -490,7 +486,7 @@ docker-compose run -u docker -it hh_applicant_tool \
 В случае успешной авторизации можно запускать рассылку откликов по крону:
 
 ```sh
-docker-compose up -d
+docker compose up -d
 ```
 
 Что будет делать?
@@ -506,14 +502,10 @@ docker compose logs -f
 
 Чтобы прекратить просмотр логов, нажмите `Ctrl-C`.
 
-Информацию об ошибках можно посмотреть в файле `config/log.txt`, а контакты работодателей — в `config/data` с помощью `sqlite3`. В `config/config.toml` хранятся токены, дающие доступ к аккаунту.
-
-Также советую отредактировать файл `letter.txt`.
-
 Запущенные сервисы докер стартуют автоматически после перезагрузки. Остановить их можно выполнив:
 
 ```sh
-docker-compose down
+docker compose down
 ```
 
 Чтобы обновить утилиту, в большинстве случаев достаточно в каталоге выполнить:
@@ -674,14 +666,7 @@ apply_mail_body = """
 Буду рад ответить на вопросы и пройти собеседование.
 """
 
-# Токен авторизации api.hh.ru
-# Трогать вообще не надо
-[token]
-access_token = "USERXXXX..."
-refresh_token = "USERXXXX..."
-access_expires_at = 1799999999  # время истечения, unix timestamp
-
-# Клиент для раб_оты с API ХХ
+#Клиент для раб_оты с API ХХ
 # delay может быть переопределен флагом --api-delay
 [api_client]
 base_url = "https://api.hh.ru/"  # адрес API, должен заканчиваться на "/"
@@ -744,9 +729,13 @@ TypeError: ApiClient.__init__() got an unexpected keyword argument 'timeoutt'
 
 - [Перейти к шаблонам](#шаблоны-сообщений)
 
+### auth.json
+
+Хранит токены авторизации.
+
 ### Логи
 
-В `log.txt` всегда можно посмотреть подробную информацию об ошибках. В целях безопасности токены, идентификаторы резюме и т. п. затираются.
+В `log.txt` всегда можно посмотреть подробную информацию об ошибках. В целях безопасности токены, идентификаторы резюме и т. п. затираются. Для просмотра логов используйте операцию `log`.
 
 ### База данных
 

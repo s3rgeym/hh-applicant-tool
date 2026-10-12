@@ -7,6 +7,7 @@ from . import utils
 
 CONFIG_DIR = utils.get_config_directory()
 CONFIG_FILENAME = "config.toml"
+AUTH_CONFIG_FILENAME = "auth.json"
 LOG_FILENAME = "log.txt"
 DATABASE_FILENAME = "data"
 COOKIES_FILENAME = "cookies.txt"

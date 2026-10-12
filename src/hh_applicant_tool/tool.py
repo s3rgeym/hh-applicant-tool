@@ -26,6 +26,7 @@ import requests
 from . import ai, api, utils
 from .constants import (
     ACCEPT_LANGUAGE,
+    AUTH_CONFIG_FILENAME,
     CONFIG_DIR,
     CONFIG_FILENAME,
     COOKIES_FILENAME,
@@ -39,6 +40,7 @@ from .constants import (
 from .errors import Error, OperationCanceled, OperationError
 from .storage import StorageFacade
 from .utils.argparse import ArgumentFormatter
+from .utils.config import ConfigJSON, ConfigTOML
 from .utils.cookiejar import HHOnlyCookieJar
 from .utils.log import setup_logger
 from .utils.package import PACKAGE_NAME, get_package_version, parse_version
@@ -323,8 +325,12 @@ class HHApplicantTool(BaseAttrs):
         ).resolve()
 
     @cached_property
-    def config(self) -> utils.Config:
-        return utils.Config(self.config_path / CONFIG_FILENAME)
+    def config(self) -> ConfigTOML:
+        return ConfigTOML(self.config_path / CONFIG_FILENAME)
+
+    @cached_property
+    def auth_config(self) -> ConfigJSON:
+        return ConfigJSON(self.config_path / AUTH_CONFIG_FILENAME)
 
     @cached_property
     def log_file(self) -> Path:
@@ -374,7 +380,9 @@ class HHApplicantTool(BaseAttrs):
 
     @cached_property
     def api_client(self) -> api.client.ApiClient:
-        token = self.config.get("token", {})
+        # Раньше токен хранился в общем конфиге, но так как при сохранении
+        # токена затираются комментарии, он был вынесен в отдельный файл
+        token = self.auth_config.get("token") or self.config.get("token") or {}
         client_config = (self.config.get("api_client") or {}).copy()
         # если передан аргумент, то он перекрывает значение из конфига
         if self.api_delay:
@@ -541,10 +549,10 @@ class HHApplicantTool(BaseAttrs):
     # TODO: добавить еще методов или те удалить?
 
     def save_token(self) -> bool:
-        if self.api_client.access_token != self.config.get("token", {}).get(
-            "access_token"
-        ):
-            self.config.save(token=self.api_client.get_access_token())
+        if self.api_client.access_token != self.auth_config.get(
+            "token", {}
+        ).get("access_token"):
+            self.auth_config.save(token=self.api_client.get_access_token())
             return True
         return False
 
