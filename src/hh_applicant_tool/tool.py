@@ -882,6 +882,11 @@ class HHApplicantTool(BaseAttrs):
             exist_ok=True,
         )
 
+    def _save_config_if_needed(self) -> None:
+        """Нужен для сохранения загруженного конфига в старом формате в новом"""
+        if self.config and not self.config_path.exists():
+            self.config.save()
+
     def setup_logging(
         self,
         verbosity: int | None = None,
@@ -980,6 +985,7 @@ class HHApplicantTool(BaseAttrs):
             except Exception as ex:
                 logger.error(f"Не удалось сохранить cookies: {ex}")
 
+            self._save_config_if_needed()
             self._check_system()
 
         return 1
