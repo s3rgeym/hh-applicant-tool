@@ -47,7 +47,7 @@ from .utils.argparse import ArgumentFormatter
 from .utils.config import ConfigJSON, ConfigTOML
 from .utils.log import setup_logger
 from .utils.package import PACKAGE_NAME, get_package_version, parse_version
-from .utils.system import is_docker
+from .utils.system import is_docker, has_gui_support
 from .utils.terminal import print_kitty_image, print_sixel_image
 
 logger = logging.getLogger("hh-applicant-tool")
@@ -657,7 +657,7 @@ class HHApplicantTool:
         if self.use_ai:
             return self.captcha_ai.recognize_text(image_data)
 
-        if self.use_kitty or self.use_sixel:
+        if not has_gui_support() or self.use_kitty or self.use_sixel:
             if self.use_kitty:
                 print_kitty_image(image_data)
             else:
@@ -972,14 +972,15 @@ class HHApplicantTool:
             r = self.session.post(
                 f"{self.base_url}/logout", {"_xsrf": self.xsrf_token}
             )
-            logger.debug("/logout: %d", r.status_code)
             if r.status_code == 302:
                 logger.info("session revoked")
+            else:
+                logger.warning("session does not exist")
         try:
             self.api_client.delete("/oauth/token")
             logger.info("token revoked")
         except api.errors.Forbidden:
-            pass
+            logger.warning("token has expired or been revoked")
 
     @cached_property
     def captcha_ai(self) -> ai.ChatOpenAI:
