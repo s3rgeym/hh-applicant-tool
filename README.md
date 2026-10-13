@@ -601,7 +601,8 @@ code $(hh-applicant-tool config -p)
 # Прокси для запросов к hh.ru
 # Приоритет: флаг --proxy-url, затем этот параметр, затем переменные окружения HTTP_PROXY / HTTPS_PROXY
 proxy_url = "http://user:pass@127.0.0.1:8080"
-base_url = "https://hh.kz/"
+# вместо дефолтного https://hh.ru впишите свой
+base_url = "https://rabota.by"
 user_agent = "..."
 captcha_lang = "RU"
 
