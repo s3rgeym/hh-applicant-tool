@@ -351,9 +351,19 @@ class ApiClient(BaseClient):
                 ):
                     raise
                 with self._refresh_lock:
-                    # Тоже может в свою очередь кинуть 403, если refresh_token недействителен
-                    self.refresh_access_token()
+                    # Тоже может в свою очередь кинуть 400 или 403, если refresh_token недействителен
+                    try:
+                        self.refresh_access_token()
+                    # Ошибка слишком общая
+                    except errors.ApiError:
+                        self.reset_tokens()
+                        raise
                     refreshed = True
+
+    def reset_tokens(self) -> None:
+        self.access_token = None
+        self.refresh_token = None
+        self.access_expires_at = 0
 
     def handle_access_token(self, token: AccessToken) -> None:
         for name in ("access_token", "refresh_token", "access_expires_at"):

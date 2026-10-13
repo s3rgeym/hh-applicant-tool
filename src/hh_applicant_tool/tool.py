@@ -997,8 +997,7 @@ class HHApplicantTool:
                 logger.warning("session does not exist")
         try:
             self.api_client.delete("/oauth/token")
-            self.api_client.access_token = self.api_client.referer_token = None
-            self.api_client.access_expires_at = 0
+            self.api_client.reset_tokens()
             logger.info("token revoked")
         except api.errors.Forbidden:
             logger.warning("token has expired or been revoked")
