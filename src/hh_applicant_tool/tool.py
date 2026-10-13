@@ -628,7 +628,7 @@ class HHApplicantTool:
 
     @property
     def xsrf_token(self) -> str | None:
-        return self._get_xsrf()
+        return self.session.cookies.get("_xsrf")
 
     @cached_property
     def smtp(self) -> smtplib.SMTP | smtplib.SMTP_SSL:
@@ -652,12 +652,6 @@ class HHApplicantTool:
             server.login(user, password)
 
         return server
-
-    def _get_xsrf(
-        self,
-        session: requests.Session | None = None,
-    ) -> str | None:
-        return (session or self.session).cookies.get("_xsrf")
 
     def _solve_captcha(self, image_data: bytes) -> str:
         if self.use_ai:
@@ -746,7 +740,7 @@ class HHApplicantTool:
 
         # Страница выставила куки в чистую сессию, токен берём из них,
         # а если куки нет - из initial state страницы
-        xsrf_token = self._get_xsrf(session)
+        xsrf_token = session.cookies.get("_xsrf")
 
         if not xsrf_token:
             raise ValueError("xsrf token отсутствует в Cookies!")
@@ -779,7 +773,7 @@ class HHApplicantTool:
     ) -> CaptchaImage:
         if session is None:
             session = self.session
-        xsrf_token = xsrf_token or self._get_xsrf(session)
+        xsrf_token = xsrf_token or session.cookies.get("_xsrf")
 
         lang = lang or self.captcha_lang
         target_url = urljoin(
