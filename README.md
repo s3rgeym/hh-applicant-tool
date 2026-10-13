@@ -396,7 +396,7 @@ $ hh-applicant-tool settings auth.username 'user@example.com'
     alt="Окно ввода капчи"
   >
   <br>
-  <em>Диалог для ввода капчи</em>
+  <em>Homo homini lupus est, ёпта&hellip;</em>
 </p>
 
 ---
