@@ -410,13 +410,15 @@ class HHApplicantTool:
 
     @cached_property
     def api_client(self) -> api.client.ApiClient:
-        # Раньше токен хранился в общем конфиге, но так как при сохранении
-        # токена затираются комментарии, он был вынесен в отдельный файл
-        token = self.auth_config.get("token") or self.config.get("token") or {}
+        token = copy.deepcopy(
+            self.auth_config.get("token") or self.config.get("token") or {}
+        )
+        self._original_token = copy.deepcopy(token)
+        
         client_config = (self.config.get("api_client") or {}).copy()
-        # если передан аргумент, то он перекрывает значение из конфига
         if self.api_delay:
             client_config["delay"] = self.api_delay
+    
         return api.client.ApiClient(
             access_token=token.get("access_token"),
             refresh_token=token.get("refresh_token"),
@@ -599,12 +601,17 @@ class HHApplicantTool:
         return self.parse_initial_state(r)
 
     def save_token(self) -> bool:
-        if self.api_client.access_token != self.auth_config.get(
-            "token", {}
-        ).get("access_token"):
-            self.auth_config.save(token=self.api_client.get_access_token())
-            return True
-        return False
+        # Методы API не вызывались
+        if not hasattr(self, "_original_token"):
+            return False
+
+        token = self.api_client.get_access_token()
+        # Поля токена не изменились
+        if token == self._original_token:
+            return False
+        
+        self.auth_config.save(token=token)
+        return True
 
     def save_cookies(self) -> None:
         """Сохраняет cookies сессии hh в файл."""
