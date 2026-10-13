@@ -1085,7 +1085,7 @@ class HHApplicantTool:
                 self._parser.print_help(file=sys.stderr)
                 return 2
             return self.operation_run(self, args)
-        except (KeyboardInterrupt, OperationCanceled):
+        except (OperationCanceled, KeyboardInterrupt, EOFError):
             logger.warning("Выполнение операции прервано!")
             return 130
         except OperationError as ex:
