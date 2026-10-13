@@ -608,6 +608,7 @@ class HHApplicantTool:
             return False
 
         token = self.api_client.get_access_token()
+
         # Поля токена не изменились
         if token == self._original_token:
             return False
