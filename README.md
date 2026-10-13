@@ -559,6 +559,11 @@ docker@1897bdd7c80b:/app$
 | **macOS**   | `~/Library/Application Support/hh-applicant-tool/`       |
 | **Linux**   | `~/.config/hh-applicant-tool/`                           |
 
+<p align="center">
+<img width="477" height="146" alt="image" src="https://github.com/user-attachments/assets/b5a99657-4908-4b07-be3c-213dfd9efd77" />
+<br><em>Содержимое директории</em>
+</p>
+
 ### Конфигурационный файл
 
 Конфигурационный называется `config.toml`. Он содержит основные настройки.
