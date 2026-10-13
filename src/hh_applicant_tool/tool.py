@@ -47,7 +47,7 @@ from .utils.argparse import ArgumentFormatter
 from .utils.config import ConfigJSON, ConfigTOML
 from .utils.log import setup_logger
 from .utils.package import PACKAGE_NAME, get_package_version, parse_version
-from .utils.system import is_docker, has_gui_support
+from .utils.system import has_gui_support, is_docker
 from .utils.terminal import print_kitty_image, print_sixel_image
 
 logger = logging.getLogger("hh-applicant-tool")
@@ -412,22 +412,21 @@ class HHApplicantTool:
 
     @cached_property
     def api_client(self) -> api.client.ApiClient:
-        token = copy.deepcopy(
-            self.auth_config.get("token") or self.config.get("token") or {}
-        )
-        self._original_token = copy.deepcopy(token)
-        
+        token = self.auth_config.get("token") or self.config.get("token") or {}
+
         client_config = (self.config.get("api_client") or {}).copy()
         if self.api_delay:
             client_config["delay"] = self.api_delay
-    
-        return api.client.ApiClient(
+
+        client = api.client.ApiClient(
             access_token=token.get("access_token"),
             refresh_token=token.get("refresh_token"),
             access_expires_at=token.get("access_expires_at"),
             captcha_handler=self.handle_captcha,
             **client_config,
         )
+        self._original_token = client.get_access_token()
+        return client
 
     def get_ai_client(
         self,
@@ -612,16 +611,16 @@ class HHApplicantTool:
         # Поля токена не изменились
         if token == self._original_token:
             return False
-        
+
         self.auth_config.save(token=token)
         self._original_token = token
         return True
 
     def save_cookies(self) -> None:
         """Сохраняет cookies сессии hh в файл."""
-        if not hasattr(self, '_original_cookies'):
+        if not hasattr(self, "_original_cookies"):
             return
-        
+
         jar = MozillaCookieJar(str(self.cookies_file))
         for c in self.session.cookies:
             # Против отдельных стран введены санкции
@@ -630,7 +629,7 @@ class HHApplicantTool:
                 c.domain,
             ):
                 continue
-                
+
             jar.set_cookie(copy.copy(c))
 
         current_cookies = list(jar)

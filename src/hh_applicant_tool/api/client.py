@@ -339,9 +339,7 @@ class ApiClient(BaseClient):
                             break
                         attempts -= 1
                     if accepted:
-                        logger.debug(
-                            f"captcha cooldown: {captcha_cooldown}"
-                        )
+                        logger.debug(f"captcha cooldown: {captcha_cooldown}")
                         time.sleep(captcha_cooldown)
                         continue
                 raise
