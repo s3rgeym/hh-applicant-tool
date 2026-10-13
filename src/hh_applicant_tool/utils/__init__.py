@@ -8,7 +8,6 @@ from .date import (
     parse_api_datetime,
     try_parse_datetime,
 )
-from .misc import print_err
 from .string import bool2str, list2str, rand_text, shorten
 from .terminal import setup_terminal
 
@@ -27,7 +26,6 @@ __all__ = [
     "get_config_directory",
     "list2str",
     "parse_api_datetime",
-    "print_err",
     "rand_text",
     "setup_terminal",
     "shorten",

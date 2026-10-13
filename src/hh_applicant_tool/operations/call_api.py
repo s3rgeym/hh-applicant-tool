@@ -4,7 +4,7 @@ import argparse
 import json
 import logging
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..api import ApiError
 from ..tool import BaseNamespace, BaseOperation
@@ -37,8 +37,55 @@ class Operation(BaseOperation):
                 " либо в виде объекта JSON аргументом сразу после пути."
             ),
         )
+        parser.add_argument(
+            "--json",
+            "-j",
+            default=False,
+            help="Принудительно отправить запрос телом в JSON и content-type application/json",
+            action="store_true",
+        )
+
+    def _build_payload(
+        self, params: list[str]
+    ) -> tuple[dict[str, Any] | None, bool]:
+        if not params:
+            return None, False
+
+        as_json = False
+        payload = None
+
+        if params[0].lstrip().startswith("{") and params[0].rstrip().endswith(
+            "}"
+        ):
+            if len(params) > 1:
+                raise ValueError(
+                    "JSON должен быть единственным аргументом после endpoint!"
+                )
+            as_json = True
+            payload = json.loads(params[0])
+        elif self._args:
+            as_json = True
+            payload = {}
+            for param in params:
+                name, _, value = param.partition("=")
+                try:
+                    value = json.loads(value)
+                except json.JSONDecodeError:
+                    pass
+                payload[name] = value
+        else:
+            payload = {}
+            for param in params:
+                # API принимает параметры с одинаковым именем
+                # Так сделано для фильтров вместо передачи
+                # чего-то чз запятую
+                key, _, value = param.partition("=")
+                payload.setdefault(key, []).append(value)
+
+        return payload, as_json
 
     def run(self, tool: HHApplicantTool, args: Namespace) -> None:
+        self._args = args
         api_client = tool.api_client
 
         methods = {"GET", "POST", "PUT", "PATCH", "DELETE"}
@@ -49,32 +96,8 @@ class Operation(BaseOperation):
             method = "GET"
             endpoint, *params = args.arg
 
-        payload = None
-        as_json = False
-        if len(params) > 0:
-            if params[0].lstrip().startswith("{") and params[
-                0
-            ].rstrip().endswith("}"):
-                try:
-                    payload = json.loads(params[0])
-                    as_json = True
-                except json.JSONDecodeError as e:
-                    logger.error(f"Invalid JSON: {e}")
-                    return 1
-                if len(params) > 1:
-                    logger.warning(
-                        "При JSON-запросе все аргументы после документа игнорируются!"
-                    )
-            else:
-                payload = {}
-                for param in params:
-                    key, value = param.split("=", 1)
-                    # В их API можно передать любое количество параметров с
-                    # одинаковым именем. Так передаются айдишники и фильтры
-                    # разные вместо объединения их через запятую как у
-                    # нормальных людей
-                    payload.setdefault(key, []).append(value)
-
+        payload, as_json = self._build_payload(params)
+        logger.debug("%r %s", payload, as_json)
         try:
             result = api_client.request(
                 method,

@@ -12,6 +12,7 @@ from typing import Any
 import tomli_w
 
 from . import system
+from .attrdict import AttrDict
 from .common import remove_none
 from .package import PACKAGE_NAME
 
@@ -21,7 +22,7 @@ def get_config_directory() -> Path:
     return system.get_config_directory() / PACKAGE_NAME
 
 
-class Config(dict, ABC):
+class Config(AttrDict, ABC):
     """Базовый словарь, который может сохраняться на диск и загружаться с него.
 
     Путь к файлу задаётся явно. Наследники задают формат файла
@@ -65,8 +66,6 @@ class Config(dict, ABC):
 
     def unlink(self) -> None:
         self._path.unlink(missing_ok=True)
-
-    __getitem__ = dict.get
 
     def __str__(self) -> str:
         return str(self._path)

@@ -25,8 +25,8 @@ def rand_text(s: str) -> str:
 
 
 def render_template(
-    template: str, 
-    placeholders: dict[str, str], 
+    template: str,
+    placeholders: dict[str, str],
     name: str = "шаблоне",
     *,
     randomize_text: bool = False,
@@ -37,11 +37,7 @@ def render_template(
     if randomize_text:
         template = rand_text(template)
     if escape_html:
-        placeholders = {
-            k: html.escape(v) 
-            for k, v 
-            in placeholders.items()
-        }
+        placeholders = {k: html.escape(v) for k, v in placeholders.items()}
     try:
         return template % placeholders
     except KeyError as ex:

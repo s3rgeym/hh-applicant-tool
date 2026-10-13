@@ -124,7 +124,7 @@ class BaseClient:
             with self._lock:
                 self._wait_for_delay(delay)
                 logger.debug(
-                    f"({attempt}/{self.max_retries}) {method} {url} {params!r}",
+                    f"({attempt}/{self.max_retries}) {method} {url}: {params=}; {as_json=}",
                 )
                 try:
                     # Заголовки собираются на каждой попытке, чтобы

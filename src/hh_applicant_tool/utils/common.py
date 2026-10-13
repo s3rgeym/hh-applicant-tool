@@ -1,6 +1,11 @@
+from __future__ import annotations
+
+import sys
+from functools import partial
 from typing import Any
 
 _SENTINEL = object()
+print_err = partial(print, file=sys.stderr, flush=True)
 
 
 def remove_none(data: Any) -> Any:
