@@ -24,7 +24,7 @@ __all__ = ("ApiClient", "OAuthClient")
 HH_API_URL = "https://api.hh.ru"
 HH_OAUTH_URL = "https://hh.ru/oauth/"
 DEFAULT_DELAY = 0.345
-DEFAULT_CAPTCHA_COOLDOWN = 3.0
+DEFAULT_CAPTCHA_COOLDOWN = 5.0
 MAX_RETRIES = 3
 MAX_CAPTCHA_RETRIES = 5
 
@@ -304,9 +304,12 @@ class ApiClient(BaseClient):
         params=None,
         delay=None,
         as_json=False,
+        *,
+        captcha_cooldown=None,
         max_captcha_attempts=None,
         **kwargs,
     ):
+        captcha_cooldown = captcha_cooldown or self.captcha_cooldown
         max_captcha_attempts = max_captcha_attempts or self.max_captcha_attempts
         refreshed = False
         while True:
@@ -319,43 +322,40 @@ class ApiClient(BaseClient):
                     as_json=as_json,
                     **kwargs,
                 )
+            # Глобальный перехват ошибок капчи
             except errors.CaptchaRequired as ex:
                 if not self.captcha_handler:
                     raise
-                # Только один поток должен обрабатывать капчу одновременно
+                # Одновременно капчу несколько потоков решать не должны
                 with self._captcha_lock:
-                    for attempt in range(1, max_captcha_attempts + 1):
+                    attempts = max_captcha_attempts
+                    while attempts:
                         logger.debug(
-                            f"({attempt}/{max_captcha_attempts}) handle captcha: {ex.captcha_url}"
+                            f"({max_captcha_attempts - attempts + 1}/{max_captcha_attempts}) handle captcha: {ex.captcha_url}"
                         )
                         accepted = self.captcha_handler(ex.captcha_url)
                         if accepted:
                             logger.info("captcha accepted!")
                             break
+                        attempts -= 1
                     if accepted:
                         logger.debug(
-                            f"captcha cooldown: {self.captcha_cooldown}"
+                            f"captcha cooldown: {captcha_cooldown}"
                         )
-                        time.sleep(self.captcha_cooldown)
+                        time.sleep(captcha_cooldown)
                         continue
                 raise
             except errors.Forbidden:
                 if (
-                    refreshed 
-                    or not self.refresh_token 
+                    refreshed
+                    or not self.refresh_token
                     or not self.is_access_expired
                 ):
                     raise
                 with self._refresh_lock:
-                    # try:
+                    # Тоже может в свою очередь кинуть 403, если refresh_token недействителен
                     self.refresh_access_token()
                     refreshed = True
-                    # except errors.Forbidden:
-                    #     # Refresh токен недействителен
-                    #     self.access_token = None
-                    #     self.refresh_token = None
-                    #     self.access_expires_at = 0
-                    #     raise
 
     def handle_access_token(self, token: AccessToken) -> None:
         for name in ("access_token", "refresh_token", "access_expires_at"):
