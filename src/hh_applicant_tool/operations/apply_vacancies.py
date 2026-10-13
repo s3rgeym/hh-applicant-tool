@@ -898,14 +898,17 @@ class Operation(BaseOperation):
                             else mail_to
                         )
                         mail_subject = render_template(
-                            rand_text(self.apply_mail_subject),
+                            self.apply_mail_subject,
                             message_placeholders,
                             "apply_mail_subject",
+                            randomize_text=True,
                         )
                         mail_body = render_template(
-                            rand_text(self.apply_mail_body),
+                            self.apply_mail_body,
                             message_placeholders,
                             "apply_mail_body",
+                            randomize_text=True,
+                            escape_html=True,
                         )
                         try:
                             self._send_email(mail_to, mail_subject, mail_body)
