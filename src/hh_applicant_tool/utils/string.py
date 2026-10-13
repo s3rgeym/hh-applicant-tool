@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import random
 import re
 from typing import Any
@@ -24,10 +25,23 @@ def rand_text(s: str) -> str:
 
 
 def render_template(
-    template: str, placeholders: dict[str, str], name: str = "шаблоне"
+    template: str, 
+    placeholders: dict[str, str], 
+    name: str = "шаблоне",
+    *,
+    randomize_text: bool = False,
+    escape_html: bool = False,
 ) -> str:
     """Подставляет плейсхолдеры `%(имя)s`, а неизвестный плейсхолдер
     превращает из невнятного `KeyError: 'имя'` в понятную ошибку."""
+    if randomize_text:
+        template = rand_text(template)
+    if escape_html:
+        placeholders = {
+            k: html.escape(v) 
+            for k, v 
+            in placeholders.items()
+        }
     try:
         return template % placeholders
     except KeyError as ex:
