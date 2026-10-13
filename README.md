@@ -822,8 +822,7 @@ $$('[data-qa="vacancy-serp__vacancy_response"]').forEach((el) => el.click())
 
 Фрагмент кода из декомпилированного приложения:
 
-`jadx_out/sources/ru/hh/shared/feature/captcha/presentation/view/CaptchaViewModel.java`:
-
+`jadx_out/sources/ru/hh/shared/feature/captcha/presentation/view/CaptchaViewModel.java`
 ```java
 /* JADX WARN: Type inference incomplete: some casts might be missing */
 public final void C5() {
