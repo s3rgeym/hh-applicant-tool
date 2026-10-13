@@ -76,8 +76,9 @@ class BaseClient:
 
     def _default_headers(self) -> dict[str, str]:
         return {
-            "Accept": "application/json",
+            "Accept": 'application/json; charset="UTF-8"',
             "User-Agent": self.user_agent,
+            "X-Force-App-Access": "true",  # Из исходников офиц приложения
             "X-HH-App-Active": "true",
         }
 
@@ -293,6 +294,8 @@ class ApiClient(BaseClient):
         headers = super()._default_headers()
         if not self.access_token:
             return headers
+        # Чит на бессмертие
+        # headers.update({"X-Force-App-Access": "true"})
         # Это очень интересно, что access token'ы начинаются с USER, т.е. API может содержать какую-то уязвимость, связанную с этим
         assert self.access_token.startswith("USER")
         return headers | {"Authorization": f"Bearer {self.access_token}"}
