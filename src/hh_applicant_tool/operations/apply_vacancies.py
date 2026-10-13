@@ -945,7 +945,7 @@ class Operation(BaseOperation):
         msg["Subject"] = subject
         msg["From"] = cfg.get("from") or cfg.get("user")
         msg["To"] = to
-        msg.set_content(body)
+        msg.set_content(body, subtype="html")
         self.tool.smtp.send_message(msg)
 
     def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData | None:
