@@ -329,6 +329,8 @@ class HHApplicantTool:
             jar.load(ignore_discard=True, ignore_expires=True)
             session.cookies.update(jar)
 
+        # Запоминаем куки, которые были при инициализации
+        self._original_cookies = list(session.cookies)
         return session
 
     @staticmethod
@@ -611,21 +613,31 @@ class HHApplicantTool:
             return False
         
         self.auth_config.save(token=token)
+        self._original_token = token
         return True
 
     def save_cookies(self) -> None:
         """Сохраняет cookies сессии hh в файл."""
+        if not hasattr(self, '_original_cookies'):
+            return
+        
         jar = MozillaCookieJar(str(self.cookies_file))
-
         for c in self.session.cookies:
+            # Против отдельных стран введены санкции
             if c.domain and not re.search(
-                r"^(?!israel\.)(?:.*?\.)?hh\.(ru|kz|uz|by|net|com)\.?$",
+                r"^((?!israel\.)(?:.*?\.)?hh\.(ru|kz|uz|by|net|com)|rabota\.by)\.?$",
                 c.domain,
             ):
                 continue
-            cc = copy.copy(c)
-            jar.set_cookie(cc)
+                
+            jar.set_cookie(copy.copy(c))
+
+        current_cookies = list(jar)
+        if self._original_cookies == current_cookies:
+            return
+
         jar.save(ignore_discard=True, ignore_expires=True)
+        self._original_cookies = current_cookies
         logger.debug("Cookies saved to %s", self.cookies_file)
 
     @property
@@ -985,9 +997,13 @@ class HHApplicantTool:
                 logger.warning("session does not exist")
         try:
             self.api_client.delete("/oauth/token")
+            self.api_client.access_token = self.api_client.referer_token = None
+            self.api_client.access_expires_at = 0
             logger.info("token revoked")
         except api.errors.Forbidden:
             logger.warning("token has expired or been revoked")
+        # Затираем куки
+        self.session.cookies.clear()
 
     @cached_property
     def captcha_ai(self) -> ai.ChatOpenAI:
