@@ -247,17 +247,21 @@ class HHApplicantTool:
     def __post_init__(self) -> None:
         self._parser = self._create_parser()
 
+        config = self.general_config
+
         # Эти значения, если они не установлены, берутся из конфига и могут быть
         # изменены флагами
-        self.user_agent = self.user_agent or self.config.get(
+        self.user_agent = self.user_agent or config.get(
             "user_agent", DEFAULT_DESKTOP_USERAGENT
         )
-        self.base_url = self.base_url or self.config.get(
-            "base_url", HH_BASE_URL
-        )
-        self.captcha_lang = self.captcha_lang or self.config.get(
+        self.base_url = self.base_url or config.get("base_url", HH_BASE_URL)
+        self.captcha_lang = self.captcha_lang or config.get(
             "captcha_lang", DEFAULT_CAPTCHA_LANGUAGE
         )
+
+    @property
+    def general_config(self) -> dict:
+        return self.config.get("general", {})
 
     @staticmethod
     def _proxy_url_to_dict(proxy_url: str | None) -> dict[str, str]:
@@ -270,7 +274,7 @@ class HHApplicantTool:
         }
 
     def _get_proxies(self) -> dict[str, str]:
-        proxy_url = self.proxy_url or self.config.get("proxy_url")
+        proxy_url = self.proxy_url or self.general_config.get("proxy_url")
 
         if proxy_url:
             return self._proxy_url_to_dict(proxy_url)
@@ -651,7 +655,7 @@ class HHApplicantTool:
 
     @cached_property
     def smtp(self) -> smtplib.SMTP | smtplib.SMTP_SSL:
-        conf = self.config.get("smtp", {})
+        conf = self.general_config.get("smtp", {})
         host = conf.get("host")
         port = conf.get("port")
         user = conf.get("user")

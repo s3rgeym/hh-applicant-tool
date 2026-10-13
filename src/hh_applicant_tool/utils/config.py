@@ -36,6 +36,10 @@ class Config(AttrDict, ABC):
         self.load()
 
     @property
+    def path(self) -> Path:
+        return self._path
+
+    @property
     def file_name(self) -> Path:
         return str(self._path)
 

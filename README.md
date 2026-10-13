@@ -291,8 +291,8 @@ $ hh-applicant-tool apply-vacancies --search "Python backend" --excluded-filter 
 # Поднимаем резюме
 $ hh-applicant-tool update-resumes
 
-# Ответить работодателям
-$ hh-applicant-tool reply-employers
+# Запустить автоответчик через AI в чатах с перерывом каждые 15 минут между проверкой чатов
+$ hh-applicant-tool --ai reply-chats -l 900
 
 # Просмотр лога в реальном времени
 $ hh-applicant-tool log -f
@@ -303,16 +303,16 @@ $ hh-applicant-tool config
 # Редактировать конфиг в стандартном редакторе
 $ hh-applicant-tool config -e
 
-# Вывести значение из конфига
-$ hh-applicant-tool config -k token.access_token
-
 # Установить значение в конфиге, например, socks-прокси
 # Учтите, что при таком способе изменения конфига, исчезнут все комментарии в нем!!!
-$ hh-applicant-tool config -s proxy_url socks5h://localhost:1080
+$ hh-applicant-tool config -s general.proxy_url socks5h://localhost:1080
+
+# Вывести значение из конфига
+$ hh-applicant-tool config -k general.proxy_url
 
 # Удалить значение из конфига
 # Эта операция тоже форматирует конфиг, удаляя из него комментарии
-$ hh-applicant-tool config -u proxy_url
+$ hh-applicant-tool config -u general.proxy_url
 
 # Утилита все данные об откликах хранит в SQLite
 $ hh-applicant-tool query 'select count(*) from vacancy_contacts;'
@@ -367,7 +367,7 @@ $ hh-applicant-tool settings auth.username 'user@example.com'
 | **update-resumes**, **update**     | Обновить все резюме. Аналогично нажатию кнопки «Обновить дату».                                                                                                                                                                                                                                         |
 | **clone-resume**                   | Клонировать резюме                                                                                                                                                                                                                                                                                      |
 | **apply-vacancies**, **apply**     | Откликнуться на подходящие вакансии. Если указана строка для поиска (`--search`), то поиск будет произведен по вакансиям, иначе по списку рекомендованных вакансий. Лимит = 200 в день. На HH есть спам-фильтры, так что лучше не рассылайте отклики со ссылками, иначе рискуете попасть в теневой бан. |
-| **reply-chats**, **respond-chats** | Рассылка ответов в чаты... Если `--use-ai` не передан, то для написания ответа открывается `vim`. |
+| **reply-chats**, **respond-chats** | Рассылка ответов в чаты... Если `--use-ai` не передан, то для написания ответа открывается `vim`.                                                                                                                                                                                                       |
 | **clear-negotiations**             | Отмена откликов                                                                                                                                                                                                                                                                                         |
 | **clear-skipped**                  | Очистка базы пропущенных вакансий. С флагом `--reason` можно указать конкретную причину (`ai_rejected`, `excluded_filter`).                                                                                                                                                                             |
 | **call-api**, **api**              | Вызов произвольного метода API с выводом результата.                                                                                                                                                                                                                                                    |
@@ -382,6 +382,10 @@ $ hh-applicant-tool settings auth.username 'user@example.com'
 | **log**                            | Просмотр файла-лога. С флагом -f будет следить за изменениями. В логах частично скрыты идентификаторы в целях безопасности.                                                                                                                                                                             |
 
 > [!IMPORTANT]
+> Настройки промптов задаются в [конфиге](#конфигурационный-файл). Если
+> разрешить передавать километровые флаги, то они сломают вашу историю
+
+> [!INFO]
 > Почитайте про [язык для поисковых запросов](https://hh.ru/article/1175). Он позволяет отсеивать мусор при поиске подходящих вакансий, например, `(Go OR Golang) NOT PHP NOT JavaScript`.
 
 ---
@@ -600,11 +604,13 @@ hh-applicant-tool config -p
 code $(hh-applicant-tool config -p)
 ```
 
-> TODO: придумать как сохранять комментарии в этом файле при его программном сохранении
+> Учтите, что настройки принадлежат той секции, чьи квадратные скобки выше
+> ближе, те какой-то порядок надо соблюдать
 
 Формат файла:
 
 ```toml
+[general]
 # Прокси для запросов к hh.ru
 # Приоритет: флаг --proxy-url, затем этот параметр, затем переменные окружения HTTP_PROXY / HTTPS_PROXY
 proxy_url = "http://user:pass@127.0.0.1:8080"

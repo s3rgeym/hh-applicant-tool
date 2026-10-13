@@ -78,7 +78,7 @@ DEFAULT_PER_PAGE = 100
 
 DEFAULT_COVER_LETTER = """\
 {Здравствуйте|Добрый день}, меня зовут %(first_name)s.\
- {Прошу|Предлагаю} рассмотреть {мою кандидатуру|мое резюме «%(resume_title)s} на вакансию «%(vacancy_name)s».\
+ {Прошу|Предлагаю} рассмотреть {мою кандидатуру|мое резюме «%(resume_title)s»} на вакансию «%(vacancy_name)s».\
  С уважением, %(first_name)s."""
 
 
@@ -170,12 +170,6 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
         parser.add_argument(
-            "--cover-letter",
-            "--letter",
-            "-l",
-            help="Шаблон сопроводительного письма для отклика. Можно указать в `cover_letter` конфига. По умолчанию генерируется стандартное сообщение...",
-        )
-        parser.add_argument(
             "-f",
             "--force-letter",
             "--force",
@@ -183,29 +177,9 @@ class Operation(BaseOperation):
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
-            "--cover-letter-system-prompt",
-            "--system-prompt",
-            "--ai-system",
-            help="Системный промпт для AI генерации сопроводительных писем (простой текст, не шаблон)",
-        )
-        parser.add_argument(
-            "--cover-letter-prompt",
-            "--message-prompt",
-            "--prompt",
-            help="Шаблон промпта для генерации сопроводительного письма. Доступны переменные %%(vacancy_name)s, %%(vacancy_url)s, %%(employer_name)s, %%(first_name)s, %%(last_name)s, %%(email)s, %%(phone)s, %%(resume_title)s, %%(resume_url)s, %%(resume_hash)s",
-        )
-        parser.add_argument(
             "--ai-filter",
             help="Использовать AI для фильтрации вакансий",
             action=argparse.BooleanOptionalAction,
-        )
-        parser.add_argument(
-            "--ai-filter-system-prompt",
-            help="Системный промпт для AI-фильтра вакансий (простой текст, не шаблон). Ответ AI должен быть «да» или «нет»",
-        )
-        parser.add_argument(
-            "--ai-filter-prompt",
-            help="Шаблон промпта для AI-фильтра вакансий. Доступны переменные из --cover-letter-prompt, а также %%(resume_skills)s, %%(resume_about)s, %%(resume_experience)s, %%(vacancy_description)s, %%(vacancy_key_skills)s",
         )
         parser.add_argument(
             "--total-pages",
@@ -221,7 +195,7 @@ class Operation(BaseOperation):
         )
         parser.add_argument(
             "--skip-tests",
-            help="Пропускать тесты при откликах вместо",
+            help="Пропускать тесты при откликах вместо их решения",
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
@@ -248,8 +222,9 @@ class Operation(BaseOperation):
         )
 
         api_search_filters.add_argument(
-            "--text",
+            "-s",
             "--search",
+            dest="text",
             help="Строка поиска для фильтрации вакансий. Если указана, то поиск будет производиться по вакансиям. В остальных случаях отклики будут производиться по списку рекомендованных вакансий.",  # noqa: E501
             type=str,
         )
@@ -383,10 +358,8 @@ class Operation(BaseOperation):
         args: Namespace,
     ) -> None:
         self.tool = tool
-        config = tool.config
-        self.cover_letter = args.cover_letter or config.get(
-            "cover_letter", DEFAULT_COVER_LETTER
-        )
+        config = tool.general_config
+        self.cover_letter = config.get("cover_letter", DEFAULT_COVER_LETTER)
         for name in SEARCH_PARAM_NAMES:
             setattr(self, name, getattr(args, name))
         self.dry_run = args.dry_run
@@ -409,15 +382,11 @@ class Operation(BaseOperation):
 
         # Приоритет: аргумент командной строки -> конфиг -> дефолтная константа
         # Системные промпты - обычный текст, пользовательские - шаблоны
-        self.cover_letter_prompt = (
-            args.cover_letter_prompt
-            or config.get("cover_letter_prompt")
-            or DEFAULT_COVER_LETTER_PROMPT
+        self.cover_letter_prompt = config.get(
+            "cover_letter_prompt", DEFAULT_COVER_LETTER_PROMPT
         )
-        self.ai_filter_prompt = (
-            args.ai_filter_prompt
-            or config.get("ai_filter_prompt")
-            or DEFAULT_AI_FILTER_PROMPT
+        self.ai_filter_prompt = config.get(
+            "ai_filter_prompt", DEFAULT_AI_FILTER_PROMPT
         )
         self.ai_filter = bool(args.ai_filter)
 
@@ -426,22 +395,18 @@ class Operation(BaseOperation):
             c = tool.get_openai_args("openai.cover_letter")
             c.setdefault("system_prompt", DEFAULT_COVER_LETTER_SYSTEM_PROMPT)
             c.setdefault("temperature", 0.8)
-            if args.cover_letter_system_prompt:
-                c["system_propmpt"] = args.cover_letter_system_prompt
             self.cover_letter_ai = tool.get_ai_client(**c)
 
             if self.ai_filter:
                 c = tool.get_openai_args("openai.vacancy_filter")
                 c.setdefault("system_propmt", DEFAULT_AI_FILTER_PROMPT)
-                if args.ai_filter_system_prompt:
-                    c["system_propmpt"] = args.cover_letter_system_prompt
                 self.vacancy_filter_ai = tool.get_ai_client(**c)
 
-        self.apply_mail_subject = (
-            tool.config.get("apply_mail_subject") or DEFAULT_APPLY_MAIL_SUBJECT
+        self.apply_mail_subject = config.get(
+            "apply_mail_subject", DEFAULT_APPLY_MAIL_SUBJECT
         )
-        self.apply_mail_body = (
-            tool.config.get("apply_mail_body") or DEFAULT_APPLY_MAIL_BODY
+        self.apply_mail_body = config.get(
+            "apply_mail_body", DEFAULT_APPLY_MAIL_BODY
         )
 
         self._apply_vacancies()
@@ -739,6 +704,9 @@ class Operation(BaseOperation):
                         f"/employers/{employer_id}"
                     )
 
+                    # Какая блядь эту строку стерла?
+                    seen_employers.add(employer_id)
+
                     try:
                         storage.employers.save(employer_profile)
                     except RepositoryError as ex:
@@ -963,7 +931,7 @@ class Operation(BaseOperation):
         letter: str = "",
     ) -> dict[str, Any]:
         """Загружает тест, ждет паузу и отправляет отклик."""
-        response_url = f"https://hh.ru/applicant/vacancy_response?vacancyId={vacancy_id}&startedWithQuestion=false&hhtmFrom=vacancy"
+        response_url = f"{self.tool.base_url}/applicant/vacancy_response?vacancyId={vacancy_id}&startedWithQuestion=false&hhtmFrom=vacancy"
 
         if not (tests_data := self._get_vacancy_tests(response_url)):
             raise ValueError(f"Данные тестов не найдены на {response_url}.")
@@ -1058,7 +1026,7 @@ class Operation(BaseOperation):
         time.sleep(random.uniform(2.0, 3.0))
 
         response = self.tool.session.post(
-            "https://hh.ru/applicant/vacancy_response/popup",
+            f"{self.tool.base_url}/applicant/vacancy_response/popup",
             data=payload,
             headers={
                 "Referer": response_url,
@@ -1270,7 +1238,7 @@ class Operation(BaseOperation):
 
         # Грузим полный текст вакансии только, если предыдущий фильтр не сработал
         state = self.tool.get_initial_state(
-            "https://hh.ru/vacancy/" + vacancy["id"]
+            self.tool.base_url + "/vacancy/" + vacancy["id"]
         )
         description = find_key(state, "description")
         if not description:
@@ -1310,7 +1278,10 @@ class Operation(BaseOperation):
             return False
 
     def _save_skipped_vacancy(
-        self, vacancy: SearchVacancy, reason: str, resume_id: str | None = None
+        self,
+        vacancy: SearchVacancy,
+        reason: str,
+        resume_id: str | None = None,
     ) -> None:
         try:
             employer = vacancy.get("employer", {})
