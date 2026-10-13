@@ -28,5 +28,3 @@ class Operation(BaseOperation):
 
     def run(self, tool: HHApplicantTool, args: BaseNamespace) -> None:
         tool.logout()
-        tool.session.cookies.clear()
-        tool.auth_config.unlink()
