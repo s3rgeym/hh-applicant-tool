@@ -87,5 +87,12 @@ CLAUDE.md
 .vscode/
 uv.lock
 poetry.lock
+
+# Мой мусор
 test_captcha.py
 direct_login.py
+out/
+*.apks
+jadx_out/
+hars/
+captcha.md

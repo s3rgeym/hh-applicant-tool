@@ -26,7 +26,7 @@ logger = logging.getLogger("hh-applicant-tool")
 
 
 class Operation(BaseOperation):
-    """Авторизация на сайте и через мобильное приложение"""
+    """Авторизация на сайте и через мобильное приложение. Ранее введенный логин запоминается и будет использован, если не указать его."""
 
     __aliases__: list = ["authenticate", "auth", "login"]
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from functools import cached_property
 from typing import Any, Type
 
 from requests import Request, Response
@@ -31,6 +30,10 @@ class ApiError(BadResponse):
     @property
     def data(self) -> dict:
         return self._data
+
+    @property
+    def request_id(self) -> str | None:
+        return self._data.get("request_id")
 
     @property
     def request(self) -> Request:
@@ -119,15 +122,17 @@ class Forbidden(ClientError):
 
 
 class CaptchaRequired(ClientError):
-    @cached_property
+    @property
     def captcha_url(self) -> str:
-        return next(
-            filter(
-                lambda v: v["value"] == "captcha_required",
-                self._data["errors"],
-            ),
-            {},
-        ).get("captcha_url")
+        # return next(
+        #     filter(
+        #         lambda v: v["value"] == "captcha_required",
+        #         self._data["errors"],
+        #     ),
+        #     {},
+        # ).get("captcha_url")
+        # Вроде ссылка на капчу всегда в первом и единственном элементе
+        return self._data["errors"][0]["captcha_url"]
 
     @property
     def message(self) -> str:

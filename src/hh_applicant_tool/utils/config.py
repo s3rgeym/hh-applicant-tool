@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 import warnings
 from abc import ABC, abstractmethod
 from functools import cache
@@ -9,7 +10,6 @@ from threading import Lock
 from typing import Any
 
 import tomli_w
-import tomllib
 
 from . import system
 from .common import remove_none

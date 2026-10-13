@@ -1,5 +1,4 @@
-# Мне не хватило терпения, поэтому я попросил нейрослоп bleed'а и ко удалить
-# Claude
+# Этот код, блять, уродлив. Просто ужасен
 from __future__ import annotations
 
 import argparse
@@ -34,7 +33,6 @@ from ..utils.string import (
     render_template,
     shorten,
     strip_tags,
-    unescape_string,
 )
 
 if TYPE_CHECKING:
@@ -78,6 +76,12 @@ SEARCH_PARAM_NAMES = (
 
 DEFAULT_PER_PAGE = 100
 
+DEFAULT_COVER_LETTER = """\
+{Здравствуйте|Добрый день}, меня зовут %(first_name)s.\
+ {Прошу|Предлагаю} рассмотреть {мою кандидатуру|мое резюме «%(resume_title)s} на вакансию «%(vacancy_name)s».\
+ С уважением, %(first_name)s."""
+
+
 # Системные промпты - простые строки, не шаблоны
 DEFAULT_COVER_LETTER_SYSTEM_PROMPT = (
     "Ты помогаешь соискателю писать сопроводительные письма. "
@@ -108,27 +112,6 @@ DEFAULT_AI_FILTER_PROMPT = """\
 
 DEFAULT_APPLY_MAIL_SUBJECT = "{Отклик|Резюме} на вакансию %(vacancy_name)s"
 DEFAULT_APPLY_MAIL_BODY = "{Здравствуйте|Добрый день}, {прошу рассмотреть|пожалуйста рассмотрите} мое резюме %(resume_url)s на вакансию %(vacancy_name)s."
-
-# Переменные, доступные в шаблонах. Нужны для проверки шаблонов до рассылки
-BASE_PLACEHOLDERS = (
-    "first_name",
-    "last_name",
-    "email",
-    "phone",
-    "resume_hash",
-    "resume_title",
-    "resume_url",
-    "vacancy_name",
-    "vacancy_url",
-    "employer_name",
-)
-AI_FILTER_PLACEHOLDERS = BASE_PLACEHOLDERS + (
-    "resume_skills",
-    "resume_about",
-    "resume_experience",
-    "vacancy_description",
-    "vacancy_key_skills",
-)
 
 
 class Namespace(BaseNamespace):
@@ -390,8 +373,6 @@ class Operation(BaseOperation):
             help="Поля поиска (name, company_name и т.п.)",
         )
 
-    cover_letter: str = "{Здравствуйте|Добрый день}, меня зовут %(first_name)s. {Прошу|Предлагаю} рассмотреть {мою кандидатуру|мое резюме «%(resume_title)s»} на вакансию «%(vacancy_name)s». С уважением, %(first_name)s."
-
     @property
     def api_client(self):
         return self.tool.api_client
@@ -404,7 +385,7 @@ class Operation(BaseOperation):
         self.tool = tool
         config = tool.config
         self.cover_letter = args.cover_letter or config.get(
-            "cover_letter", self.cover_letter
+            "cover_letter", DEFAULT_COVER_LETTER
         )
         for name in SEARCH_PARAM_NAMES:
             setattr(self, name, getattr(args, name))
@@ -442,7 +423,7 @@ class Operation(BaseOperation):
 
         self.cover_letter_ai = self.vacancy_filter_ai = None
         if args.use_ai:
-            c = tool.get_openai_config("openai.cover_letter")
+            c = tool.get_openai_args("openai.cover_letter")
             c.setdefault("system_prompt", DEFAULT_COVER_LETTER_SYSTEM_PROMPT)
             c.setdefault("temperature", 0.8)
             if args.cover_letter_system_prompt:
@@ -450,7 +431,7 @@ class Operation(BaseOperation):
             self.cover_letter_ai = tool.get_ai_client(**c)
 
             if self.ai_filter:
-                c = tool.get_openai_config("openai.vacancy_filter")
+                c = tool.get_openai_args("openai.vacancy_filter")
                 c.setdefault("system_propmt", DEFAULT_AI_FILTER_PROMPT)
                 if args.ai_filter_system_prompt:
                     c["system_propmpt"] = args.cover_letter_system_prompt
@@ -463,76 +444,7 @@ class Operation(BaseOperation):
             tool.config.get("apply_mail_body") or DEFAULT_APPLY_MAIL_BODY
         )
 
-        # Ошибки в шаблонах должны вскрыться до начала рассылки
-        self._validate_templates()
-
         self._apply_vacancies()
-
-    def _render_template(
-        self,
-        template: str,
-        placeholders: dict[str, str],
-        name: str,
-        *,
-        randomize: bool = False,
-        unescape: bool = False,
-    ) -> str:
-        """Рендерит шаблон. Любая ошибка в нем прекращает операцию."""
-        try:
-            if randomize:
-                template = rand_text(template)
-            if unescape:
-                template = unescape_string(template)
-            return render_template(template, placeholders, name)
-        except Exception as ex:
-            raise OperationError(f"Ошибка в шаблоне {name}: {ex}") from ex
-
-    def _render_cover_letter(self, placeholders: dict[str, str]) -> str:
-        return self._render_template(
-            self.cover_letter,
-            placeholders,
-            "сопроводительного письма",
-            randomize=True,
-        )
-
-    def _render_mail(self, placeholders: dict[str, str]) -> tuple[str, str]:
-        subject = self._render_template(
-            self.apply_mail_subject,
-            placeholders,
-            "apply_mail_subject",
-            randomize=True,
-        )
-        body = self._render_template(
-            self.apply_mail_body,
-            placeholders,
-            "apply_mail_body",
-            randomize=True,
-            unescape=True,
-        )
-        return subject, body
-
-    def _validate_templates(self) -> None:
-        """Пробный рендер всех используемых шаблонов до начала рассылки."""
-        base = dict.fromkeys(BASE_PLACEHOLDERS, "")
-
-        if self.cover_letter_ai:
-            self._render_template(
-                self.cover_letter_prompt,
-                base,
-                "промпта сопроводительного письма",
-            )
-        else:
-            self._render_cover_letter(base)
-
-        if self.ai_filter:
-            self._render_template(
-                self.ai_filter_prompt,
-                dict.fromkeys(AI_FILTER_PLACEHOLDERS, ""),
-                "промпта AI-фильтра",
-            )
-
-        if self.send_email:
-            self._render_mail(base)
 
     def _get_resume_info(self, resume_id: str | None) -> dict[str, str]:
         """Данные резюме для подстановки в шаблон промпта AI-фильтра."""
@@ -598,7 +510,7 @@ class Operation(BaseOperation):
             if s.get("name")
         )
 
-        prompt = self._render_template(
+        prompt = render_template(
             self.ai_filter_prompt,
             {
                 **placeholders,
@@ -877,7 +789,7 @@ class Operation(BaseOperation):
 
                 if self.force_letter or vacancy.get("response_letter_required"):
                     if self.cover_letter_ai:
-                        prompt = self._render_template(
+                        prompt = render_template(
                             self.cover_letter_prompt,
                             message_placeholders,
                             "промпта сопроводительного письма",
@@ -885,7 +797,11 @@ class Operation(BaseOperation):
                         logger.debug("prompt: %s", prompt)
                         letter = self.cover_letter_ai.complete(prompt)
                     else:
-                        letter = self._render_cover_letter(message_placeholders)
+                        letter = render_template(
+                            rand_text(self.cover_letter),
+                            message_placeholders,
+                            "сопроводительного письма",
+                        )
 
                     logger.debug(letter)
 
@@ -981,9 +897,15 @@ class Operation(BaseOperation):
                             if isinstance(mail_to, list)
                             else mail_to
                         )
-                        # Ошибка в шаблонах письма обрывает рассылку
-                        mail_subject, mail_body = self._render_mail(
-                            message_placeholders
+                        mail_subject = render_template(
+                            rand_text(self.apply_mail_subject),
+                            message_placeholders,
+                            "apply_mail_subject",
+                        )
+                        mail_body = render_template(
+                            rand_text(self.apply_mail_body),
+                            message_placeholders,
+                            "apply_mail_body",
                         )
                         try:
                             self._send_email(mail_to, mail_subject, mail_body)

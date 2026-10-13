@@ -46,6 +46,7 @@ def list2str(items: list[Any] | None) -> str:
     return ",".join(f"{v}" for v in items) if items else ""
 
 
+# Не нужна
 def unescape_string(text: str) -> str:
     if not text:
         return ""

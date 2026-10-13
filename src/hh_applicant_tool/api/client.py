@@ -21,11 +21,12 @@ from .user_agent import generate_android_useragent
 
 __all__ = ("ApiClient", "OAuthClient")
 
-HH_API_URL = "https://api.hh.ru/"
+HH_API_URL = "https://api.hh.ru"
 HH_OAUTH_URL = "https://hh.ru/oauth/"
 DEFAULT_DELAY = 0.345
 DEFAULT_CAPTCHA_COOLDOWN = 3.0
 MAX_RETRIES = 3
+MAX_CAPTCHA_RETRIES = 5
 
 AllowedMethods = Literal[
     "GET",
@@ -49,21 +50,16 @@ class BaseClient:
     base_url: str
     _: dataclasses.KW_ONLY
     delay: float | None = None
-    captcha_handler: Callable[[str], bool] | None = None
-    captcha_cooldown: float | None = None
     max_retries: int | None = None
     session: requests.Session | None = None
     user_agent: str | None = None
 
     _previous_request_time: float = field(default=0.0, init=False)
-    _lock: Lock = field(default_factory=Lock, init=False)
-    _captcha_lock: Lock = field(default_factory=Lock, init=False)
+    _lock: Lock = field(
+        default_factory=Lock, init=False, compare=False, repr=False
+    )
 
     def __post_init__(self) -> None:
-        assert self.base_url.endswith("/"), "base_url must ends with /"
-        self.captcha_cooldown = (
-            self.captcha_cooldown or DEFAULT_CAPTCHA_COOLDOWN
-        )
         self.delay = self.delay or DEFAULT_DELAY
         self.max_retries = self.max_retries or MAX_RETRIES
         self.user_agent = self.user_agent or generate_android_useragent()
@@ -169,7 +165,6 @@ class BaseClient:
                         f"({response.status_code})"
                     ) from ex
 
-            # CaptchaRequired и прочие ошибки пробрасываются наверх
             errors.ApiError.raise_for_status(response, rv)
             return rv
 
@@ -259,6 +254,22 @@ class ApiClient(BaseClient):
     client_id: str | None = None
     client_secret: str | None = None
     base_url: str = HH_API_URL
+    captcha_handler: Callable[[str], bool] | None = None
+    captcha_cooldown: float | None = None
+    max_captcha_attempts: int | None = None
+
+    _captcha_lock: Lock = field(
+        default_factory=Lock, init=False, compare=False, repr=False
+    )
+
+    def __post_init__(self) -> None:
+        self.captcha_cooldown = (
+            self.captcha_cooldown or DEFAULT_CAPTCHA_COOLDOWN
+        )
+        self.max_captcha_attempts = (
+            self.max_captcha_attempts or MAX_CAPTCHA_RETRIES
+        )
+        return super().__post_init__()
 
     @property
     def is_access_expired(self) -> bool:
@@ -271,8 +282,6 @@ class ApiClient(BaseClient):
             client_secret=self.client_secret,
             user_agent=self.user_agent,
             session=self.session,
-            captcha_handler=self.captcha_handler,
-            captcha_cooldown=self.captcha_cooldown,
         )
 
     def _default_headers(
@@ -285,39 +294,57 @@ class ApiClient(BaseClient):
         assert self.access_token.startswith("USER")
         return headers | {"Authorization": f"Bearer {self.access_token}"}
 
-    # Реализовано автоматическое обновление токена
     def request(
         self,
-        method: str,
-        endpoint: str,
-        params: dict[str, Any] | None = None,
-        delay: float | None = None,
-        as_json: bool = False,
-        **kwargs: Any,
-    ) -> T:
-        def send_request():
-            return super(ApiClient, self).request(
-                method,
-                endpoint,
-                params,
-                delay=delay,
-                as_json=as_json,
-                **kwargs,
-            )
-
-        try:
-            return send_request()
-        # TODO: добавить класс для ошибок типа AccessTokenExpired
-        except errors.Forbidden as ex:
-            # тут при получении 403 происходит обновление access token, если
-            # задан и не протух refresh
-            if not self.is_access_expired or not self.refresh_token:
-                raise ex
-            logger.info("try to refresh access_token")
-            # Пробуем обновить токен
-            self.refresh_access_token()
-            # И повторно отправляем запрос
-            return send_request()
+        method,
+        endpoint,
+        params=None,
+        delay=None,
+        as_json=False,
+        max_captcha_attempts=None,
+        **kwargs,
+    ):
+        max_captcha_attempts = max_captcha_attempts or self.max_captcha_attempts
+        refreshed = False
+        while True:
+            try:
+                return super().request(
+                    method,
+                    endpoint,
+                    params,
+                    delay=delay,
+                    as_json=as_json,
+                    **kwargs,
+                )
+            except errors.CaptchaRequired as ex:
+                if not self.captcha_handler:
+                    raise
+                # Только один поток должен обрабатывать капчу одновременно
+                with self._captcha_lock:
+                    for attempt in range(1, max_captcha_attempts + 1):
+                        logger.debug(
+                            f"({attempt}/{max_captcha_attempts}) handle captcha: {ex.captcha_url}"
+                        )
+                        accepted = self.captcha_handler(ex.captcha_url)
+                        if accepted:
+                            logger.info("captcha accepted!")
+                            break
+                    if accepted:
+                        logger.debug(
+                            f"captcha cooldown: {self.captcha_cooldown}"
+                        )
+                        time.sleep(self.captcha_cooldown)
+                        continue
+                raise
+            except errors.Forbidden:
+                if (
+                    refreshed
+                    or not self.refresh_token
+                    or not self.is_access_expired
+                ):
+                    raise
+                refreshed = True
+                self.refresh_access_token()
 
     def handle_access_token(self, token: AccessToken) -> None:
         for name in ("access_token", "refresh_token", "access_expires_at"):

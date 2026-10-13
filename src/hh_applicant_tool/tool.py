@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import html
 import json
 import logging
+import re
 import smtplib
 import sqlite3
 import sys
 from collections.abc import Sequence
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
 from http.cookiejar import MozillaCookieJar
@@ -26,7 +28,9 @@ import requests
 from . import ai, api, utils
 from .constants import (
     ACCEPT_LANGUAGE,
+    ANDROID_WEBVIEW_USERAGENT,
     AUTH_CONFIG_FILENAME,
+    CAPTCHA_SUCCESS_BACKURL,
     CONFIG_DIR,
     CONFIG_FILENAME,
     COOKIES_FILENAME,
@@ -41,7 +45,6 @@ from .errors import Error, OperationCanceled, OperationError
 from .storage import StorageFacade
 from .utils.argparse import ArgumentFormatter
 from .utils.config import ConfigJSON, ConfigTOML
-from .utils.cookiejar import HHOnlyCookieJar
 from .utils.log import setup_logger
 from .utils.package import PACKAGE_NAME, get_package_version, parse_version
 from .utils.system import is_docker
@@ -79,40 +82,51 @@ class BaseOperation:
         raise NotImplementedError()
 
 
-class HHSession(requests.Session):
-    cookies: HHOnlyCookieJar
-
-
-@dataclass
-class BaseAttrs:
-    profile_id: str | None = None
-    config_dir: Path | None = None
-    verbosity: int = 0
-    api_delay: float | None = None
-    user_agent: str | None = DEFAULT_DESKTOP_USERAGENT
-    proxy_url: str | None = None
-    use_sixel: bool = False
-    use_kitty: bool = False
-    use_ai: bool = False
-    captcha_lang: str = DEFAULT_CAPTCHA_LANGUAGE
-    openai_proxy_url: str | None = None
-    openai_delay: float | None = None
-    openai_timeout: float | None = None
-    openai_connect_timeout: float | None = None
-
-
-class BaseNamespace(argparse.Namespace, BaseAttrs):
+class BaseNamespace(argparse.Namespace):
+    verbosity: int
+    use_ai: bool
     operation_run: Callable[[HHApplicantTool, BaseNamespace], None | int] | None
+    # argument_default=SUPPRESS: поля нет, пока флаг не передан
+    config_dir: Path
+    profile_id: str
+    api_delay: float
+    base_url: str
+    user_agent: str
+    proxy_url: str
+    openai_proxy_url: str
+    openai_delay: str
+    openai_timeout: float
+    openai_connect_timeout: float
+    use_kitty: bool
+    use_sixel: bool
+    captcha_lang: Literal["RU", "EN"]
 
 
 @dataclass
-class HHApplicantTool(BaseAttrs):
+class HHApplicantTool:
     """Утилита для автоматизации действий соискателя на сайте hh.ru.
 
     Исходники и предложения: <https://github.com/s3rgeym/hh-applicant-tool>
 
     Группа поддержки: <https://t.me/s3rgeym_chat>
     """
+
+    _: KW_ONLY
+    api_delay: float | None = None
+    base_url: str | None = None
+    captcha_lang: str | None = None
+    config_dir: Path | None = None
+    openai_connect_timeout: float | None = None
+    openai_delay: float | None = None
+    openai_proxy_url: str | None = None
+    openai_timeout: float | None = None
+    profile_id: str | None = None
+    proxy_url: str | None = None
+    use_ai: bool = False
+    use_kitty: bool = False
+    use_sixel: bool = False
+    user_agent: str | None = None
+    verbosity: int = 0
 
     @classmethod
     def _create_parser(cls) -> argparse.ArgumentParser:
@@ -135,7 +149,6 @@ class HHApplicantTool(BaseAttrs):
             "--config",
             help="Путь до директории с конфигом",
             type=Path,
-            default=None,
         )
         parser.add_argument(
             "--profile-id",
@@ -150,9 +163,12 @@ class HHApplicantTool(BaseAttrs):
             help="Задержка между запросами к API HH по умолчанию",
         )
         parser.add_argument(
+            "--base-url",
+            help="Базовый URL сайта чтобы избежать лишних редиректов.",
+        )
+        parser.add_argument(
             "--user-agent",
             help="User-Agent для запросов к HH. Нужно притворяться каким-нибудь популярным браузером, иначе будет показывать 403 или 404 ошибку на каждый запрос",
-            default=DEFAULT_DESKTOP_USERAGENT,
         )
         parser.add_argument(
             "--proxy-url",
@@ -206,7 +222,6 @@ class HHApplicantTool(BaseAttrs):
         )
         parser.add_argument(
             "--captcha-lang",
-            default=DEFAULT_CAPTCHA_LANGUAGE,
             choices=["RU", "EN"],
             help="Язык капчи. Некоторые модели распознают лучше текст на английском",
         )
@@ -231,6 +246,18 @@ class HHApplicantTool(BaseAttrs):
 
     def __post_init__(self) -> None:
         self._parser = self._create_parser()
+
+        # Эти значения, если они не установлены, берутся из конфига и могут быть
+        # изменены флагами
+        self.user_agent = self.user_agent or self.config.get(
+            "user_agent", DEFAULT_DESKTOP_USERAGENT
+        )
+        self.base_url = self.base_url or self.config.get(
+            "base_url", HH_BASE_URL
+        )
+        self.captcha_lang = self.captcha_lang or self.config.get(
+            "captcha_lang", DEFAULT_CAPTCHA_LANGUAGE
+        )
 
     @staticmethod
     def _proxy_url_to_dict(proxy_url: str | None) -> dict[str, str]:
@@ -259,16 +286,17 @@ class HHApplicantTool(BaseAttrs):
 
         return proxies
 
-    def _get_openai_proxies(self) -> dict[str, str]:
-        openai_config = self.config.get("openai", {})
+    def _get_openai_proxies(self, section: str = None) -> dict[str, str]:
+        openai_config = self.get_openai_config(section=section)
         proxy_url = self.openai_proxy_url or openai_config.get("proxy_url")
         if proxy_url:
             return self._proxy_url_to_dict(proxy_url)
         # Из какого-нибудь казахстана одинаково hh и ChatGPT работают
         return self._get_proxies()
 
-    def _create_desktop_session(
+    def _create_session(
         self,
+        user_agent: str | None = None,
         proxies: dict[str, str] | None = None,
     ) -> requests.Session:
         session = requests.Session()
@@ -280,7 +308,7 @@ class HHApplicantTool(BaseAttrs):
         # В заголовки не лезь, если не понимаешь зачем они
         session.headers.update(
             {
-                "User-Agent": self.user_agent,
+                "User-Agent": user_agent or self.user_agent,
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": ACCEPT_LANGUAGE,
             }
@@ -291,14 +319,15 @@ class HHApplicantTool(BaseAttrs):
         return session
 
     @cached_property
-    def session(self) -> HHSession:
-        session = self._create_desktop_session(
-            self._get_proxies(),
+    def session(self) -> requests.Session:
+        session = self._create_session(
+            proxies=self._get_proxies(),
         )
 
-        session.cookies = HHOnlyCookieJar(str(self.cookies_file))
         if self.cookies_file.exists():
-            session.cookies.load(ignore_discard=True, ignore_expires=True)
+            jar = MozillaCookieJar(str(self.cookies_file))
+            jar.load(ignore_discard=True, ignore_expires=True)
+            session.cookies.update(jar)
 
         return session
 
@@ -392,6 +421,7 @@ class HHApplicantTool(BaseAttrs):
             access_token=token.get("access_token"),
             refresh_token=token.get("refresh_token"),
             access_expires_at=token.get("access_expires_at"),
+            captcha_handler=self.handle_captcha,
             **client_config,
         )
 
@@ -402,10 +432,13 @@ class HHApplicantTool(BaseAttrs):
     ) -> ai.ChatOpenAI:
         return ai.ChatOpenAI(system_prompt=system_prompt, **kwargs)
 
-    def get_openai_config(self, section: str = "main") -> dict:
+    def get_openai_config(self, section: str | None = None) -> dict:
         """Возвращает копию конфига openai с учетом наследования от главной"""
         base_section = "openai"
-        if "." in section:
+        default_section = "default"
+        if section is None:
+            section = default_section
+        elif "." in section:
             base, section = section.split(".")
             if base != base_section:
                 raise ValueError(
@@ -418,13 +451,18 @@ class HHApplicantTool(BaseAttrs):
         def required(name: str) -> None:
             if name not in c:
                 raise ValueError(
-                    f"Значение {name!r} не задано в секции {base_section + '.' + section!r} либо '{base_section}.main' или '{base_section}.default'"
+                    f"Значение {name!r} не задано в [{base_section}.{section}]"
+                    + (
+                        f" или [{base_section}.{default_section}]"
+                        if section != default_section
+                        else ""
+                    )
                 )
 
         c = self.config.get(base_section) or {}
         c = deepcopy(
             {
-                **(c.get("main") or c.get("default") or {}),
+                **(c.get("default") or {}),
                 **(c.get(section) or {}),
             }
         )
@@ -442,8 +480,28 @@ class HHApplicantTool(BaseAttrs):
 
         return c
 
+    def get_openai_args(self, config_section: str = None) -> dict:
+        c = self.get_openai_config(section=config_section)
+        return {
+            k: v
+            for k, v in c.items()
+            if k
+            in [
+                "base_url",
+                "connect_timeout",
+                "delay",
+                "history",
+                "max_completion_tokens",
+                "max_retries",
+                "model",
+                "system_prompt",
+                "temperature",
+                "timeout",
+            ]
+        }
+
     def _get_captcha_ai(self) -> ai.ChatOpenAI:
-        c = self.get_openai_config("openai.captcha")
+        c = self.get_openai_args("openai.captcha")
         c.setdefault(
             "system_prompt",
             (
@@ -495,13 +553,6 @@ class HHApplicantTool(BaseAttrs):
             if page + 1 >= r.get("pages", 0):
                 break
 
-    def _is_authenticated(self, config: dict[str, Any]) -> bool:
-        account = config.get("account") or {}
-        if not account:
-            return False
-        # Если пользователь неавторизован содержит поля типа firstName, lastName и тд со значением None (все поля)
-        return any(v is not None for v in account.values())
-
     def parse_initial_state(
         self,
         response: requests.Response,
@@ -547,8 +598,6 @@ class HHApplicantTool(BaseAttrs):
         logger.debug("check initial state: %s %d", r.url, r.status_code)
         return self.parse_initial_state(r)
 
-    # TODO: добавить еще методов или те удалить?
-
     def save_token(self) -> bool:
         if self.api_client.access_token != self.auth_config.get(
             "token", {}
@@ -558,40 +607,28 @@ class HHApplicantTool(BaseAttrs):
         return False
 
     def save_cookies(self) -> None:
-        """Сохраняет текущие куки сессии в файл."""
-        if isinstance(self.session.cookies, MozillaCookieJar):
-            self.session.cookies.save(ignore_discard=True, ignore_expires=True)
-            logger.debug("Cookies saved to %s", self.cookies_file)
-        else:
-            logger.warning(
-                f"Сессионные куки имеют неправильный тип: {type(self.session.cookies)}"
-            )
+        """Сохраняет cookies сессии hh в файл."""
+        jar = MozillaCookieJar(str(self.cookies_file))
 
-    # TODO: вынести в миксин какой
-    def get_cookie(self, name: str, default: Any = None) -> Any:
-        """Значение cookie по имени из jar на базе {CookieJar} (нет get_dict)."""
-        return next(
-            (c.value for c in self.session.cookies if c.name == name),
-            default,
-        )
-
-    @property
-    def xsrf_token(self) -> str | None:
-        return self.get_cookie("_xsrf")
-
-    @property
-    def base_url(self) -> str:
-        return (
-            "https://"
-            + self.get_cookie("redirect_host", HH_BASE_URL)
-            .split("://", 1)[-1]
-            .split("/")[0]
-        )
+        for c in self.session.cookies:
+            if c.domain and not re.search(
+                r"^(?!israel\.)(?:.*?\.)?hh\.(ru|kz|uz|by|net|com)\.?$",
+                c.domain,
+            ):
+                continue
+            cc = copy.copy(c)
+            jar.set_cookie(cc)
+        jar.save(ignore_discard=True, ignore_expires=True)
+        logger.debug("Cookies saved to %s", self.cookies_file)
 
     @property
     def is_logged_in(self) -> bool:
         """Проверяет авторизован ли пользователь через сайт."""
         return self.session.get(f"{self.base_url}/settings").status_code == 200
+
+    @property
+    def xsrf_token(self) -> str | None:
+        return self._get_xsrf()
 
     @cached_property
     def smtp(self) -> smtplib.SMTP | smtplib.SMTP_SSL:
@@ -616,6 +653,12 @@ class HHApplicantTool(BaseAttrs):
 
         return server
 
+    def _get_xsrf(
+        self,
+        session: requests.Session | None = None,
+    ) -> str | None:
+        return (session or self.session).cookies.get("_xsrf")
+
     def _solve_captcha(self, image_data: bytes) -> str:
         if self.use_ai:
             return self.captcha_ai.recognize_text(image_data)
@@ -636,6 +679,7 @@ class HHApplicantTool(BaseAttrs):
         lang: str | None = None,
         referer_url: str | None = None,
         xsrf_token: str | None = None,
+        session: requests.Session | None = None,
     ) -> CaptchaSolution:
         """Если API сайта возвращает ответ с hhcaptcha.captchaState, то
         появляется всплывающее окно для ввода капчи"""
@@ -643,6 +687,7 @@ class HHApplicantTool(BaseAttrs):
             lang=lang,
             referer_url=referer_url,
             xsrf_token=xsrf_token,
+            session=session,
         )
         text = self._solve_captcha(image_data=captcha_img.data)
 
@@ -652,35 +697,76 @@ class HHApplicantTool(BaseAttrs):
             key=captcha_img.key,
         )
 
-    def solve_captcha_url(
+    def handle_captcha(
         self,
         captcha_url: str,
         *,
         lang: str | None = None,
         referer_url: str | None = None,
-        xsrf_token: str | None = None,
-    ) -> CaptchaSolution:
-        """Отдельная страница с капчей"""
+    ) -> bool:
+        """Проходит отдельную страницу с капчей (замена solve_captcha_url).
+
+        Страница капчи обычно открывается в webview, где своя сессия, а
+        не self.session. Поэтому без параметра session создаётся чистая
+        сессия, и все запросы идут через неё. Чтобы потом забрать её куки,
+        создайте сессию снаружи и передайте сюда.
+
+        1. К ссылке добавляется backurl, страница открывается. Сайт может
+           перекинуть на другой поддомен, итоговый URL страницы идёт в
+           Referer всех следующих запросов.
+        2. Получаем captcha key и картинку, решаем (solve_captcha).
+        3. Отправляем text, key, state, backurl, failurl.
+           302 - успех, 403 и всё остальное - ошибка.
+
+        Возвращает True, если капча принята. Одна попытка; повтор при
+        неверном вводе - на стороне вызывающего.
+        """
         logger.debug("captcha url: %s", captcha_url)
 
-        # Посещаем страницу с капчей
-        r = self.session.get(
+        # Создадим новую пустую сессию для прохождения капчи
+        session = self._create_session(user_agent=ANDROID_WEBVIEW_USERAGENT)
+
+        r = session.get(
             captcha_url,
+            {"backurl": CAPTCHA_SUCCESS_BACKURL},
             headers={"Referer": referer_url} if referer_url else {},
         )
         r.raise_for_status()
 
-        data = self.parse_initial_state(r)
-        xsrf_token = xsrf_token or self.xsrf_token
-        assert data["xsrfToken"] == xsrf_token, "xsrf токены не совпадают!"
-        captcha_state = parse_qs(urlsplit(r.url).query)["state"][0]
+        redirect_url = r.url
+        logger.debug("Страница капчи, пойдёт в referer: %s", redirect_url)
 
-        logger.debug("Передаем в качестве referer: %s", r.url)
-        return self.solve_captcha(
-            captcha_state=captcha_state,
+        query = parse_qs(urlsplit(redirect_url).query)
+
+        if "state" not in query:
+            raise ValueError(f"В ссылке на капчу нет state: {redirect_url}")
+        state = query["state"][0]
+
+        assert CAPTCHA_SUCCESS_BACKURL in query.get("backurl", [])
+
+        # Страница выставила куки в чистую сессию, токен берём из них,
+        # а если куки нет - из initial state страницы
+        xsrf_token = self._get_xsrf(session)
+
+        if not xsrf_token:
+            raise ValueError("xsrf token отсутствует в Cookies!")
+
+        solution = self.solve_captcha(
+            captcha_state=state,
             lang=lang,
+            referer_url=redirect_url,
             xsrf_token=xsrf_token,
-            referer_url=r.url,
+            session=session,
+        )
+
+        return self._send_captcha(
+            text=solution.text,
+            key=solution.key,
+            state=solution.state,
+            referer_url=redirect_url,
+            xsrf_token=xsrf_token,
+            backurl=CAPTCHA_SUCCESS_BACKURL,
+            session=session,
         )
 
     def get_captcha_image(
@@ -689,7 +775,12 @@ class HHApplicantTool(BaseAttrs):
         lang: str | None = None,
         xsrf_token: str | None = None,
         referer_url: str | None = None,
+        session: requests.Session | None = None,
     ) -> CaptchaImage:
+        if session is None:
+            session = self.session
+        xsrf_token = xsrf_token or self._get_xsrf(session)
+
         lang = lang or self.captcha_lang
         target_url = urljoin(
             referer_url or HH_BASE_URL, "/captcha?lang=" + quote(lang)
@@ -698,14 +789,14 @@ class HHApplicantTool(BaseAttrs):
             "Отправляем POST-запрос на %s для получения captcha key",
             target_url,
         )
-        res = self.session.post(
+        res = session.post(
             target_url,
             headers={
                 k: v
                 for k, v in {
                     "Accept": "application/json",
                     "Referer": referer_url,
-                    "X-Xsrftoken": xsrf_token or self.xsrf_token,
+                    "X-Xsrftoken": xsrf_token,
                     "X-Hhtmfrom": "",
                     "X-Hhtmsource": "account_captcha",
                     # Я тут опустил кучу заголовков, так как их значения есть в
@@ -731,7 +822,7 @@ class HHApplicantTool(BaseAttrs):
         if referer_url:
             headers |= {"Referer": referer_url}
 
-        image_data = self.session.get(
+        image_data = session.get(
             image_url,
             headers=headers,
         ).content
@@ -750,23 +841,33 @@ class HHApplicantTool(BaseAttrs):
         state: str,
         referer_url: str | None = None,
         xsrf_token: str | None = None,
+        backurl: str | None = None,
+        session: requests.Session | None = None,
     ) -> bool:
+        """Отправляет введенную капчу."""
+
         captcha_endpoint = "/account/captcha"
-        target_url: str = urljoin(referer_url or HH_BASE_URL, captcha_endpoint)
+        target_url: str = urljoin(
+            referer_url or self.base_url, captcha_endpoint
+        )
+
+        failurl = captcha_endpoint + "?state=" + quote(state)
+
+        if backurl:
+            failurl += "&backurl=" + quote(backurl)
 
         payload = {
             "captchaText": text,
             "captchaKey": key,
             "captchaState": state,
-            # Я не уверен, что эти параметры обзяательные
-            "backurl": "/",
-            "failurl": captcha_endpoint + "?state=" + quote(state),
+            "backurl": backurl or "/",
+            "failurl": failurl,
         }
 
         headers = {
             "Accept": "application/json",
             "X-Requested-With": "XMLHttpRequest",
-            "X-Xsrftoken": xsrf_token or self.xsrf_token,
+            "X-Xsrftoken": xsrf_token,
             "x-hhtmfrom": "",
             "x-hhtmsource": "account_captcha",
         }
@@ -776,31 +877,30 @@ class HHApplicantTool(BaseAttrs):
 
         logger.debug(f"POST {target_url}: {payload=}, {headers=}")
 
-        # Там зачем-то payload передается и в теле запроса и в query string
-        # Скорее всего его можно передать только в теле
-        r = self.session.post(
+        # payload уходит в query string, тело пустое (так делает браузер).
+        # allow_redirects=False: при успехе 302 ведёт на hh://..., такую
+        # схему requests не умеет, а нам сам редирект не нужен.
+        r = session.post(
             target_url,
             params=payload,
             headers=headers,
+            allow_redirects=False,
         )
 
-        logger.debug(
-            "Код ответа сервера на отправку текста капчи: %d", r.status_code
-        )
+        logger.debug(f"{r.request.method} {r.request.url} {r.status_code}")
 
-        if r.status_code in (200, 302):
-            logger.debug(r.text[:255])
+        if r.status_code == 302:
             return True
 
-        assert r.status_code == 403
-
-        try:
-            res = r.json()
-            logger.debug(res)
-            return not res["hhcaptcha"]["captchaError"]
-        except json.JSONDecodeError:
-            logger.debug(r.text[:255])
+        if r.status_code == 403:
             return False
+
+        # Произошло что-то странное
+        logger.warning(
+            "Неожиданный код ответа на отправку капчи: %d", r.status_code
+        )
+        logger.debug(r.text[:255])
+        return False
 
     def prompt_captcha_tk(self, image_data: bytes) -> str:
         """Показывает капчу в окне Tk и возвращает введённый текст.
@@ -873,6 +973,20 @@ class HHApplicantTool(BaseAttrs):
 
         return result[0].strip()
 
+    def logout(self) -> None:
+        if self.xsrf_token:
+            r = self.session.post(
+                f"{self.base_url}/logout", {"_xsrf": self.xsrf_token}
+            )
+            logger.debug("/logout: %d", r.status_code)
+            if r.status_code == 302:
+                logger.info("session revoked")
+        try:
+            self.api_client.delete("/oauth/token")
+            logger.info("token revoked")
+        except api.errors.Forbidden:
+            pass
+
     @cached_property
     def captcha_ai(self) -> ai.ChatOpenAI:
         return self._get_captcha_ai()
@@ -936,7 +1050,6 @@ class HHApplicantTool(BaseAttrs):
         if not self.storage.settings.get_value("disable_version_check", False):
             self._check_version()
 
-    # Этот костыль используется в ui. Ему здесь не место
     def _assign_args(self, args: BaseNamespace) -> None:
         for k, v in vars(args).items():
             setattr(self, k, v)
