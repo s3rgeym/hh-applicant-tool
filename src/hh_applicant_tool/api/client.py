@@ -261,6 +261,9 @@ class ApiClient(BaseClient):
     _captcha_lock: Lock = field(
         default_factory=Lock, init=False, compare=False, repr=False
     )
+    _refresh_lock: Lock = field(
+        default_factory=Lock, init=False, compare=False, repr=False
+    )
 
     def __post_init__(self) -> None:
         self.captcha_cooldown = (
@@ -338,13 +341,21 @@ class ApiClient(BaseClient):
                 raise
             except errors.Forbidden:
                 if (
-                    refreshed
-                    or not self.refresh_token
+                    refreshed 
+                    or not self.refresh_token 
                     or not self.is_access_expired
                 ):
                     raise
-                refreshed = True
-                self.refresh_access_token()
+                with self._refresh_lock:
+                    # try:
+                    self.refresh_access_token()
+                    refreshed = True
+                    # except errors.Forbidden:
+                    #     # Refresh токен недействителен
+                    #     self.access_token = None
+                    #     self.refresh_token = None
+                    #     self.access_expires_at = 0
+                    #     raise
 
     def handle_access_token(self, token: AccessToken) -> None:
         for name in ("access_token", "refresh_token", "access_expires_at"):
