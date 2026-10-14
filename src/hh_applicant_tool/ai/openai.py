@@ -15,8 +15,10 @@ from ..utils.common import get_proxies_dict
 from .base import AIError
 
 DEFAULT_DELAY = 0.5
-DEFAULT_TIMEOUT = 60.0
-DEFAULT_CONNECT_TIMEOUT = 10.0
+DEFAULT_TIMEOUT = 90.0
+DEFAULT_CONNECT_TIMEOUT = 15.0
+
+CHAT_COMPLETIONS_ENDPOINT = "chat/completions"
 
 
 logger = logging.getLogger("hh-applicant-tool")
@@ -28,9 +30,10 @@ class OpenAIError(AIError):
 
 @dataclass
 class ChatOpenAI:
-    api_key: str
-    _: KW_ONLY
     base_url: str
+    model: str
+    _: KW_ONLY
+    api_key: str | None = None
     system_prompt: str | None = None
     # Базовая история диалога, которая подставляется в каждый запрос
     # перед history из вызова complete()/recognize_text()
@@ -45,7 +48,6 @@ class ChatOpenAI:
 
     temperature: float = 0.0
     max_completion_tokens: int = 1000
-    model: str | None = None
 
     # Минимальный интервал между запросами (сек). Если с прошлого запроса
     # прошло больше — не ждём.
@@ -66,9 +68,13 @@ class ChatOpenAI:
         self.connect_timeout = self.connect_timeout or DEFAULT_CONNECT_TIMEOUT
 
     def _default_headers(self) -> dict[str, str]:
-        return {
-            "Authorization": f"Bearer {self.api_key}",
-        }
+        return (
+            {
+                "Authorization": f"Bearer {self.api_key}",
+            }
+            if self.api_key
+            else {}
+        )
 
     def _request(self, payload: dict) -> requests.Response:
         """Выполнение запроса с минимальным интервалом между запросами.
@@ -91,7 +97,7 @@ class ChatOpenAI:
 
             try:
                 return self.session.post(
-                    self.base_url,
+                    f"{self.base_url.lstrip('/')}/{CHAT_COMPLETIONS_ENDPOINT}",
                     json=payload,
                     headers=headers,
                     timeout=timeout,
@@ -182,6 +188,13 @@ class ChatOpenAI:
         for attempt in range(self.max_retries + 1):
             try:
                 response = self._request(payload)
+                logger.debug(
+                    "OpenAI %s %s -> %d (%.2fs)",
+                    response.request.method,
+                    response.url,
+                    response.status_code,
+                    response.elapsed.total_seconds(),
+                )
             except requests.exceptions.RequestException as ex:
                 # Таймаут локальной модели и оборванное соединение
                 # повторяем, а не роняем отклик на первой вакансии

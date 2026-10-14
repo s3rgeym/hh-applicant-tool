@@ -426,7 +426,7 @@ class HHApplicantTool:
         )
 
         required("base_url")
-        required("api_key")
+        # required("api_key")
         required("model")
 
         if self.openai_delay:

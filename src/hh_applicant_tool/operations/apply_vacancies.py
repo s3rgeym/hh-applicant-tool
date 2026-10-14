@@ -421,11 +421,7 @@ class Operation(BaseOperation):
         if not resume_id:
             return info
 
-        try:
-            full_resume = self.api_client.get(f"/resumes/{resume_id}")
-        except Exception as e:
-            logger.warning(f"Не удалось получить полное резюме: {e}")
-            return info
+        full_resume = self.api_client.get(f"/resumes/{resume_id}")
 
         # hh.ru отдаёт skills как null, когда поле не заполнено,
         # и .get(..., "") тут не спасает: null уже есть в ответе
@@ -451,12 +447,10 @@ class Operation(BaseOperation):
     def _parse_is_suitable_response(response: str) -> bool | None:
         answer = response.strip().lower().strip(" .!\"'«»")
 
-        if re.match(r"(да|yes|true)\b", answer):
+        if re.match(r"\b(да|yes|true)\b", answer):
             return True
-        if re.match(r"(нет|no|false)\b", answer):
-            return False
 
-        return None
+        return False
 
     def _is_vacancy_suitable(
         self, vacancy: dict, placeholders: dict[str, str]
@@ -489,16 +483,7 @@ class Operation(BaseOperation):
         response = self.vacancy_filter_ai.complete(prompt)
         logger.debug("AI ответ фильтра: %s", response)
 
-        result = self._parse_is_suitable_response(response)
-        if result is None:
-            logger.warning(
-                "AI-фильтр дал непонятный ответ для вакансии %s: %.100s. Считаю вакансию подходящей.",
-                vacancy.get("name", ""),
-                response,
-            )
-            return True
-
-        return result
+        return self._parse_is_suitable_response(response)
 
     def _apply_vacancies(self) -> None:
         resumes: list[datatypes.Resume] = self.tool.get_resumes()
@@ -771,7 +756,7 @@ class Operation(BaseOperation):
                             "сопроводительного письма",
                         )
 
-                    logger.debug(letter)
+                    logger.debug("Сопроводительное письмло: %.255s", letter)
 
                 logger.debug(
                     "Пробуем откликнуться на вакансию: %s",
@@ -1013,7 +998,7 @@ class Operation(BaseOperation):
                     prompt = f"Ответь на вопрос: {question}"
                     answer = self.cover_letter_ai.complete(prompt)
                     ## добавляем ответ AI на вопрос теста##
-                    logger.debug("AI ответ= %r", answer)
+                    logger.debug("AI ответ: %.255s", answer)
                 # Тупоеблые любят вопросы с ответами да/нет, где ответ да является правильным в большинстве случаев.
                 else:
                     answer = "Да"
