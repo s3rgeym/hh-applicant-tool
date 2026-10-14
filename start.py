@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Тут очень много странного/лишнего. Необходима помощь в рефакторинге. 
+# Тут очень много странного/лишнего. Необходима помощь в рефакторинге.
 """
 Лаунчер hh-applicant-tool.
 
@@ -29,6 +29,7 @@ MAX_PYTHON = (3, 13)
 # Автоперезапуск на совместимой версии Python
 # ──────────────────────────────────────────────
 
+
 def _find_compatible_python() -> str | None:
     """Найти py -3.XX на Windows через py launcher."""
     if platform.system() != "Windows":
@@ -38,7 +39,9 @@ def _find_compatible_python() -> str | None:
         try:
             r = subprocess.run(
                 ["py", tag, "--version"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if r.returncode == 0:
                 return tag
@@ -54,16 +57,27 @@ def _install_compatible_python() -> bool:
     try:
         subprocess.run(
             ["winget", "--version"],
-            capture_output=True, timeout=5,
+            capture_output=True,
+            timeout=5,
         ).check_returncode()
-    except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
+    except (
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+        subprocess.CalledProcessError,
+    ):
         return False
 
     pkg = f"Python.Python.3.{MAX_PYTHON[1]}"
     print(f"   Устанавливаю Python 3.{MAX_PYTHON[1]} через winget...")
     print(f"   (winget install {pkg})\n")
     code = subprocess.run(
-        ["winget", "install", pkg, "--accept-source-agreements", "--accept-package-agreements"],
+        [
+            "winget",
+            "install",
+            pkg,
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+        ],
     ).returncode
     return code == 0
 
@@ -114,6 +128,7 @@ def _maybe_relaunch() -> None:
 # Путь к config.json (повторяет логику utils/config.py + constants.py)
 # ──────────────────────────────────────────────
 
+
 def _config_base() -> Path:
     match platform.system():
         case "Windows":
@@ -155,6 +170,7 @@ def has_token() -> bool:
 # ──────────────────────────────────────────────
 # Автоустановка зависимостей
 # ──────────────────────────────────────────────
+
 
 def _is_installed(module: str) -> bool:
     return importlib.util.find_spec(module) is not None
@@ -216,7 +232,9 @@ def ensure_installed() -> None:
             [sys.executable, "-m", "pip", "install", "playwright", "--quiet"],
         ).returncode
         if code != 0:
-            print("⚠  Не удалось установить Playwright. Авторизация может не работать.\n")
+            print(
+                "⚠  Не удалось установить Playwright. Авторизация может не работать.\n"
+            )
         else:
             # Скачиваем Chromium (idempotent — пропустит если уже есть)
             subprocess.run(
@@ -230,6 +248,7 @@ def ensure_installed() -> None:
 # ──────────────────────────────────────────────
 # Запуск команд
 # ──────────────────────────────────────────────
+
 
 def run_tool(*args: str) -> int:
     """Запускает hh-applicant-tool <args>."""
@@ -256,6 +275,7 @@ def run_ui() -> int:
 # ──────────────────────────────────────────────
 # Авторизация (через существующую операцию authorize)
 # ──────────────────────────────────────────────
+
 
 def run_authorize() -> int:
     """Запуск авторизации напрямую через import (как run_ui).
@@ -302,9 +322,7 @@ def cli_menu() -> None:
     else:
         cmd = choice
 
-    extra = input(
-        f"Аргументы для {cmd} (Enter — без аргументов): "
-    ).strip()
+    extra = input(f"Аргументы для {cmd} (Enter — без аргументов): ").strip()
     args = [cmd] + shlex.split(extra) if extra else [cmd]
     print()
     run_tool(*args)
@@ -316,6 +334,7 @@ def cli_menu() -> None:
 # Главное меню
 # ──────────────────────────────────────────────
 
+
 def _getch() -> str:
     """Читает один символ без ожидания Enter. Fallback на input() если не TTY."""
     if not sys.stdin.isatty():
@@ -323,6 +342,7 @@ def _getch() -> str:
     if platform.system() == "Windows":
         try:
             import msvcrt
+
             ch = msvcrt.getwch()
             print(ch)
             return ch
@@ -332,6 +352,7 @@ def _getch() -> str:
         try:
             import termios
             import tty
+
             fd = sys.stdin.fileno()
             old = termios.tcgetattr(fd)
             try:
@@ -373,6 +394,7 @@ def main_menu() -> None:
 # Пауза перед закрытием (чтобы окно не схлопнулось при клике)
 # ──────────────────────────────────────────────
 
+
 def _pause_and_exit(code: int = 0) -> None:
     """На Windows окно закроется сразу — даём прочитать."""
     if platform.system() == "Windows":
@@ -383,6 +405,7 @@ def _pause_and_exit(code: int = 0) -> None:
 # ──────────────────────────────────────────────
 # Точка входа
 # ──────────────────────────────────────────────
+
 
 def main() -> None:
     print("=" * 42)

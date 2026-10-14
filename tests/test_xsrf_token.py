@@ -77,7 +77,7 @@ def make_tool(
 def page_html(*tokens: str, escaped: bool = False) -> str:
     """Собирает HTML с несколькими полями `,"xsrfToken":"..."`."""
     q = "&quot;" if escaped else '"'
-    return "".join(f',{q}xsrfToken{q}:{q}{t}{q}' for t in tokens)
+    return "".join(f",{q}xsrfToken{q}:{q}{t}{q}" for t in tokens)
 
 
 class TestXsrfTokenFromCookie:

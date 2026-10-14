@@ -11,7 +11,7 @@ from urllib.parse import urlencode, urljoin
 
 import requests
 
-from ..utils.common import get_proxies_dict
+from ..utils.helpers import get_proxies_dict
 from . import errors
 from .client_keys import (
     ANDROID_CLIENT_ID,

@@ -9,7 +9,7 @@ from .date import (
     try_parse_datetime,
 )
 from .string import bool2str, list2str, rand_text, shorten
-from .terminal import setup_terminal
+from .term import setup_terminal
 
 # TODO: добавить остальное или лучше удалить все
 

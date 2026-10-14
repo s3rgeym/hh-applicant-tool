@@ -43,12 +43,12 @@ from .constants import (
 from .errors import Error, OperationCanceled, OperationError
 from .storage import StorageFacade
 from .utils.argparse import ArgumentFormatter
-from .utils.common import get_proxies_dict
 from .utils.config import ConfigJSON, ConfigTOML
+from .utils.helpers import get_proxies_dict
 from .utils.log import setup_logger
 from .utils.package import get_package_version, parse_version
 from .utils.system import has_gui_support, is_docker
-from .utils.terminal import print_kitty_image, print_sixel_image
+from .utils.term import print_kitty_image, print_sixel_image
 
 logger = logging.getLogger("hh-applicant-tool")
 
@@ -114,6 +114,7 @@ class HHApplicantTool:
     _: KW_ONLY
     api_delay: float | None = None
     base_url: str | None = None
+    captcha_manual: bool = False
     captcha_lang: str | None = None
     config_dir: Path | None = None
     openai_connect_timeout: float | None = None
@@ -224,6 +225,13 @@ class HHApplicantTool:
             "--captcha-lang",
             choices=["RU", "EN"],
             help="Язык капчи. Некоторые модели распознают лучше текст на английском",
+        )
+        parser.add_argument(
+            "--captcha-manual",
+            "--manual",
+            help="Ручной ввод капчи. Полезен, если модель не поддерживает vision",
+            action="store_true",
+            default=False,
         )
         subparsers = parser.add_subparsers(help="commands")
         package_dir = Path(__file__).resolve().parent / OPERATIONS
@@ -630,7 +638,7 @@ class HHApplicantTool:
         return server
 
     def _solve_captcha(self, image_data: bytes) -> str:
-        if self.use_ai:
+        if self.use_ai and not self.captcha_manual:
             return self.captcha_ai.recognize_text(image_data)
 
         if not has_gui_support() or self.use_kitty or self.use_sixel:

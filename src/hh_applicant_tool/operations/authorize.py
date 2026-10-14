@@ -32,6 +32,7 @@ class Operation(BaseOperation):
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("username", nargs="?", help="Email или телефон")
+        parser.add_argument("password", nargs="?", help="Пароль")
 
     def run(self, tool: HHApplicantTool, args) -> int | None:
         api_client = tool.api_client
