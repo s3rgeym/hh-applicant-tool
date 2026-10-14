@@ -25,9 +25,11 @@ from urllib.parse import parse_qs, quote, urljoin, urlsplit
 
 import requests
 
-from . import ai, api, utils
+from . import ai, api
 from .constants import (
     ACCEPT_LANGUAGE,
+    ANDROID_CLIENT_ID,
+    ANDROID_CLIENT_SECRET,
     ANDROID_WEBVIEW_USERAGENT,
     AUTH_CONFIG_FILENAME,
     CAPTCHA_SUCCESS_BACKURL,
@@ -48,7 +50,8 @@ from .utils.helpers import get_proxies_dict
 from .utils.log import setup_logger
 from .utils.package import get_package_version, parse_version
 from .utils.system import has_gui_support, is_docker
-from .utils.term import print_kitty_image, print_sixel_image
+from .utils.term import print_kitty_image, print_sixel_image, setup_terminal
+from .utils.user_agent import generate_android_useragent
 
 logger = logging.getLogger("hh-applicant-tool")
 
@@ -312,6 +315,10 @@ class HHApplicantTool:
         return session
 
     @cached_property
+    def ai_session(self) -> requests.Session:
+        return requests.Session()
+
+    @cached_property
     def config_dir_path(self) -> Path:
         return (
             (self.config_dir or Path(getenv("CONFIG_DIR", CONFIG_DIR)))
@@ -377,7 +384,6 @@ class HHApplicantTool:
         token = self.auth_config.get("token", self.config.get("token", {}))
         client_config = self.config.get("api_client", {}).copy()
         client_config.setdefault("proxy_url", self.proxy_url)
-
         if self.api_delay:
             client_config["delay"] = self.api_delay
 
@@ -385,6 +391,9 @@ class HHApplicantTool:
             access_token=token.get("access_token"),
             refresh_token=token.get("refresh_token"),
             access_expires_at=token.get("access_expires_at"),
+            client_id=ANDROID_CLIENT_ID,
+            client_secret=ANDROID_CLIENT_SECRET,
+            user_agent=generate_android_useragent(),
             captcha_handler=self.handle_captcha,
             **client_config,
         )
@@ -396,6 +405,7 @@ class HHApplicantTool:
         system_prompt: str | None = None,
         **kwargs,
     ) -> ai.ChatOpenAI:
+        kwargs.setdefault("session", self.ai_session)
         return ai.ChatOpenAI(system_prompt=system_prompt, **kwargs)
 
     def get_openai_config(self, section: str | None = None) -> dict:
@@ -995,7 +1005,7 @@ class HHApplicantTool:
             logging.DEBUG, logging.WARNING - self.verbosity * 10
         )
         setup_logger(logger, verbosity_level, self.log_file)
-        utils.setup_terminal()
+        setup_terminal()
 
     def _get_latest_version(self) -> Literal[False] | str:
         try:

@@ -262,10 +262,6 @@ class ChatOpenAI:
         messages = self._build_messages(message, system_prompt, history)
 
         logger.debug(
-            "AI системный промпт: %s",
-            system_prompt if system_prompt is not None else self.system_prompt,
-        )
-        logger.debug(
             "AI запрос: %s (сообщений в истории: %d)",
             message,
             len(self.history) + len(history or []),

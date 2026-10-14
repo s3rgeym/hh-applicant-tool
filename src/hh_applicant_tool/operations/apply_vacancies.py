@@ -82,22 +82,42 @@ DEFAULT_COVER_LETTER = """\
 
 
 # Системные промпты - простые строки, не шаблоны
-DEFAULT_COVER_LETTER_SYSTEM_PROMPT = (
-    "Ты помогаешь соискателю писать сопроводительные письма. "
-    "Пиши кратко, вежливо и по делу, не выдумывай фактов."
-)
+DEFAULT_COVER_LETTER_SYSTEM_PROMPT = """\
+Ты пишешь сопроводительные письма от первого лица на русском языке.
+
+Правила:
+- Выводи ТОЛЬКО текст письма. Без вступлений («Вот письмо», «Конечно»), без комментариев и пояснений после текста.
+- Не используй markdown: никаких звёздочек, решёток, списков, заголовков, кавычек вокруг письма.
+- Не используй плейсхолдеры в квадратных или фигурных скобках. Если данных нет, просто опусти эту деталь.
+- Не придумывай факты, опыт, компании и навыки, которых нет в запросе.
+- Не добавляй тему письма, контакты и подпись, кроме имени в конце.
+- Пиши только по-русски, без английских слов и вставок."""
+
 DEFAULT_AI_FILTER_SYSTEM_PROMPT = (
     "Ты определяешь, подходит ли вакансия кандидату. "
     "Отвечай одним словом: «да» или «нет»."
 )
 
+DEFAULT_TEST_SYSTEM_PROMPT = """\
+Ты проходишь тест при отклике на вакансию от имени кандидата. \
+Отвечай на русском языке.
+
+Правила:
+- Выводи ТОЛЬКО ответ, без вступлений, пояснений и комментариев.
+- Не используй markdown и плейсхолдеры в скобках.
+- Если нужно выбрать вариант, ответь только его числовым ID.
+- Если нужен текстовый ответ, пиши кратко, 1-3 предложения, по существу.
+- Не придумывай факты о кандидате, которых нет в вопросе."""
+
 # Пользовательские промпты - шаблоны, подстановка через %(name)s
 DEFAULT_COVER_LETTER_PROMPT = (
     "Сгенерируй сопроводительное письмо не более 5-7 предложений "
-    "от моего имени для вакансии «%(vacancy_name)s» "
-    "работодателя «%(employer_name)s». "
-    "Меня зовут %(first_name)s, мое резюме: «%(resume_title)s»."
+    "для вакансии «%(vacancy_name)s» и работодателя «%(employer_name)s». "
+    "Меня зовут: %(first_name)s. Мое резюме: «%(resume_title)s». "
+    "Начни сразу с обращения или первого предложения, закончи именем. "
+    "Только текст письма, без markdown и комментариев."
 )
+
 DEFAULT_AI_FILTER_PROMPT = """\
 Резюме кандидата:
 Должность: %(resume_title)s
@@ -108,6 +128,16 @@ DEFAULT_AI_FILTER_PROMPT = """\
 Описание: %(vacancy_description)s
 
 Подходит ли эта вакансия кандидату?"""
+
+DEFAULT_TEST_CHOICE_PROMPT = (
+    "Вопрос: %(question)s\n"
+    "Варианты:\n%(options)s\n"
+    "Выбери правильный вариант. Ответь только его ID."
+)
+
+DEFAULT_TEST_TEXT_PROMPT = (
+    "Вопрос: %(question)s\nДай краткий ответ. Только текст ответа."
+)
 
 DEFAULT_APPLY_MAIL_SUBJECT = "{Отклик|Резюме} на вакансию %(vacancy_name)s"
 DEFAULT_APPLY_MAIL_BODY = "{Здравствуйте|Добрый день}, {прошу рассмотреть|пожалуйста рассмотрите} мое резюме %(resume_url)s на вакансию %(vacancy_name)s."
@@ -169,9 +199,9 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
         parser.add_argument(
-            "-f",
+            "-l",
             "--force-letter",
-            "--force",
+            "--letter",
             help="Всегда отправлять сопроводительное письмо при отклике",
             action=argparse.BooleanOptionalAction,
         )
@@ -387,19 +417,31 @@ class Operation(BaseOperation):
         self.ai_filter_prompt = config.get(
             "ai_filter_prompt", DEFAULT_AI_FILTER_PROMPT
         )
+        self.test_choice_prompt = config.get(
+            "test_choice_prompt", DEFAULT_TEST_CHOICE_PROMPT
+        )
+        self.test_text_prompt = config.get(
+            "test_text_prompt", DEFAULT_TEST_TEXT_PROMPT
+        )
         self.ai_filter = bool(args.ai_filter)
 
-        self.cover_letter_ai = self.vacancy_filter_ai = None
+        self.cover_letter_ai = self.vacancy_filter_ai = self.test_ai = None
         if args.use_ai:
             c = tool.get_openai_args("openai.cover_letter")
             c.setdefault("system_prompt", DEFAULT_COVER_LETTER_SYSTEM_PROMPT)
-            c.setdefault("temperature", 0.8)
+            c.setdefault("temperature", 0.3)
             logger.debug("cover letter config: %r", c)
             self.cover_letter_ai = tool.get_ai_client(**c)
 
+            c = tool.get_openai_args("openai.test_solver")
+            c.setdefault("system_prompt", DEFAULT_TEST_SYSTEM_PROMPT)
+            c.setdefault("temperature", 0.2)
+            logger.debug("test solver config: %r", c)
+            self.test_ai = tool.get_ai_client(**c)
+
             if self.ai_filter:
                 c = tool.get_openai_args("openai.vacancy_filter")
-                c.setdefault("system_propmt", DEFAULT_AI_FILTER_PROMPT)
+                c.setdefault("system_prompt", DEFAULT_AI_FILTER_SYSTEM_PROMPT)
                 self.vacancy_filter_ai = tool.get_ai_client(**c)
 
         self.apply_mail_subject = config.get(
@@ -444,13 +486,13 @@ class Operation(BaseOperation):
 
     # Если AI ответил что-то непонятное, лучше не отбрасывать вакансию
     @staticmethod
-    def _parse_is_suitable_response(response: str) -> bool | None:
+    def _parse_is_suitable_response(response: str) -> bool:
         answer = response.strip().lower().strip(" .!\"'«»")
 
-        if re.match(r"\b(да|yes|true)\b", answer):
-            return True
+        if re.match(r"(нет|no|false)\b", answer):
+            return False
 
-        return False
+        return True
 
     def _is_vacancy_suitable(
         self, vacancy: dict, placeholders: dict[str, str]
@@ -951,23 +993,26 @@ class Operation(BaseOperation):
             question = (task.get("description") or "").strip()
 
             if solutions:
-                if self.cover_letter_ai:
+                if self.test_ai:
                     options = "\n".join(
-                        [
-                            f"{s['id']}: {strip_tags(s['text'])}"
-                            for s in solutions
-                        ]
+                        f"{s['id']}: {strip_tags(s['text'])}" for s in solutions
                     )
-                    prompt = (
-                        f"Вопрос: {question}\n"
-                        f"Варианты:\n{options}\n"
-                        f"Выбери ID правильного ответа. Пришли только ID."
+                    prompt = render_template(
+                        self.test_choice_prompt,
+                        {"question": question, "options": options},
+                        "промпта выбора ответа в тесте",
                     )
-                    ai_answer = self.cover_letter_ai.complete(prompt).strip()
-                    # Ищем ID в ответе AI на случай лишнего текста
-                    match = re.search(r"\d+", ai_answer)
-                    selected_id = (
-                        match.group(0) if match else solutions[0]["id"]
+                    ai_answer = self.test_ai.complete(prompt).strip()
+                    logger.debug("AI ответ (выбор): %.255s", ai_answer)
+                    # Берём только ID, который реально есть среди вариантов
+                    valid_ids = {str(s["id"]) for s in solutions}
+                    selected_id = next(
+                        (
+                            x
+                            for x in re.findall(r"\d+", ai_answer)
+                            if x in valid_ids
+                        ),
+                        str(solutions[len(solutions) // 2]["id"]),
                     )
                     payload[field_name] = selected_id
                 else:
@@ -994,9 +1039,13 @@ class Operation(BaseOperation):
                     answer = rand_text(
                         "{{Простите|Извините}, но я не перехожу по {внешним|сторонним} ссылкам, так как {опасаюсь взлома|не хочу {быть взломанным|подхватить вирус|чтобы у меня {со|с банковского} счета украли деньги}}.|У меня нет времени на заполнение анкет и гуглодоков}"
                     )
-                elif self.cover_letter_ai:
-                    prompt = f"Ответь на вопрос: {question}"
-                    answer = self.cover_letter_ai.complete(prompt)
+                elif self.test_ai:
+                    prompt = render_template(
+                        self.test_text_prompt,
+                        {"question": question},
+                        "промпта текстового ответа в тесте",
+                    )
+                    answer = self.test_ai.complete(prompt)
                     ## добавляем ответ AI на вопрос теста##
                     logger.debug("AI ответ: %.255s", answer)
                 # Тупоеблые любят вопросы с ответами да/нет, где ответ да является правильным в большинстве случаев.

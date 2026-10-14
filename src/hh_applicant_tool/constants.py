@@ -3,9 +3,9 @@
 # подмодуле
 from __future__ import annotations
 
-from . import utils
+from .utils import config
 
-CONFIG_DIR = utils.get_config_directory()
+CONFIG_DIR = config.get_config_directory()
 CONFIG_FILENAME = "config.toml"
 AUTH_CONFIG_FILENAME = "auth.json"
 LOG_FILENAME = "log.txt"
