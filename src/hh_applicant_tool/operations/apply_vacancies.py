@@ -25,7 +25,6 @@ from ..api.errors import ApiError, LimitExceeded
 from ..errors import OperationError
 from ..storage.repositories.errors import RepositoryError
 from ..tool import BaseNamespace, BaseOperation
-from ..utils.common import find_key
 from ..utils.datatypes import VacancyTestsData
 from ..utils.string import (
     bool2str,
@@ -922,7 +921,7 @@ class Operation(BaseOperation):
     def _get_vacancy_tests(self, response_url: str) -> VacancyTestsData | None:
         """Парсит тесты"""
         res = self.tool.get_initial_state(response_url)
-        return find_key(res, "vacancyTests")
+        return res.get("vacancyTests")
 
     def _solve_vacancy_test(
         self,
@@ -1010,10 +1009,10 @@ class Operation(BaseOperation):
                         "{{Простите|Извините}, но я не перехожу по {внешним|сторонним} ссылкам, так как {опасаюсь взлома|не хочу {быть взломанным|подхватить вирус|чтобы у меня {со|с банковского} счета украли деньги}}.|У меня нет времени на заполнение анкет и гуглодоков}"
                     )
                 elif self.cover_letter_ai:
-                    prompt = f"Дай краткий и профессиональный ответ на вопрос: {question}"
+                    prompt = f"Ответь на вопрос: {question}"
                     answer = self.cover_letter_ai.complete(prompt)
                     ## добавляем ответ AI на вопрос теста##
-                    logger.debug("AI ответ= %r", answer)
+                    logger.debug("хуИИ ответ= %r", answer)
                 # Тупоеблые любят вопросы с ответами да/нет, где ответ да является правильным в большинстве случаев.
                 else:
                     answer = "Да"
@@ -1231,55 +1230,38 @@ class Operation(BaseOperation):
             )
         )
 
-        logger.debug(vacancy_summary)
+        logger.debug("vacancy summary: %s", vacancy_summary)
 
         if self.excluded_pat.search(vacancy_summary):
             return True
 
-        # Грузим полный текст вакансии только, если предыдущий фильтр не сработал
-        state = self.tool.get_initial_state(vacancy["alternate_url"])
-
-        # Тут не хватает какого-то таймаута
-        # with open("vac.json", "wb") as f:
-        #     json.dump(f, state)
-        #     raise RuntimeError
-
-        description = find_key(state, "description")
-        if not description:
-            logger.warning(
-                "Не удалось найти описание вакансии на странице: %s",
-                vacancy["alternate_url"],
-            )
-            return False
-
-        description = strip_tags(description)
-        logger.debug(description[:2047])
+        # Когда мы грузим страницу через API, то можем перехватить капчу, а на
+        # самом сайте нет
+        res = self.api_client.get(f"/vacancies/{vacancy['id']}")
+        description = res["description"]
+        logger.debug("vacancy description: %.255s", description)
         return bool(self.excluded_pat.search(description))
 
     def _is_vacancy_already_skipped(
         self, vacancy: SearchVacancy, resume_id: str | None = None
     ) -> bool:
-        try:
-            vacancy_id = vacancy["id"]
+        vacancy_id = vacancy["id"]
 
-            if resume_id:
-                if any(
-                    self.tool.storage.skipped_vacancies.find(
-                        resume_id=resume_id,
-                        vacancy_id=vacancy_id,
-                    )
-                ):
-                    return True
-
-            return any(
+        if resume_id:
+            if any(
                 self.tool.storage.skipped_vacancies.find(
-                    resume_id="",
+                    resume_id=resume_id,
                     vacancy_id=vacancy_id,
                 )
-            )
+            ):
+                return True
 
-        except Exception:
-            return False
+        return any(
+            self.tool.storage.skipped_vacancies.find(
+                resume_id="",
+                vacancy_id=vacancy_id,
+            )
+        )
 
     def _save_skipped_vacancy(
         self,
@@ -1287,18 +1269,15 @@ class Operation(BaseOperation):
         reason: str,
         resume_id: str | None = None,
     ) -> None:
-        try:
-            employer = vacancy.get("employer", {})
-            self.tool.storage.skipped_vacancies.save(
-                {
-                    "resume_id": resume_id or "",
-                    "vacancy_id": vacancy["id"],
-                    "reason": reason,
-                    "alternate_url": vacancy.get("alternate_url"),
-                    "name": vacancy.get("name"),
-                    "employer_name": employer.get("name"),
-                    "created_at": datetime.now(),
-                }
-            )
-        except Exception as ex:
-            logger.warning(f"Не удалось сохранить пропущенную вакансию: {ex}")
+        employer = vacancy.get("employer", {})
+        self.tool.storage.skipped_vacancies.save(
+            {
+                "resume_id": resume_id or "",
+                "vacancy_id": vacancy["id"],
+                "reason": reason,
+                "alternate_url": vacancy.get("alternate_url"),
+                "name": vacancy.get("name"),
+                "employer_name": employer.get("name"),
+                "created_at": datetime.now(),
+            }
+        )
