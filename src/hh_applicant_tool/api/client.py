@@ -11,6 +11,7 @@ from urllib.parse import urlencode, urljoin
 
 import requests
 
+from ..utils.common import get_proxies_dict
 from . import errors
 from .client_keys import (
     ANDROID_CLIENT_ID,
@@ -53,6 +54,7 @@ class BaseClient:
     max_retries: int | None = None
     session: requests.Session | None = None
     user_agent: str | None = None
+    proxy_url: str | None = None
 
     _previous_request_time: float = field(default=0.0, init=False)
     _lock: Lock = field(
@@ -67,16 +69,12 @@ class BaseClient:
         logger.debug(f"{class_name} User-Agent: {self.user_agent}")
 
         if not self.session:
-            logger.debug(f"Сreate new session for {class_name}")
+            logger.debug(f"create new session for {class_name}")
             self.session = requests.session()
-
-    @property
-    def proxies(self):
-        return self.session.proxies
 
     def _default_headers(self) -> dict[str, str]:
         return {
-            "Accept": 'application/json; charset="UTF-8"',
+            "Accept": "application/json",
             "User-Agent": self.user_agent,
             "X-Force-App-Access": "true",  # Из исходников офиц приложения
             "X-HH-App-Active": "true",
@@ -133,6 +131,7 @@ class BaseClient:
                         method,
                         url,
                         headers=self._default_headers(),
+                        proxies=get_proxies_dict(self.proxy_url),
                         allow_redirects=False,
                         **payload,
                     )
@@ -285,6 +284,7 @@ class ApiClient(BaseClient):
             client_id=self.client_id,
             client_secret=self.client_secret,
             user_agent=self.user_agent,
+            proxy_url=self.proxy_url,
             session=self.session,
         )
 

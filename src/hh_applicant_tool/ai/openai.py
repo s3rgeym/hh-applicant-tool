@@ -11,6 +11,7 @@ from threading import Lock
 import requests
 from urllib3.util import Timeout
 
+from ..utils.common import get_proxies_dict
 from .base import AIError
 
 DEFAULT_DELAY = 0.5
@@ -52,6 +53,8 @@ class ChatOpenAI:
     # прошло больше — не ждём.
     delay: float | None = None
 
+    proxy_url: str | None = None
+
     session: requests.Session = field(default_factory=requests.Session)
 
     # Внутренние поля
@@ -77,6 +80,7 @@ class ChatOpenAI:
         """
         timeout = Timeout(connect=self.connect_timeout, total=self.timeout)
         headers = self._default_headers()
+        proxies = get_proxies_dict(self.proxy_url)
 
         with self._lock:
             if self._previous_request_time > 0:
@@ -93,6 +97,7 @@ class ChatOpenAI:
                     json=payload,
                     headers=headers,
                     timeout=timeout,
+                    proxies=proxies,
                 )
             finally:
                 self._previous_request_time = time.monotonic()

@@ -39,14 +39,14 @@ from .constants import (
     DEFAULT_DESKTOP_USERAGENT,
     HH_BASE_URL,
     LOG_FILENAME,
-    REPO_URL,
 )
 from .errors import Error, OperationCanceled, OperationError
 from .storage import StorageFacade
 from .utils.argparse import ArgumentFormatter
+from .utils.common import get_proxies_dict
 from .utils.config import ConfigJSON, ConfigTOML
 from .utils.log import setup_logger
-from .utils.package import PACKAGE_NAME, get_package_version, parse_version
+from .utils.package import get_package_version, parse_version
 from .utils.system import has_gui_support, is_docker
 from .utils.terminal import print_kitty_image, print_sixel_image
 
@@ -260,44 +260,9 @@ class HHApplicantTool:
         )
 
     @property
-    def general_config(self) -> dict:
+    def general_config(self) -> dict[str, Any]:
         self.config.setdefault("general", {})
-        return self.config['general']
-
-    @staticmethod
-    def _proxy_url_to_dict(proxy_url: str | None) -> dict[str, str]:
-        if not proxy_url:
-            return {}
-
-        return {
-            "http": proxy_url,
-            "https": proxy_url,
-        }
-
-    def _get_proxies(self) -> dict[str, str]:
-        proxy_url = self.proxy_url or self.general_config.get("proxy_url")
-
-        if proxy_url:
-            return self._proxy_url_to_dict(proxy_url)
-
-        proxies = {}
-        http_env = getenv("HTTP_PROXY") or getenv("http_proxy")
-        https_env = getenv("HTTPS_PROXY") or getenv("https_proxy") or http_env
-
-        if http_env:
-            proxies["http"] = http_env
-        if https_env:
-            proxies["https"] = https_env
-
-        return proxies
-
-    def _get_openai_proxies(self, section: str = None) -> dict[str, str]:
-        openai_config = self.get_openai_config(section=section)
-        proxy_url = self.openai_proxy_url or openai_config.get("proxy_url")
-        if proxy_url:
-            return self._proxy_url_to_dict(proxy_url)
-        # Из какого-нибудь казахстана одинаково hh и ChatGPT работают
-        return self._get_proxies()
+        return self.config["general"]
 
     def _create_session(
         self,
@@ -305,9 +270,11 @@ class HHApplicantTool:
         proxies: dict[str, str] | None = None,
     ) -> requests.Session:
         session = requests.Session()
+        if proxies is None:
+            proxies = get_proxies_dict(self.proxy_url)
 
         if proxies:
-            logger.info("Use proxies for Browser: %r", proxies)
+            logger.debug("session proxies: %r", proxies)
             session.proxies = proxies
 
         # В заголовки не лезь, если не понимаешь зачем они
@@ -319,15 +286,13 @@ class HHApplicantTool:
             }
         )
 
-        logger.debug("Desktop Session Headers: %r", session.headers)
+        logger.debug("session headers: %r", session.headers)
 
         return session
 
     @cached_property
     def session(self) -> requests.Session:
-        session = self._create_session(
-            proxies=self._get_proxies(),
-        )
+        session = self._create_session()
 
         if self.cookies_file.exists():
             jar = MozillaCookieJar(str(self.cookies_file))
@@ -336,22 +301,6 @@ class HHApplicantTool:
 
         # Запоминаем куки, которые были при инициализации
         self._original_cookies = list(session.cookies)
-        return session
-
-    @staticmethod
-    def get_tool_useragent() -> str:
-        return f"{PACKAGE_NAME}/{get_package_version()} (+{REPO_URL})"
-
-    def get_openai_session(self) -> requests.Session:
-        session = requests.session()
-
-        if proxies := self._get_openai_proxies():
-            session.proxies = proxies
-
-        session.headers.update({"User-Agent": self.get_tool_useragent()})
-
-        logger.debug("OpenAI Session Headers: %r", session.headers)
-
         return session
 
     @cached_property
@@ -417,9 +366,10 @@ class HHApplicantTool:
 
     @cached_property
     def api_client(self) -> api.client.ApiClient:
-        token = self.auth_config.get("token") or self.config.get("token") or {}
+        token = self.auth_config.get("token", self.config.get("token", {}))
+        client_config = self.config.get("api_client", {}).copy()
+        client_config.setdefault("proxy_url", self.proxy_url)
 
-        client_config = (self.config.get("api_client") or {}).copy()
         if self.api_delay:
             client_config["delay"] = self.api_delay
 
@@ -502,6 +452,7 @@ class HHApplicantTool:
                 "max_completion_tokens",
                 "max_retries",
                 "model",
+                "proxy_url",
                 "system_prompt",
                 "temperature",
                 "timeout",
