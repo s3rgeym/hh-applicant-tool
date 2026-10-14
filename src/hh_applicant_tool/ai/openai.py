@@ -29,9 +29,7 @@ class OpenAIError(AIError):
 @dataclass
 class ChatOpenAI:
     api_key: str
-
     _: KW_ONLY
-
     base_url: str
     system_prompt: str | None = None
     # Базовая история диалога, которая подставляется в каждый запрос

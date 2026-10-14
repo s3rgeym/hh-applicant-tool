@@ -445,6 +445,7 @@ class HHApplicantTool:
             for k, v in c.items()
             if k
             in [
+                "api_key",
                 "base_url",
                 "connect_timeout",
                 "delay",

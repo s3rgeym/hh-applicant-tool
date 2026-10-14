@@ -1012,7 +1012,7 @@ class Operation(BaseOperation):
                     prompt = f"Ответь на вопрос: {question}"
                     answer = self.cover_letter_ai.complete(prompt)
                     ## добавляем ответ AI на вопрос теста##
-                    logger.debug("хуИИ ответ= %r", answer)
+                    logger.debug("AI ответ= %r", answer)
                 # Тупоеблые любят вопросы с ответами да/нет, где ответ да является правильным в большинстве случаев.
                 else:
                     answer = "Да"
