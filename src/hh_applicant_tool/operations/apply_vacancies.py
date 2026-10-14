@@ -1237,9 +1237,13 @@ class Operation(BaseOperation):
             return True
 
         # Грузим полный текст вакансии только, если предыдущий фильтр не сработал
-        state = self.tool.get_initial_state(
-            self.tool.base_url + "/vacancy/" + vacancy["id"]
-        )
+        state = self.tool.get_initial_state(vacancy["alternate_url"])
+
+        # Тут не хватает какого-то таймаута
+        # with open("vac.json", "wb") as f:
+        #     json.dump(f, state)
+        #     raise RuntimeError
+
         description = find_key(state, "description")
         if not description:
             logger.warning(
