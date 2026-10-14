@@ -29,6 +29,14 @@ DEFAULT_CAPTCHA_LANGUAGE = "RU"
 
 ANDROID_WEBVIEW_USERAGENT = "Mozilla/5.0 (Linux; Android 13; Pixel 7 Build/TQ3A.230901.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/118.0.0.0 Mobile Safari/537.36"
 
+ANDROID_CLIENT_ID = (
+    "HIOMIAS39CA9DICTA7JIO64LQKQJF5AGIK74G9ITJKLNEDAOH5FHS5G1JI7FOEGD"
+)
+
+ANDROID_CLIENT_SECRET = (
+    "V9M870DE342BGHFRUJ5FTCGCUA1482AN0DI8C5TFI9ULMA89H10N60NOP8I4JMVS"
+)
+
 # Android-приложение перенаправляет на данную ссылку.
 # Не знаю учитывается ли.
 CAPTCHA_SUCCESS_BACKURL = "hh://applicant/captchaSuccessBackUrl"
