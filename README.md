@@ -296,7 +296,7 @@ $ hh-applicant-tool apply-vacancies --search "Python backend" --excluded-filter 
 # Поднимаем резюме
 $ hh-applicant-tool update-resumes
 
-# Запустить автоответчик через AI в чатах с перерывом каждые 15 минут между проверкой чатов
+# Запустить автоответчик в чатах с перерывом каждые 15 минут между проверкой чатов
 $ hh-applicant-tool --ai reply-chats -l 900
 
 # Просмотр лога в реальном времени
@@ -781,7 +781,7 @@ model = "llama3"
 
 <p align="center">
   <img width="647" height="313" alt="image" src="https://github.com/user-attachments/assets/8a96602c-2324-4516-b9dd-822bf7d7c7d9" />
-  <br><em>Модели типа `llama3:latest` уже можно спутать с человеком</em>
+  <br><em>Пример работы автоответчика в чатах с <code>llama3:latest</code></em>
 </p>
 
 Для тестирования настроек запустить `hh-applicant-tool` с `-vv`, так в терминала будут выводиться сообщения отладки. Либо же можно посмотреть логи с помощью операции `log`.
