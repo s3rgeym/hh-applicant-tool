@@ -18,7 +18,7 @@ DEFAULT_DELAY = 0.5
 DEFAULT_TIMEOUT = 90.0
 DEFAULT_CONNECT_TIMEOUT = 15.0
 
-CHAT_COMPLETIONS_ENDPOINT = "chat/completions"
+CHAT_COMPLETIONS_ENDPOINT = "/chat/completions"
 
 
 logger = logging.getLogger("hh-applicant-tool")
@@ -53,6 +53,8 @@ class ChatOpenAI:
     # прошло больше — не ждём.
     delay: float | None = None
 
+    chat_completions_endpoint: str | None = None
+
     proxy_url: str | None = None
 
     session: requests.Session = field(default_factory=requests.Session)
@@ -66,6 +68,9 @@ class ChatOpenAI:
         self.delay = self.delay or DEFAULT_DELAY
         self.timeout = self.timeout or DEFAULT_TIMEOUT
         self.connect_timeout = self.connect_timeout or DEFAULT_CONNECT_TIMEOUT
+        self.chat_completions_endpoint = (
+            self.chat_completions_endpoint or CHAT_COMPLETIONS_ENDPOINT
+        )
 
     def _default_headers(self) -> dict[str, str]:
         return (
@@ -97,7 +102,7 @@ class ChatOpenAI:
 
             try:
                 return self.session.post(
-                    f"{self.base_url.lstrip('/')}/{CHAT_COMPLETIONS_ENDPOINT}",
+                    f"{self.base_url.rstrip('/')}/{self.chat_completions_endpoint.lstrip('/')}",
                     json=payload,
                     headers=headers,
                     timeout=timeout,
