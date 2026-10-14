@@ -261,7 +261,8 @@ class HHApplicantTool:
 
     @property
     def general_config(self) -> dict:
-        return self.config.get("general", {})
+        self.config.setdefault("general", {})
+        return self.config['general']
 
     @staticmethod
     def _proxy_url_to_dict(proxy_url: str | None) -> dict[str, str]:
