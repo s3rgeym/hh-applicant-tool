@@ -13,12 +13,7 @@ import requests
 
 from ..utils.helpers import get_proxies_dict
 from . import errors
-from .client_keys import (
-    ANDROID_CLIENT_ID,
-    ANDROID_CLIENT_SECRET,
-)
 from .datatypes import AccessToken
-from .user_agent import generate_android_useragent
 
 __all__ = ("ApiClient", "OAuthClient")
 
@@ -64,7 +59,7 @@ class BaseClient:
     def __post_init__(self) -> None:
         self.delay = self.delay or DEFAULT_DELAY
         self.max_retries = self.max_retries or MAX_RETRIES
-        self.user_agent = self.user_agent or generate_android_useragent()
+        self.user_agent = self.user_agent
         class_name = self.__class__.__name__
         logger.debug(f"{class_name} User-Agent: {self.user_agent}")
 
@@ -75,10 +70,9 @@ class BaseClient:
     def _default_headers(self) -> dict[str, str]:
         return {
             "Accept": "application/json",
-            "User-Agent": self.user_agent,
             "X-Force-App-Access": "true",  # Из исходников офиц приложения
             "X-HH-App-Active": "true",
-        }
+        } | ({"User-Agent": self.user_agent} if self.user_agent else {})
 
     def _wait_for_delay(self, delay: float | None = None) -> None:
         """Выдерживает паузу между запросами.
@@ -190,18 +184,13 @@ class BaseClient:
 
 @dataclass
 class OAuthClient(BaseClient):
-    client_id: str | None = None
-    client_secret: str | None = None
+    client_id: str
+    client_secret: str
     _: dataclasses.KW_ONLY
     base_url: str = HH_OAUTH_URL
     state: str = ""
     scope: str = ""
     redirect_uri: str = ""
-
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        self.client_id = self.client_id or ANDROID_CLIENT_ID
-        self.client_secret = self.client_secret or ANDROID_CLIENT_SECRET
 
     def authorize_url(self, **kwargs: Any) -> str:
         params = dict(
