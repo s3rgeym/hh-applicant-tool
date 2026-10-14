@@ -617,7 +617,9 @@ proxy_url = "http://user:pass@127.0.0.1:8080"
 
 # Вместо дефолтного https://hh.ru впишите свой
 base_url = "https://rabota.by"
-user_agent = "..."
+# Можете вписать сюда ваш браузерный юзер-агент, если так спокойнее
+# По умочанию там Yandex Browser
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:157.0) Gecko/20100101 Firefox/157.0"
 captcha_lang = "RU"
 
 # Шаблон сопроводительного письма
