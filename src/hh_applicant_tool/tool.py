@@ -966,9 +966,11 @@ class HHApplicantTool:
         root.mainloop()
 
         # Окно было закрыто
-        if not result:
-            raise KeyboardInterrupt()
+        # if not result:
+        #     raise KeyboardInterrupt()
 
+        # Пусть падает.
+        # Правильное решение тут только дать случиться неизбежному.
         return result[0].strip()
 
     def logout(self) -> None:
