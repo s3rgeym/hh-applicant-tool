@@ -201,7 +201,7 @@ class OAuthClient(BaseClient):
             state=self.state,
             **kwargs,
         )
-        query = urlencode({k: v for k, v in params.items() if v})
+        query = urlencode({k: v for k, v in params.items() if v is not None and v != ""})
         return self.resolve_url(f"/authorize?{query}")
 
     def request_access_token(
