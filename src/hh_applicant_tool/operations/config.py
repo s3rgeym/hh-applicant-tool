@@ -18,11 +18,11 @@ logger = logging.getLogger("hh-applicant-tool")
 
 
 class Namespace(BaseNamespace):
-    show_path: bool
-    key: str
-    set: list[str]
+    key: str | None
+    value: str | None
     edit: bool
-    unset: str
+    delete: str | None
+    show_path: bool
 
 
 def get_value(data: dict[str, Any], path: str) -> Any:
@@ -42,7 +42,7 @@ def set_value(data: dict[str, Any], path: str, value: Any) -> None:
     data[keys[-1]] = value
 
 
-def del_value(data: dict[str, Any], path: str) -> None:
+def del_value(data: dict[str, Any], path: str) -> bool:
     """Удаляет значение из вложенного словаря по ключу в виде строки."""
     keys = path.split(".")
     for key in keys[:-1]:
@@ -53,7 +53,7 @@ def del_value(data: dict[str, Any], path: str) -> None:
     try:
         del data[keys[-1]]
         return True
-    except KeyError:
+    except (KeyError, TypeError):
         return False
 
 
@@ -75,9 +75,24 @@ class Operation(BaseOperation):
     """
     Операции с конфигурационным файлом.
     По умолчанию выводит содержимое конфига.
+
+    config                              показать весь конфиг
+    config openai.defaul.model          вывести значение
+    config openai.default.model gpt-4o  установить значение
+    config -d openai.model              удалить ключ
     """
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            "key",
+            nargs="?",
+            help="Ключ конфига, например openai.model",
+        )
+        parser.add_argument(
+            "value",
+            nargs="?",
+            help="Новое значение (если не указано, значение ключа выводится)",
+        )
         group = parser.add_mutually_exclusive_group()
         group.add_argument(
             "-e",
@@ -86,17 +101,11 @@ class Operation(BaseOperation):
             help="Открыть конфигурационный файл в редакторе",
         )
         group.add_argument(
-            "-v", "--value", help="Вывести отдельное значение из конфига"
-        )
-        group.add_argument(
-            "-s",
-            "--set",
-            nargs=2,
-            metavar=("KEY", "VALUE"),
-            help="Установить значение в конфиг, например, --set openai.model gpt-4o",
-        )
-        group.add_argument(
-            "-u", "--unset", metavar="KEY", help="Удалить ключ из конфига"
+            "-d",
+            "--delete",
+            "--unset",
+            metavar="KEY",
+            help="Удалить ключ из конфига",
         )
         group.add_argument(
             "-p",
@@ -108,39 +117,44 @@ class Operation(BaseOperation):
 
     def run(self, applicant_tool: HHApplicantTool, args: Namespace) -> None:
         config = applicant_tool.config
-        if args.set:
-            key, value = args.set
-            set_value(config, key, parse_scalar(value))
-            config.save()
-            logger.info("Значение '%s' для ключа '%s' сохранено.", value, key)
+
+        if args.key and (args.edit or args.delete or args.show_path):
+            logger.error("Ключ нельзя сочетать с -e, -d и -p.")
             return
 
-        if args.unset:
-            key = args.unset
-            if del_value(config, key):
-                config.save()
-                logger.info("Ключ '%s' удален из конфига.", key)
+        if args.key:
+            if args.value is None:
+                value = get_value(config, args.key)
+                if value is not None:
+                    print(value)
             else:
-                logger.warning("Ключ '%s' не найден в конфиге.", key)
+                set_value(config, args.key, parse_scalar(args.value))
+                config.save()
+                logger.info(
+                    "Значение '%s' для ключа '%s' сохранено.",
+                    args.value,
+                    args.key,
+                )
             return
 
-        if args.value:
-            value = get_value(config, args.value)
-            if value is not None:
-                print(value)
+        if args.delete:
+            if del_value(config, args.delete):
+                config.save()
+                logger.info("Ключ '%s' удален из конфига.", args.delete)
+            else:
+                logger.warning("Ключ '%s' не найден в конфиге.", args.delete)
             return
 
-        config_path = config.path
         if args.show_path:
-            print(config_path)
+            print(config.path)
             return
 
         if args.edit:
-            self._open_editor(config_path)
+            self._open_editor(config.path)
             return
 
         # Default action: show content
-        print(config_path.read_text(encoding="utf-8"))
+        print(config.path.read_text(encoding="utf-8"))
 
     def _open_editor(self, filepath: Path) -> None:
         """Открывает файл в редакторе по умолчанию в зависимости от ОС."""

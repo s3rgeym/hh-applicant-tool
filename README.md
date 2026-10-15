@@ -276,14 +276,14 @@ $ hh-applicant-tool config -e
 
 # Установить значение в конфиге, например, socks-прокси
 # Учтите, что при таком способе изменения конфига, исчезнут все комментарии в нем!!!
-$ hh-applicant-tool config -s general.proxy_url socks5h://localhost:1080
+$ hh-applicant-tool config general.proxy_url socks5h://localhost:1080
 
 # Вывести значение из конфига
-$ hh-applicant-tool config -k general.proxy_url
+$ hh-applicant-tool config general.proxy_url
 
 # Удалить значение из конфига
 # Эта операция тоже форматирует конфиг, удаляя из него комментарии
-$ hh-applicant-tool config -u general.proxy_url
+$ hh-applicant-tool config -d general.proxy_url
 
 # Чистим отказы
 $ hh-applicant-tool clear-negotiations
