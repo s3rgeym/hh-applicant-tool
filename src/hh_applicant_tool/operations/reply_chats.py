@@ -5,20 +5,16 @@ from __future__ import annotations
 import argparse
 import logging
 import random
-import shutil
-import subprocess
-import tempfile
 import time
 import uuid
-from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generator, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 from urllib.parse import urljoin
 
 from ..api import ApiError
+from ..errors import OperationError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.date import parse_api_datetime
 from ..utils.string import render_template
@@ -99,19 +95,6 @@ BOT_RECRUITER_ANSWER = (
     "который вы указали."
 )
 
-# Интерактивный режим: всё, что написано после последнего разделителя,
-# уходит в чат
-REPLY_SEPARATOR = "-------- ОТВЕТ ПИШИТЕ НИЖЕ ЭТОЙ СТРОКИ --------"
-
-# В редакторе показывается первое сообщение и столько последних
-EDITOR_HISTORY_TAIL = 4
-
-# Команды запуска: курсор в конце файла и сразу режим вставки.
-# Helix не поддерживает запуск команд через аргументы, поэтому его здесь нет
-EDITORS: dict[str, list[str]] = {
-    "vim": ["vim", "-c", "normal! G$", "-c", "startinsert!"],
-    "nvim": ["nvim", "-c", "normal! G$", "-c", "startinsert!"],
-}
 
 logger = logging.getLogger("hh-applicant-tool")
 
@@ -452,23 +435,8 @@ def _parse_dt(value: str) -> datetime:
         return parse_api_datetime(value)
 
 
-@contextmanager
-def reply_file(text: str) -> Generator[Path, None, None]:
-    """Временный файл для редактора, удаляется при выходе из контекста."""
-    with tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8", prefix="hh-reply-", suffix=".txt", delete=False
-    ) as tmp:
-        tmp.write(text)
-        tmp_path = Path(tmp.name)
-
-    try:
-        yield tmp_path
-    finally:
-        tmp_path.unlink(missing_ok=True)
-
-
 class Operation(BaseOperation):
-    """Ответ работодателям в чатах (chatik)."""
+    """Автоответчик в чатах."""
 
     __aliases__: list[str] = ["respond-chats"]
 
@@ -506,24 +474,19 @@ class Operation(BaseOperation):
             default=False,
             action=argparse.BooleanOptionalAction,
         )
-        parser.add_argument(
-            "-e",
-            "--editor",
-            choices=list(EDITORS),
-            default="vim",
-            help="Редактор для интерактивного режима (когда AI не используется)",  # noqa: E501
-        )
 
     # ---------------------------------------------------------------- run
 
     def run(self, tool: HHApplicantTool, args: Namespace) -> int | None:
+        if not tool.ai_enabled:
+            raise OperationError("Required AI")
+
         self.tool = tool
         self.resume_id = args.resume_id
         self.max_pages = args.max_pages
         self.max_age = timedelta(hours=args.period) if args.period else None
         self.max_history = args.max_history
         self.dry_run = args.dry_run
-        self.editor = args.editor
         self.ignored_chats: set[int] = set()
 
         self.user_prompt: str = (
@@ -536,18 +499,10 @@ class Operation(BaseOperation):
         )
 
         # Используется AI — отвечает он, нет — открываем редактор
-        self.ai_init_args: dict[str, Any] | None = None
-        if tool.ai_enabled:
-            c = tool.get_openai_settings("openai.reply_chat")
-            c.setdefault("system_prompt", DEFAULT_SYSTEM_PROMPT)
-            self.ai_init_args = c
-        else:
-            # if self.loop_delay:
-            #     logger.error("Для работы в цикле нужен AI")
-            #     return 1
-            if not shutil.which(EDITORS[self.editor][0]):
-                logger.error("Редактор %s не найден", self.editor)
-                return 1
+
+        c = tool.get_openai_settings("openai.reply_chat")
+        c.setdefault("system_prompt", DEFAULT_SYSTEM_PROMPT)
+        self.ai_init_args = c
 
         self.user = tool.get_me()
         self.base_placeholders = {
@@ -771,7 +726,8 @@ class Operation(BaseOperation):
 
     @staticmethod
     def trim_history(
-        lines: list[str], tail: int = EDITOR_HISTORY_TAIL
+        lines: list[str],
+        tail: int = 10,
     ) -> list[str]:
         """Оставляет первое сообщение и последние `tail`.
 
@@ -1019,54 +975,41 @@ class Operation(BaseOperation):
 
         send_message = ""
 
-        if self.ai_init_args is not None:
-            placeholders = self.build_placeholders(chat)
+        placeholders = self.build_placeholders(chat)
 
-            if chat.reply_options:
-                template = self.options_prompt
-            else:
-                template = self.user_prompt
-                lines, count, writable = self.load_history(chat)
-                if not writable or count >= self.max_history:
-                    logger.debug("Игнорируем чат #%s", chat.chat_id)
-                    self.ignored_chats.add(chat.chat_id)
-                    return
-                placeholders = self.build_placeholders(
-                    chat, "\n---\n".join(lines), count
-                )
-
-            cfg = dict(self.ai_init_args)
-            cfg["system_prompt"] = render_template(
-                cfg["system_prompt"], placeholders, randomize_text=False
-            )
-            ai = self.tool.get_ai_client(**cfg)
-            send_message = ai.complete(
-                render_template(template, placeholders, randomize_text=False)
-            ).strip()
-            logger.debug(f"AI message: {send_message}")
-
-            if chat.reply_options:
-                option = self.match_option(send_message, chat.reply_options)
-                if option is None:
-                    logger.warning(
-                        "AI вернул не вариант ответа в чате %s: %r",
-                        chat.chat_id,
-                        send_message,
-                    )
-                    return
-                send_message = option
+        if chat.reply_options:
+            template = self.options_prompt
         else:
-            lines, _, writable = self.load_history(chat)
-            if not writable:
+            template = self.user_prompt
+            lines, count, writable = self.load_history(chat)
+            if not writable or count >= self.max_history:
                 logger.debug("Игнорируем чат #%s", chat.chat_id)
                 self.ignored_chats.add(chat.chat_id)
                 return
-            answer = self.ask_interactively(
-                chat, self.trim_history(lines), blacklist
+            placeholders = self.build_placeholders(
+                chat, "\n---\n".join(lines), count
             )
-            if answer is None:
+
+        cfg = dict(self.ai_init_args)
+        cfg["system_prompt"] = render_template(
+            cfg["system_prompt"], placeholders, randomize_text=False
+        )
+        ai = self.tool.get_ai_client(**cfg)
+        send_message = ai.complete(
+            render_template(template, placeholders, randomize_text=False)
+        ).strip()
+        logger.debug(f"AI message: {send_message}")
+
+        if chat.reply_options:
+            option = self.match_option(send_message, chat.reply_options)
+            if option is None:
+                logger.warning(
+                    "AI вернул не вариант ответа в чате %s: %r",
+                    chat.chat_id,
+                    send_message,
+                )
                 return
-            send_message = answer
+            send_message = option
 
         if not send_message.strip():
             logger.warning("Пустой ответ для чата %s", chat.chat_id)
@@ -1084,79 +1027,3 @@ class Operation(BaseOperation):
 
         print(f"📨 Отправлено для {chat.vacancy_url}")
         time.sleep(random.uniform(1, 3))
-
-    # --------------------------------------------------- interactive mode
-
-    @staticmethod
-    def build_editor_text(chat: ChatToReply, history: list[str]) -> str:
-        header = [f"{chat.employer_name} — {chat.vacancy_name}"]
-        if chat.vacancy_compensation:
-            header.append(f"Зарплата: {chat.vacancy_compensation}")
-        header.append(f"Резюме: {chat.resume_title}")
-
-        messages = "\n---\n".join(history) or chat.reply_to_message.strip()
-        parts = ["\n".join(header), "Последние сообщения:\n\n" + messages]
-
-        if chat.reply_options:
-            options = "\n".join(f"- {o}" for o in chat.reply_options)
-            parts.append("Варианты ответа:\n" + options)
-
-        parts.append(
-            "# Напишите ответ, сохраните файл и выйдите из редактора с помощью `:wq`.\n"
-            "# Всё, что выше разделителя, игнорируется. Разделитель не "
-            "удаляйте.\n"
-            "# Пустой ответ — пропустить чат. /ban — заблокировать "
-            "работодателя, /leave — выйти из чата."
-        )
-
-        # Пустая строка в конце нужна, чтобы курсор встал под разделителем,
-        # а не в его конец
-        return "\n\n".join(parts) + f"\n\n{REPLY_SEPARATOR}\n\n"
-
-    @staticmethod
-    def parse_editor_answer(text: str) -> str | None:
-        """Текст после разделителя или None, если разделитель удалён."""
-        if REPLY_SEPARATOR not in text:
-            return None
-        return text.rpartition(REPLY_SEPARATOR)[2].strip()
-
-    def ask_interactively(
-        self, chat: ChatToReply, history: list[str], blacklist: set[str]
-    ) -> str | None:
-        """Возвращает текст ответа или None, если чат нужно пропустить."""
-        print("Отвечаем:", chat.employer_name, "|", chat.vacancy_name)
-        with reply_file(self.build_editor_text(chat, history)) as path:
-            result = subprocess.run([*EDITORS[self.editor], str(path)])
-
-            if result.returncode != 0:
-                logger.warning(
-                    "Редактор завершился с кодом %s, пропускаем чат",
-                    result.returncode,
-                )
-                return None
-
-            edited = path.read_text(encoding="utf-8")
-
-        answer = self.parse_editor_answer(edited)
-        if not answer:
-            print("🚶 Пропускаем чат")
-            return None
-
-        command = answer.split(maxsplit=1)[0]
-        if command == "/ban":
-            if chat.employer_id and not self.dry_run:
-                self.tool.api_client.put(
-                    f"/employers/blacklisted/{chat.employer_id}"
-                )
-                blacklist.add(chat.employer_id)
-            print("🚫 Работодатель заблокирован", chat.employer_name)
-            return None
-
-        if command == "/leave":
-            if not self.dry_run:
-                self.leave_chat(chat.chat_id, refer_url=self.chat_page_url)
-            self.ignored_chats.add(chat.chat_id)
-            print("❌ Выход из чата", chat.vacancy_url)
-            return None
-
-        return answer

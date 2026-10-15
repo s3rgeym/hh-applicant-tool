@@ -972,14 +972,12 @@ class HHApplicantTool:
         return result[0].strip()
 
     def logout(self) -> None:
-        self.session.get(
-            f"{self.base_url}/logout", {"hhtmFrom": "main"}
-        )
+        self.session.get(f"{self.base_url}/logout", {"hhtmFrom": "main"})
 
         # Она всегда 302 возвращает, даже если ты не авторизован
         # узнать вышел ли ты нельзя
         # logger.debug("/logout %d", r.status_code)
-        
+
         # Затираем куки
         self.session.cookies.clear()
 
@@ -1030,25 +1028,25 @@ class HHApplicantTool:
             logger.info("Запущено через Docker")
         logger.debug("Путь до профиля: %s", self.config_dir_path)
 
-        try:
-            if not self.operation_run:
-                self._parser.print_help(file=sys.stderr)
-                return 2
-            while True:
+        if not self.operation_run:
+            self._parser.print_help(file=sys.stderr)
+            return 2
+
+        while True:
+            try:
                 ret_code = self.operation_run(self, args) or 0
                 logger.debug("Операция завершена с кодом: %d", ret_code)
+
                 if not self.loop:
                     return ret_code
-                logger.debug("Ожидаем %d сек перед повторением операции", args.loop)
-                time.sleep(args.loop)
-        except (OperationCanceled, KeyboardInterrupt, EOFError):
-            logger.warning("Выполнение операции прервано!")
-            return 130
-        except OperationError as ex:
-            logger.error(ex)
-        except Exception as ex:
-            logger.exception(ex)
-        finally:
+            except (OperationCanceled, KeyboardInterrupt, EOFError):
+                logger.warning("Выполнение операции прервано!")
+                return 130
+            except OperationError as ex:
+                logger.error(ex)
+            except Exception as ex:
+                logger.exception(ex)
+
             # Токен мог автоматически обновиться
             if self.save_token():
                 logger.debug("Токен был сохранен после обновления.")
@@ -1060,4 +1058,8 @@ class HHApplicantTool:
 
             self._save_config_if_needed()
 
-        return 1
+            if not self.loop:
+                return 1
+
+            logger.debug("Ожидаем %d сек перед повторением операции", args.loop)
+            time.sleep(args.loop)
