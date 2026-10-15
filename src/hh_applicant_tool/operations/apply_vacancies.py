@@ -425,20 +425,20 @@ class Operation(BaseOperation):
 
         self.cover_letter_ai = self.vacancy_filter_ai = self.test_ai = None
         if args.use_ai:
-            c = tool.get_openai_args("openai.cover_letter")
+            c = tool.get_openai_settings("openai.cover_letter")
             c.setdefault("system_prompt", DEFAULT_COVER_LETTER_SYSTEM_PROMPT)
             c.setdefault("temperature", 0.3)
             logger.debug("cover letter config: %r", c)
             self.cover_letter_ai = tool.get_ai_client(**c)
 
-            c = tool.get_openai_args("openai.test_solver")
+            c = tool.get_openai_settings("openai.test_solver")
             c.setdefault("system_prompt", DEFAULT_TEST_SYSTEM_PROMPT)
             c.setdefault("temperature", 0.2)
             logger.debug("test solver config: %r", c)
             self.test_ai = tool.get_ai_client(**c)
 
             if self.ai_filter:
-                c = tool.get_openai_args("openai.vacancy_filter")
+                c = tool.get_openai_settings("openai.vacancy_filter")
                 c.setdefault("system_prompt", DEFAULT_AI_FILTER_SYSTEM_PROMPT)
                 self.vacancy_filter_ai = tool.get_ai_client(**c)
 
@@ -546,12 +546,13 @@ class Operation(BaseOperation):
                 seen_employers=seen_employers,
             )
             if limit_reached:
-                logger.warning(
+                logger.info(
                     "Лимит откликов hh.ru исчерпан. Пропускаю оставшиеся резюме."
                 )
                 print("⛔ Лимит откликов hh.ru исчерпан. Попробуйте позже.")
                 break
 
+        logger.info("Отклики разосланы!")
         print("📝 Отклики на вакансии разосланы!")
 
     def _apply_resume(
@@ -615,16 +616,16 @@ class Operation(BaseOperation):
                 relations = vacancy.get("relations", [])
 
                 if relations:
-                    logger.debug(
-                        "Пропускаем вакансию с откликом: %s",
-                        vacancy["alternate_url"],
-                    )
                     if "got_rejection" in relations:
                         logger.debug(
                             "Вы получили отказ от %s",
                             vacancy["alternate_url"],
                         )
                         print("⛔ Пришел отказ от", vacancy["alternate_url"])
+                    logger.debug(
+                        "Пропускаем вакансию с откликом: %s",
+                        vacancy["alternate_url"],
+                    )
                     continue
 
                 if vacancy.get("archived"):
@@ -757,6 +758,10 @@ class Operation(BaseOperation):
                             )
                             if result.get("success") == "true":
                                 applied_count += 1
+                                logger.info(
+                                    "Отправили отклик на вакансию с тестом: %s",
+                                    vacancy["alternate_url"],
+                                )
                                 print(
                                     "📨 Отправили отклик на вакансию с тестом",
                                     vacancy["alternate_url"],
@@ -771,10 +776,6 @@ class Operation(BaseOperation):
                                 if err == "negotiations-limit-exceeded":
                                     do_apply = False
                                     limit_reached = True
-                                    logger.warning(
-                                        "Достигли лимита на отклики (отправлено в этой сессии: %d)",
-                                        applied_count,
-                                    )
                                     break
                                 else:
                                     logger.error(
@@ -806,6 +807,10 @@ class Operation(BaseOperation):
                         )
                         assert res == {}
                         applied_count += 1
+                        logger.info(
+                            "Отправили отклик на вакнсию без теста: %s",
+                            vacancy["alternate_url"],
+                        )
                         print(
                             "📨 Отправили отклик на вакансию",
                             vacancy["alternate_url"],
@@ -853,10 +858,6 @@ class Operation(BaseOperation):
             except LimitExceeded:
                 do_apply = False
                 limit_reached = True
-                logger.warning(
-                    "Достигли лимита на отклики (отправлено в этой сессии: %d)",
-                    applied_count,
-                )
                 break
             except ApiError as ex:
                 logger.warning(ex)

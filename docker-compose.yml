@@ -1,20 +1,40 @@
+x-common: &common
+  image: hh_applicant_tool:latest
+  build:
+    context: .
+    dockerfile: Dockerfile
+  volumes:
+    - .:/app:ro
+    - ./config:/app/config:rw
+    # Пробрасываем таймзону хоста
+    - /etc/localtime:/etc/localtime:ro
+  restart: unless-stopped
+  environment:
+    # Это не трогаем
+    - CONFIG_DIR=/app/config
+    # Смените или закомментируйте при проблемах
+    - TERM=${TERM}
+    # Если время на сервере отличается
+    # - TZ=Europe/Moscow
+
 services:
+  # Для разовых команд: docker compose run --rm hh_applicant_tool <аргументы>
   hh_applicant_tool:
-    container_name: hh_applicant_tool
-    image: hh_applicant_tool:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
-    volumes:
-      - .:/app:ro
-      - ./config:/app/config:rw
-      # Пробрасываем таймзону хоста
-      - /etc/localtime:/etc/localtime:ro
-    restart: unless-stopped
-    environment:
-      # Это не трогаем
-      - CONFIG_DIR=/app/config
-      # Смените или закомментируйте при проблемах
-      - TERM=${TERM}
-      # Если время на сервере отличается
-      # - TZ=Europe/Moscow
+    <<: *common
+    profiles: ['manual']
+    restart: 'no'
+
+  apply_vacancies:
+    <<: *common
+    container_name: hh_apply_vacancies
+    command: ['--loop', '86400', 'apply-vacancies'] # 24*60*60, раз в сутки
+
+  update_resumes:
+    <<: *common
+    container_name: hh_update_resumes
+    command: ['--loop', '14400', 'update-resumes'] # 4*60*60, раз в 4 часа
+
+  reply_chats:
+    <<: *common
+    container_name: hh_reply_chats
+    command: ['--loop', '300', 'reply-chats'] # раз в 5 минут

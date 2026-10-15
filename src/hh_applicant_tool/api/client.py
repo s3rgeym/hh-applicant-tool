@@ -115,9 +115,14 @@ class BaseClient:
         for attempt in range(1, self.max_retries + 1):
             with self._lock:
                 self._wait_for_delay(delay)
+
+                def kv(d: dict) -> str:
+                    return "; ".join(f"{k}={v!r}" for k, v in d.items())
+
                 logger.debug(
-                    f"({attempt}/{self.max_retries}) {method} {url} | {payload=}",
+                    f"({attempt}/{self.max_retries}) {method} {url} {kv(payload)}",
                 )
+
                 try:
                     # Заголовки собираются на каждой попытке, чтобы
                     # подхватывать обновлённый access token.
@@ -201,7 +206,9 @@ class OAuthClient(BaseClient):
             state=self.state,
             **kwargs,
         )
-        query = urlencode({k: v for k, v in params.items() if v is not None and v != ""})
+        query = urlencode(
+            {k: v for k, v in params.items() if v is not None and v != ""}
+        )
         return self.resolve_url(f"/authorize?{query}")
 
     def request_access_token(

@@ -1,48 +1,25 @@
-# SLIM КАЛ ЕБУЧИЙ!!! ХВАТИТ ГАДИТЬ ВЫСЕРАМИ НЕЙРОПРИДУРКА! 
-# ЕСЛИ НЕТ СВОИХ МОЗГОВ, ТО И ГОЛОВА НАХУЙ НЕ НУЖНА
-# ЛЯЖЬ НА РЕЛЬСЫ, ПУСТЬ ТЕБЕ ЕЕ НАХУЙ ОТПИЛИТ
-FROM python:3.13-slim
+FROM python:3.13-alpine
 
 # Системные зависимости
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-      gcc \
-      libc6-dev \
-      procps \
-      cron \
-      dos2unix \
-      tzdata \
-      less && \
-    rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache tzdata less
 
 # Настройка пользователя
 ARG UID=1000
 ARG GID=1000
-RUN groupadd -g $GID docker && \
-    useradd -u $UID -g docker -m -s /bin/bash docker
+RUN addgroup -g $GID docker && \
+    adduser -D -u $UID -G docker -s /bin/sh docker
 
 WORKDIR /app
 
 COPY pyproject.toml README.md ./
-
-# Копируем исходный код
 COPY src ./src
 
-# Устанавливаем саму утилиту
-# Подготовка cron
-RUN pip install --no-cache-dir -e '.' && \
-    touch /var/log/cron.log && chown docker:docker /var/log/cron.log && \
+# Ставим утилиту (компилятор нужен только на время сборки) и готовим каталог конфига
+RUN apk add --no-cache --virtual .build-deps gcc musl-dev && \
+    pip install --no-cache-dir -e '.' && \
+    apk del .build-deps && \
     mkdir -p ./config && chown -R docker:docker ./config
 
-# Копируем остальное
-COPY --chmod=755 crontab startup.sh ./
+USER docker
 
-# Запускаем cron и читаем лог
-# cron не видит переменные окружения, переданные главному процессу, точнее
-# он начинает новую сессию, где тот же $CONFIG_DIR пуст
-CMD printenv | grep -E '^(CONFIG_DIR|HH_PROFILE_ID)=' > /etc/environment; \
-    chown -R docker:docker ./config && \
-    dos2unix -n ./crontab /tmp/crontab && \
-    crontab -u docker /tmp/crontab && \
-    cron && \
-    exec tail -f /var/log/cron.log
+ENTRYPOINT ["hh-applicant-tool"]

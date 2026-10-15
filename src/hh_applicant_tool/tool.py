@@ -8,6 +8,7 @@ import logging
 import re
 import smtplib
 import sys
+import time
 from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import KW_ONLY, dataclass
@@ -204,8 +205,8 @@ class HHApplicantTool:
         parser.add_argument(
             "--use-ai",
             "--ai",
-            action="store_true",
-            default=False,
+            action=argparse.BooleanOptionalAction,
+            default=True,
             help="Использовать AI для всех действий в т.ч. решения капчи",
         )
         parser.add_argument(
@@ -233,6 +234,12 @@ class HHApplicantTool:
             help="Ручной ввод капчи. Полезен, если модель не поддерживает vision",
             action="store_true",
             default=False,
+        )
+        parser.add_argument(
+            "--loop",
+            type=int,
+            default=0,
+            help="Повторять операцию каждые N секунд",
         )
         subparsers = parser.add_subparsers(help="commands")
         package_dir = Path(__file__).resolve().parent / OPERATIONS
@@ -312,6 +319,15 @@ class HHApplicantTool:
         self._original_cookies = list(session.cookies)
         return session
 
+    @property
+    def ai_configured(self) -> bool:
+        return bool(self.config.get("openai"))
+
+    @property
+    def ai_enabled(self) -> bool:
+        # Использование AI по умолчанию включено
+        return self.use_ai and self.ai_configured
+
     @cached_property
     def ai_session(self) -> requests.Session:
         session = requests.Session()
@@ -389,7 +405,7 @@ class HHApplicantTool:
             captcha_handler=self.handle_captcha,
             **client_config,
         )
-        
+
         self._original_token = client.get_access_token()
         return client
 
@@ -449,7 +465,7 @@ class HHApplicantTool:
 
         return c
 
-    def get_openai_args(self, config_section: str = None) -> dict:
+    def get_openai_settings(self, config_section: str = None) -> dict:
         c = self.get_openai_config(section=config_section)
         return {
             k: v
@@ -458,6 +474,7 @@ class HHApplicantTool:
             in [
                 "api_key",
                 "base_url",
+                "chat_completions_endpoint",
                 "connect_timeout",
                 "delay",
                 "history",
@@ -472,7 +489,7 @@ class HHApplicantTool:
         }
 
     def _get_captcha_ai(self) -> ai.ChatOpenAI:
-        c = self.get_openai_args("openai.captcha")
+        c = self.get_openai_settings("openai.captcha")
         c.setdefault(
             "system_prompt",
             (
@@ -640,7 +657,7 @@ class HHApplicantTool:
         return server
 
     def _solve_captcha(self, image_data: bytes) -> str:
-        if self.use_ai and not self.captcha_manual:
+        if self.ai_enabled and not self.captcha_manual:
             return self.captcha_ai.recognize_text(image_data)
 
         if not has_gui_support() or self.use_kitty or self.use_sixel:
@@ -955,7 +972,7 @@ class HHApplicantTool:
         return result[0].strip()
 
     def logout(self) -> None:
-        if self.xsrf_token:
+        if self.is_logged_in:
             r = self.session.post(
                 f"{self.base_url}/logout", {"_xsrf": self.xsrf_token}
             )
@@ -1010,14 +1027,20 @@ class HHApplicantTool:
         self.create_config_dir()
         self.setup_logging()
         if is_docker():
-            logger.debug("Запущено через Docker")
+            logger.info("Запущено через Docker")
         logger.debug("Путь до профиля: %s", self.config_dir_path)
 
         try:
             if not self.operation_run:
                 self._parser.print_help(file=sys.stderr)
                 return 2
-            return self.operation_run(self, args)
+            while True:
+                ret_code = self.operation_run(self, args) or 0
+                logger.debug("Операция завершена с кодом: %d", ret_code)
+                if not self.loop:
+                    return ret_code
+                logger.debug("Ожидаем %d сек перед повторением операции %s")
+                time.sleep(args.loop)
         except (OperationCanceled, KeyboardInterrupt, EOFError):
             logger.warning("Выполнение операции прервано!")
             return 130

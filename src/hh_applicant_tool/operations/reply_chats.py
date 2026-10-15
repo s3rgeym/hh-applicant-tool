@@ -507,12 +507,6 @@ class Operation(BaseOperation):
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
-            "-l",
-            "--loop-delay",
-            type=int,
-            help="Работать в цикле: после каждого прохода по чатам ждать N секунд и повторять. Без этого аргумента проход делается один раз. Требует AI",  # noqa: E501
-        )
-        parser.add_argument(
             "-e",
             "--editor",
             choices=list(EDITORS),
@@ -529,7 +523,6 @@ class Operation(BaseOperation):
         self.max_age = timedelta(hours=args.period) if args.period else None
         self.max_history = args.max_history
         self.dry_run = args.dry_run
-        self.loop_delay = args.loop_delay
         self.editor = args.editor
         self.ignored_chats: set[int] = set()
 
@@ -543,11 +536,11 @@ class Operation(BaseOperation):
         )
 
         # Используется AI — отвечает он, нет — открываем редактор
-        self.ai_args: dict[str, Any] | None = None
-        if tool.use_ai:
-            c = tool.get_openai_args("openai.reply_chat")
+        self.ai_init_args: dict[str, Any] | None = None
+        if tool.ai_enabled:
+            c = tool.get_openai_settings("openai.reply_chat")
             c.setdefault("system_prompt", DEFAULT_SYSTEM_PROMPT)
-            self.ai_args = c
+            self.ai_init_args = c
         else:
             # if self.loop_delay:
             #     logger.error("Для работы в цикле нужен AI")
@@ -564,17 +557,7 @@ class Operation(BaseOperation):
             "phone": self.user.get("phone") or "",
         }
 
-        return self.run_loop()
-
-    def run_loop(self) -> int:
-        while True:
-            self.reply_chats()
-
-            if not self.loop_delay:
-                return 0
-
-            logger.debug("Следующий проход через %d с", self.loop_delay)
-            time.sleep(self.loop_delay)
+        return self.reply_chats()
 
     # ---------------------------------------------------------- chatik API
 
@@ -1036,7 +1019,7 @@ class Operation(BaseOperation):
 
         send_message = ""
 
-        if self.ai_args is not None:
+        if self.ai_init_args is not None:
             placeholders = self.build_placeholders(chat)
 
             if chat.reply_options:
@@ -1052,7 +1035,7 @@ class Operation(BaseOperation):
                     chat, "\n---\n".join(lines), count
                 )
 
-            cfg = dict(self.ai_args)
+            cfg = dict(self.ai_init_args)
             cfg["system_prompt"] = render_template(
                 cfg["system_prompt"], placeholders, randomize_text=False
             )
