@@ -110,7 +110,7 @@ class Operation(BaseOperation):
         assert xsrf == tool.xsrf_token
 
         self.pubkey = data["loginTrustFlagsSecret"]
-        logger.debug(self.pubkey)
+        logger.debug("Публичный ключ для подписи запроса:\n%s", self.pubkey)
 
         # Вход по паролю или запрос OTP-кода, с повторами при капче
         captcha: dict[str, Any] = {}
@@ -238,7 +238,7 @@ class Operation(BaseOperation):
         """
         # Шлем на тот же URL страницы логина, в failUrl — он же без хоста
         sp = urlsplit(self.redirect_url)
-        fail_url = f"{sp.path}?{sp.query}" if sp.query else sp.path
+        fail_url = f"{sp.path}?{sp.query}"
 
         params = {
             "accountType": "APPLICANT",
