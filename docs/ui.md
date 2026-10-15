@@ -1,5 +1,8 @@
 # UI модуль (pywebview)
 
+> [!IMPORTANT]
+> перемещено в ветку `broken-ui-feature`. Работало до версии 1.9.2 или 1.9.3. Во второй версии многое было изменено.
+
 Локальный графический интерфейс для hh-applicant-tool. Запускается в нативном окне через [pywebview](https://pywebview.flowrl.com/) (Edge WebView2 на Windows, WebKit на macOS/Linux).
 
 ## Быстрый старт (для пользователей)
