@@ -389,6 +389,7 @@ class HHApplicantTool:
             captcha_handler=self.handle_captcha,
             **client_config,
         )
+        
         self._original_token = client.get_access_token()
         return client
 
@@ -590,9 +591,8 @@ class HHApplicantTool:
 
         jar = MozillaCookieJar(str(self.cookies_file))
         for c in self.session.cookies:
-            # Против отдельных стран введены санкции
             if c.domain and not re.search(
-                r"^((?!israel\.)(?:.*?\.)?hh\.(ru|kz|uz|by|net|com)|rabota\.by)\.?$",
+                r"^((?:.*?\.)?hh\.(ru|kz|uz|by|net|com)|rabota\.by)\.?$",
                 c.domain,
             ):
                 continue
@@ -763,7 +763,7 @@ class HHApplicantTool:
 
         lang = lang or self.captcha_lang
         target_url = urljoin(
-            referer_url or HH_BASE_URL, "/captcha?lang=" + quote(lang)
+            referer_url or self.base_url, "/captcha?lang=" + quote(lang)
         )
         logger.debug(
             "Отправляем POST-запрос на %s для получения captcha key",
@@ -795,6 +795,7 @@ class HHApplicantTool:
         )
         logger.debug("Пробуем загрузить капчу: %s", image_url)
 
+        # Браузер когда встречает в разметке тег IMG, посылает другой Accept
         headers = {
             "Accept": "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"
         }
