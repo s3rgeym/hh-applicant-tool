@@ -235,12 +235,6 @@ class HHApplicantTool:
             action="store_true",
             default=False,
         )
-        parser.add_argument(
-            "--loop",
-            type=int,
-            default=0,
-            help="Повторять операцию каждые N секунд",
-        )
         subparsers = parser.add_subparsers(help="commands")
         package_dir = Path(__file__).resolve().parent / OPERATIONS
         for _, module_name, _ in iter_modules([str(package_dir)]):
@@ -1034,36 +1028,24 @@ class HHApplicantTool:
             self._parser.print_help(file=sys.stderr)
             return 2
 
-        # Если передан --loop, то только OperationCanceled и прерывание с
-        # клавиатуры, могут привести к выходу из цикла
-        while True:
-            try:
-                ret_code = self.operation_run(self, args) or 0
-                logger.debug("Операция завершена с кодом: %d", ret_code)
+        try:
+            return self.operation_run(self, args)
+        except (OperationCanceled, KeyboardInterrupt, EOFError):
+            logger.warning("Выполнение операции прервано пользователем!")
+            return 130
+        except OperationError as ex:
+            logger.error(ex)
+        except Exception as ex:
+            logger.exception(ex)
 
-                if not self.loop:
-                    return ret_code
-            except (OperationCanceled, KeyboardInterrupt, EOFError):
-                logger.warning("Выполнение операции прервано!")
-                return 130
-            except OperationError as ex:
-                logger.error(ex)
-            except Exception as ex:
-                logger.exception(ex)
+        # Токен мог автоматически обновиться
+        if self.save_token():
+            logger.debug("Токен был сохранен после обновления.")
 
-            # Токен мог автоматически обновиться
-            if self.save_token():
-                logger.debug("Токен был сохранен после обновления.")
+        try:
+            self.save_cookies()
+        except Exception as ex:
+            logger.error(f"Не удалось сохранить cookies: {ex}")
 
-            try:
-                self.save_cookies()
-            except Exception as ex:
-                logger.error(f"Не удалось сохранить cookies: {ex}")
-
-            self._save_config_if_needed()
-
-            if not self.loop:
-                return 1
-
-            logger.debug("Ожидаем %d сек перед повторением операции", args.loop)
-            time.sleep(args.loop)
+        self._save_config_if_needed()
+        return 1
