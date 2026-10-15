@@ -258,7 +258,7 @@ $ hh-applicant-tool apply-vacancies --search "Python Backend" --excluded-filter 
 $ hh-applicant-tool update-resumes
 
 # Запускаем автоответчик в чате (если настроен openai)
-$ hh-applicant-tool --loop 900 reply-chats
+$ hh-applicant-tool reply-chats
 
 # Просмотр лога в реальном времени
 $ hh-applicant-tool log -f
@@ -295,7 +295,6 @@ AI (ChatGPT и тп) будет использоваться автоматич�
 | `--profile <profile-id>`                                                                           | можно указать профиль, данные которого будут храниться в подкаталоге. |
 | `--use-kitty/--use-sixel`                                                                          | использовать опр протокол для отображения капчи в терминале. Если не указывать, то капча будет отображена через `tkinter`, если тот установлен.... |
 | `--no-use-ai/--no-ai`                                                                              | игнорировать настройки AI в конфиге. |
-| `--loop` | Зациклить операцию, повторяя ее каждые N секунд |
 
 Доступные операции (имеют свои флаги, название операции идет после флагов самого hh-applicant-tool):
 
