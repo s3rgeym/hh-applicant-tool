@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generator
+from typing import TYPE_CHECKING, Any, Generator, TypedDict
 from urllib.parse import urljoin
 
 from ..api import ApiError
@@ -124,6 +124,304 @@ class Namespace(BaseNamespace):
     dry_run: bool
     loop_delay: int | None
     editor: str
+
+
+# ------------------------------------------------------------ типы ответов
+
+
+class UnreadCount(TypedDict):
+    unreadCount: int
+    unreadSupportCount: int
+
+
+class ParticipantDisplay(TypedDict):
+    name: str
+    isBot: bool
+
+
+class _ChatMessageRequired(TypedDict):
+    id: int
+    chatId: int
+    creationTime: str
+    text: str
+    resources: dict[str, Any]
+    type: str
+    canEdit: bool
+    canReact: bool
+    canDelete: bool
+    onlyVisibleForMyType: bool
+    flags: dict[str, Any]
+    hasContent: bool
+    hidden: bool
+    reactions: list[Any]
+    participantDisplay: ParticipantDisplay
+    participantId: str
+
+
+class WorkflowTransition(TypedDict):
+    id: int
+    topicId: int
+    applicantState: str
+    declinedByApplicant: bool
+
+
+class ChatMessage(_ChatMessageRequired, total=False):
+    # Приходят не во всех сообщениях
+    actions: dict[str, Any]
+    workflowTransitionId: int
+    workflowTransition: WorkflowTransition
+
+
+class ChatItemResources(TypedDict, total=False):
+    VACANCY: list[str]
+    RESUME: list[str]
+    NEGOTIATION_TOPIC: list[str]
+    RESPONSE_LETTER: list[str]
+    UNKNOWN: list[str]
+
+
+class ChatOperations(TypedDict):
+    allowed: list[str]
+
+
+class ChatItem(TypedDict):
+    id: int
+    type: str
+    subType: str | None
+    blockInfo: Any | None
+    unreadCount: int
+    resources: ChatItemResources
+    pinned: bool
+    notificationEnabled: bool
+    operations: ChatOperations
+    ownerViolatesRules: bool
+    currentParticipantId: str
+    lastMessage: ChatMessage | None
+    lastViewedByOpponentMessageId: int | None
+    lastViewedByCurrentUserMessageId: int | None
+    participantsIds: list[str]
+    onlineUntilTime: str | None
+    lastActivityTime: str
+
+
+class ChatsPage(TypedDict):
+    items: list[ChatItem]
+    found: int
+    nextFrom: str | None
+
+
+class ChatDisplayInfo(TypedDict):
+    title: str
+    subtitle: str
+    icon: str
+
+
+class ChatsResponse(TypedDict):
+    chats: ChatsPage
+    chatsDisplayInfo: dict[str, ChatDisplayInfo]
+    resources: dict[str, Any]
+
+
+# ---- ответ chat_data
+
+
+class WritePossibility(TypedDict):
+    name: str
+    writeDisabledReasons: list[str]
+
+
+class OwnerEmployerInfo(TypedDict):
+    id: int
+    state: str
+
+
+class ChatMessagesPage(TypedDict):
+    items: list[ChatMessage]
+    hasMore: bool
+
+
+class ChatDetails(TypedDict):
+    id: int
+    type: str
+    subType: str | None
+    blockInfo: Any | None
+    unreadCount: int
+    resources: ChatItemResources
+    pinned: bool
+    notificationEnabled: bool
+    writePossibility: WritePossibility
+    operations: ChatOperations
+    ownerViolatesRules: bool
+    ownerEmployerInfo: OwnerEmployerInfo
+    messages: ChatMessagesPage
+    currentParticipantId: str
+    lastViewedByOpponentMessageId: int | None
+    lastViewedByCurrentUserMessageId: int | None
+    participantsIds: list[str]
+    onlineUntilTime: str | None
+    lastActivityTime: str
+
+
+class VacancyCompany(TypedDict, total=False):
+    # Служебные поля с префиксом @ не описаны
+    id: int
+    name: str
+    visibleName: str
+    structureName: str
+    mainEmployerId: int
+    companySiteUrl: str
+    logos: dict[str, Any]
+    badges: dict[str, Any]
+
+
+# "from" — ключевое слово, поэтому функциональный синтаксис
+VacancyCompensation = TypedDict(
+    "VacancyCompensation",
+    {
+        "from": int,
+        "to": int,
+        "currencyCode": str,
+        "gross": bool,
+        "noCompensation": dict[str, Any],
+    },
+    total=False,
+)
+
+
+class VacancyLinks(TypedDict):
+    desktop: str
+    mobile: str
+
+
+class VacancyArea(TypedDict):
+    name: str
+    path: str
+
+
+class Vacancy(TypedDict, total=False):
+    # Описаны только основные поля, остальных у вакансии ещё много
+    vacancyId: int
+    name: str
+    company: VacancyCompany
+    compensation: VacancyCompensation
+    area: VacancyArea
+    links: VacancyLinks
+    creationTime: str
+    workExperience: str
+    employmentForm: str
+    closedForApplicants: bool
+    userTestPresent: bool
+    chatWritePossibility: str
+    professionalRoleIds: list[dict[str, Any]]
+    workFormats: list[dict[str, Any]]
+
+
+class ResumePhone(TypedDict):
+    type: str
+    country: str
+    city: str
+    number: str
+    formatted: str
+    raw: str
+    verified: bool
+    needVerification: bool
+    comment: str | None
+
+
+class ChatResume(TypedDict):
+    hash: str
+    id: int
+    userId: int
+    title: str
+    hiddenFields: list[str]
+    gender: str
+    phone: list[ResumePhone]
+
+
+class ParticipantName(TypedDict):
+    name: str
+
+
+class ParticipantTime(TypedDict):
+    dt: str
+
+
+class ParticipantRole(TypedDict):
+    name: str
+    display: str
+
+
+class ChatParticipant(TypedDict):
+    id: int
+    externalId: str
+    type: str
+    isCurrentUser: bool
+    key: str
+    display: ParticipantName
+    lastActivityTime: ParticipantTime
+    onlineUntilTime: ParticipantTime
+    entityId: int
+    role: ParticipantRole
+
+
+class NegotiationTopic(TypedDict):
+    topicId: int
+    vacancyId: int
+    resumeId: int
+    initialTopicType: str
+    currentTopicType: str
+    initialApplicantState: str
+    currentApplicantState: str
+
+
+class ChatDataResources(TypedDict):
+    vacancies: dict[str, Vacancy]
+    employers: dict[str, Any]
+    resumes: dict[str, ChatResume]
+    resumeHashById: dict[str, str]
+    participants: dict[str, ChatParticipant]
+    negotiation_topics: dict[str, NegotiationTopic]
+    addresses: dict[str, Any]
+    test_solutions: dict[str, Any]
+    file_info_by_upload_ids: dict[str, Any]
+    employer_assistant: dict[str, Any]
+
+
+class WriteMessageState(TypedDict):
+    allowed: bool
+    reasons: list[str]
+    reason: str | None
+
+
+class AllowedState(TypedDict):
+    allowed: bool
+
+
+class ChatStates(TypedDict):
+    writeMessageState: WriteMessageState
+    responseReminderState: AllowedState
+    sendFileState: AllowedState
+
+
+class SuggestionOptions(TypedDict):
+    options: list[Any]
+
+
+class Suggestions(TypedDict):
+    uuid: str
+    suggestionOptions: SuggestionOptions
+
+
+class ChatDataResponse(TypedDict):
+    chat: ChatDetails
+    resources: ChatDataResources
+    missingResources: dict[str, dict[str, Any]]
+    display: ChatDisplayInfo
+    chatStates: ChatStates
+    suggestions: Suggestions
+    hasMessagesWithTextButtons: bool
+    callAvailable: bool
+    negotiationTopicsAvailableStates: Any | None
 
 
 @dataclass
@@ -251,9 +549,9 @@ class Operation(BaseOperation):
             c.setdefault("system_prompt", DEFAULT_SYSTEM_PROMPT)
             self.ai_args = c
         else:
-            if self.loop_delay:
-                logger.error("Для работы в цикле нужен AI")
-                return 1
+            # if self.loop_delay:
+            #     logger.error("Для работы в цикле нужен AI")
+            #     return 1
             if not shutil.which(EDITORS[self.editor][0]):
                 logger.error("Редактор %s не найден", self.editor)
                 return 1
@@ -304,6 +602,10 @@ class Operation(BaseOperation):
     ) -> dict[str, str]:
         headers = {
             "Accept": "application/json",
+            "X-hhtmFrom": "resume_profile_front",
+            "X-hhtmFromLabel": "resume_profile_front",
+            "X-hhtmSource": "app",
+            "X-hhtmSourceLabel": "resume_profile_front",
             "X-Requested-With": "XMLHttpRequest",
             "X-Xsrftoken": self.tool.xsrf_token,
             **extra,
@@ -312,11 +614,20 @@ class Operation(BaseOperation):
             headers["Referer"] = refer_url
         return headers
 
+    def get_unread_count(self) -> UnreadCount:
+        """Количество непрочитанных чатов. Запрос без спецзаголовков."""
+        response = self.tool.session.get(f"{self.chat_url}/chatik/api/unread")
+        response.raise_for_status()
+        return response.json()
+
     def get_chats(
-        self, page: int, refer_url: str | None = None
-    ) -> dict[str, Any]:
+        self,
+        page: int,
+        refer_url: str | None = None,
+        unread: bool = False,
+    ) -> ChatsResponse:
         params: dict[str, Any] = {
-            "filterUnread": "false",
+            "filterUnread": "true" if unread else "false",
             "filterHasTextMessage": "false",
             "do_not_track_session_events": "true",
         }
@@ -331,23 +642,36 @@ class Operation(BaseOperation):
         response.raise_for_status()
         return response.json()
 
-    def get_chat_data(
-        self,
-        chat_id: int,
-        applicant_id: int,
-        refer_url: str | None = None,
-    ) -> dict[str, Any]:
+    def chat_referer(self, chat_id: int) -> str:
+        """Адрес страницы конкретного чата, он же Referer запросов к нему."""
+        return f"{self.chat_url}/chat/{chat_id}"
+
+    def get_chat_data(self, chat_id: int) -> ChatDataResponse:
         response = self.tool.session.get(
             f"{self.chat_url}/chatik/api/chat_data",
             params={
                 "chatId": chat_id,
-                "applicantId": applicant_id,
                 "do_not_track_session_events": "true",
             },
-            headers=self._headers(refer_url),
+            headers=self._headers(self.chat_referer(chat_id)),
         )
         response.raise_for_status()
         return response.json()
+
+    def mark_chat_read(self, chat_id: int, message_id: int) -> None:
+        response = self.tool.session.post(
+            f"{self.chat_url}/chatik/api/mark_read",
+            json={
+                "chatId": chat_id,
+                "messageId": message_id,
+                "hasUnreadDiscardMessage": False,
+            },
+            headers=self._headers(
+                self.chat_referer(chat_id),
+                **{"Content-Type": "application/json"},
+            ),
+        )
+        response.raise_for_status()
 
     def send_chat_message(
         self, chat_id: int, text: str, refer_url: str | None = None
@@ -357,6 +681,8 @@ class Operation(BaseOperation):
             json={
                 "chatId": chat_id,
                 "text": text,
+                # Я на самом деле не знаю, как это идентификатор на фронте
+                # генерируется
                 "idempotencyKey": str(uuid.uuid4()),
             },
             headers=self._headers(
@@ -374,14 +700,7 @@ class Operation(BaseOperation):
             f"{self.chat_url}/chatik/api/leave",
             json={"chatId": chat_id},
             headers=self._headers(
-                refer_url,
-                **{
-                    "Content-Type": "application/json",
-                    "X-hhtmFrom": "resume",
-                    "X-hhtmFromLabel": "resume",
-                    "X-hhtmSource": "app",
-                    "X-hhtmSourceLabel": "resume",
-                },
+                refer_url, **{"Content-Type": "application/json"}
             ),
         )
         response.raise_for_status()
@@ -442,7 +761,7 @@ class Operation(BaseOperation):
 
     @staticmethod
     def format_history_lines(
-        chat_data: dict[str, Any],
+        chat_data: ChatDataResponse,
     ) -> tuple[list[str], int]:
         """Возвращает сообщения чата по одному и их общее число."""
         chat = chat_data.get("chat") or {}
@@ -488,7 +807,7 @@ class Operation(BaseOperation):
 
     # --------------------------------------------------- collecting chats
 
-    def is_stale(self, item: dict[str, Any]) -> bool:
+    def is_stale(self, item: ChatItem) -> bool:
         last = item.get("lastMessage")
         if not self.max_age or not last or not last.get("creationTime"):
             return False
@@ -497,7 +816,7 @@ class Operation(BaseOperation):
 
     def parse_chat_item(
         self,
-        item: dict[str, Any],
+        item: ChatItem,
         resume: dict[str, Any],
         applicant_id: int,
         resources: dict[str, Any],
@@ -578,7 +897,9 @@ class Operation(BaseOperation):
         result: list[ChatToReply] = []
 
         for page in range(max_pages):
-            data = self.get_chats(page, refer_url=self.chat_page_url)
+            data = self.get_chats(
+                page, refer_url=self.chat_page_url, unread=True
+            )
             chats = data.get("chats") or {}
             items = chats.get("items") or []
             if not items:
@@ -672,6 +993,9 @@ class Operation(BaseOperation):
         """Один проход по чатам."""
         blacklist = set(self.tool.get_blacklisted())
 
+        cnt = self.get_unread_count()
+        logger.debug("Счетчик непрочитанных: %d", cnt["unreadCount"])
+
         chats = self.get_chats_awaiting_reply(self.max_pages)
         logger.debug("Чатов для ответа: %d", len(chats))
         if not chats:
@@ -685,9 +1009,10 @@ class Operation(BaseOperation):
 
     def load_history(self, chat: ChatToReply) -> tuple[list[str], int, bool]:
         """Возвращает сообщения чата, их число и можно ли писать в чат."""
-        chat_data = self.get_chat_data(
-            chat.chat_id, chat.applicant_id, refer_url=self.chat_page_url
-        )
+        chat_data = self.get_chat_data(chat.chat_id)
+        if not self.dry_run:
+            last_message = chat_data["chat"]["messages"]["items"][-1]
+            self.mark_chat_read(chat.chat_id, last_message["id"])
         state = (chat_data.get("chatStates") or {}).get(
             "writeMessageState"
         ) or {}
