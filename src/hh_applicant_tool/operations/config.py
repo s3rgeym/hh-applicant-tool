@@ -153,8 +153,7 @@ class Operation(BaseOperation):
             self._open_editor(config.path)
             return
 
-        # Default action: show content
-        print(config.path.read_text(encoding="utf-8"))
+        print(config)
 
     def _open_editor(self, filepath: Path) -> None:
         """Открывает файл в редакторе по умолчанию в зависимости от ОС."""

@@ -77,8 +77,8 @@ class Config(dict, ABC):
     def unlink(self) -> None:
         self._path.unlink(missing_ok=True)
 
-    def __str__(self) -> str:
-        return str(self._path)
+    # def __str__(self) -> str:
+    #     return str(self._path)
 
 
 class ConfigJSON(Config):
