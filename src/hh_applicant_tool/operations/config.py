@@ -86,7 +86,7 @@ class Operation(BaseOperation):
             help="Открыть конфигурационный файл в редакторе",
         )
         group.add_argument(
-            "-k", "--key", help="Вывести отдельное значение из конфига"
+            "-v", "--value", help="Вывести отдельное значение из конфига"
         )
         group.add_argument(
             "-s",
@@ -124,8 +124,8 @@ class Operation(BaseOperation):
                 logger.warning("Ключ '%s' не найден в конфиге.", key)
             return
 
-        if args.key:
-            value = get_value(config, args.key)
+        if args.value:
+            value = get_value(config, args.value)
             if value is not None:
                 print(value)
             return
