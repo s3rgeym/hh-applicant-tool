@@ -910,11 +910,11 @@ class Operation(BaseOperation):
             chat_resumes = resources.get("resumes") or {}
 
             for item in items:
-                if self.is_stale(item):
-                    if item.get("pinned"):
-                        continue
-                    # Чаты отсортированы по активности, дальше только старее
-                    return result
+                # Я не знаю что pinned=true значит
+                # if self.is_stale(item):
+                #     if item.get("pinned"):
+                #         continue
+                #     return result
 
                 if item["id"] in self.ignored_chats:
                     continue
