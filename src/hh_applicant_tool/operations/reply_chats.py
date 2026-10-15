@@ -479,7 +479,9 @@ class Operation(BaseOperation):
 
     def run(self, tool: HHApplicantTool, args: Namespace) -> int | None:
         if not tool.ai_enabled:
-            raise OperationError("Required AI")
+            raise OperationError(
+                "Операция требует включенного и настроенного AI"
+            )
 
         self.tool = tool
         self.resume_id = args.resume_id

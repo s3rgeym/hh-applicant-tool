@@ -1032,6 +1032,8 @@ class HHApplicantTool:
             self._parser.print_help(file=sys.stderr)
             return 2
 
+        # Если передан --loop, то только OperationCanceled и прерывание с
+        # клавиатуры, могут привести к выходу из цикла
         while True:
             try:
                 ret_code = self.operation_run(self, args) or 0
