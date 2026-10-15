@@ -110,6 +110,7 @@ class Operation(BaseOperation):
         assert xsrf == tool.xsrf_token
 
         self.pubkey = data["loginTrustFlagsSecret"]
+        logger.debug(self.pubkey)
 
         # Вход по паролю или запрос OTP-кода, с повторами при капче
         captcha: dict[str, Any] = {}
