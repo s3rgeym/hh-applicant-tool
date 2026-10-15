@@ -262,9 +262,8 @@ class ChatOpenAI:
         messages = self._build_messages(message, system_prompt, history)
 
         logger.debug(
-            "AI запрос: %s (сообщений в истории: %d)",
+            "AI запрос: %s",
             message,
-            len(self.history) + len(history or []),
         )
 
         return self._post_chat(

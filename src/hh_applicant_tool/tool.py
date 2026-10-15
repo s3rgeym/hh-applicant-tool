@@ -23,6 +23,8 @@ from urllib.parse import parse_qs, quote, urljoin, urlsplit
 
 import requests
 
+from hh_applicant_tool.utils.package import PACKAGE_NAME
+
 from . import ai, api
 from .constants import (
     ACCEPT_LANGUAGE,
@@ -38,6 +40,7 @@ from .constants import (
     DEFAULT_DESKTOP_USERAGENT,
     HH_BASE_URL,
     LOG_FILENAME,
+    REPO_URL,
 )
 from .errors import Error, OperationCanceled, OperationError
 from .utils.argparse import ArgumentFormatter
@@ -311,7 +314,14 @@ class HHApplicantTool:
 
     @cached_property
     def ai_session(self) -> requests.Session:
-        return requests.Session()
+        session = requests.Session()
+        session.headers.update(
+            {
+                "User-Agent": f"{PACKAGE_NAME} (+{REPO_URL})",
+            }
+        )
+        logger.debug("AI Default Headers: %r", session.headers)
+        return session
 
     @cached_property
     def config_dir_path(self) -> Path:
@@ -1025,6 +1035,5 @@ class HHApplicantTool:
                 logger.error(f"Не удалось сохранить cookies: {ex}")
 
             self._save_config_if_needed()
-            self._check_system()
 
         return 1

@@ -9,7 +9,6 @@ CONFIG_DIR = config.get_config_directory()
 CONFIG_FILENAME = "config.toml"
 AUTH_CONFIG_FILENAME = "auth.json"
 LOG_FILENAME = "log.txt"
-DATABASE_FILENAME = "data"
 COOKIES_FILENAME = "cookies.txt"
 HH_BASE_URL = "https://hh.ru"
 # Та же страница капчи возвращает 404-ую, если юзер-агент не похож на
