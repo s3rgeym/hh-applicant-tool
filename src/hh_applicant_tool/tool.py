@@ -972,22 +972,22 @@ class HHApplicantTool:
         return result[0].strip()
 
     def logout(self) -> None:
-        if self.is_logged_in:
-            r = self.session.post(
-                f"{self.base_url}/logout", {"_xsrf": self.xsrf_token}
-            )
-            if r.status_code == 302:
-                logger.info("session revoked")
-            else:
-                logger.warning("session does not exist")
-        try:
-            self.api_client.delete("/oauth/token")
-            self.api_client.reset_tokens()
-            logger.info("token revoked")
-        except api.errors.Forbidden:
-            logger.warning("token has expired or been revoked")
+        self.session.get(
+            f"{self.base_url}/logout", {"hhtmFrom": "main"}
+        )
+
+        # Она всегда 302 возвращает, даже если ты не авторизован
+        # узнать вышел ли ты нельзя
+        # logger.debug("/logout %d", r.status_code)
+        
         # Затираем куки
         self.session.cookies.clear()
+
+        # И отзываем токен
+        try:
+            self.api_client.delete("/oauth/token")
+        finally:
+            self.api_client.reset_tokens()
 
     @cached_property
     def captcha_ai(self) -> ai.ChatOpenAI:
@@ -1039,7 +1039,7 @@ class HHApplicantTool:
                 logger.debug("Операция завершена с кодом: %d", ret_code)
                 if not self.loop:
                     return ret_code
-                logger.debug("Ожидаем %d сек перед повторением операции %s")
+                logger.debug("Ожидаем %d сек перед повторением операции", args.loop)
                 time.sleep(args.loop)
         except (OperationCanceled, KeyboardInterrupt, EOFError):
             logger.warning("Выполнение операции прервано!")
