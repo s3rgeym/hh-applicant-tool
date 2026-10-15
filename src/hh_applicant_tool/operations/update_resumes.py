@@ -30,9 +30,6 @@ class Operation(BaseOperation):
 
     def run(self, tool: HHApplicantTool, args: BaseNamespace) -> None:
         resumes: list[datatypes.Resume] = tool.get_resumes()
-        # Там вызов API меняет поля
-        tool.storage.resumes.save_batch(resumes)
-
         for resume in resumes:
             if not resume.get("can_publish_or_update"):
                 logger.warning(f"Не могу обновить: {resume['alternate_url']}")

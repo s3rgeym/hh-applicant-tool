@@ -53,10 +53,6 @@ class Operation(BaseOperation):
             )
             or "Анонимный аккаунт"
         )
-        with tool.storage.settings as s:
-            s.set_value("user.full_name", full_name)
-            s.set_value("user.email", result.get("email"))
-            s.set_value("user.phone", result.get("phone"))
         counters = result.get("counters", {})
         print(
             f"🆔 {result['id']} {full_name} "

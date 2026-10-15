@@ -31,7 +31,6 @@ class Operation(BaseOperation):
     def run(self, tool: HHApplicantTool, args: Namespace) -> None:
         resumes: PaginatedItems[datatypes.Resume] = tool.get_resumes()
         logger.debug(resumes)
-        tool.storage.resumes.save_batch(resumes)
 
         print_table(
             headers=["ID", "Название", "Статус"],

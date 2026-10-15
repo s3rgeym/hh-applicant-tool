@@ -73,7 +73,7 @@ class Operation(BaseOperation):
             "X-Hhtmsource": "negotiation_list",
             "X-Requested-With": "XMLHttpRequest",
             "X-Xsrftoken": self.tool.xsrf_token,
-            "Refrerer": "https://hh.ru/applicant/negotiations?hhtmFrom=main&hhtmFromLabel=header",
+            "Refrerer": f"{self.tool.base_url}/applicant/negotiations?hhtmFrom=main&hhtmFromLabel=header",
         }
 
         payload = {
@@ -84,7 +84,7 @@ class Operation(BaseOperation):
 
         try:
             r = self.tool.session.post(
-                "https://hh.ru/applicant/negotiations/trash",
+                f"{self.tool.base_url}/applicant/negotiations/trash",
                 payload,
                 headers=headers,
             )
@@ -98,17 +98,6 @@ class Operation(BaseOperation):
         blacklisted = set(self.tool.get_blacklisted())
         for negotiation in self.tool.get_negotiations():
             vacancy = negotiation["vacancy"]
-
-            # Если работодателя блокируют, то он превращается в null
-            # ХХ позволяет скрывать компанию, когда id нет, а вместо имени "Крупная российская компания"
-            # sqlite3.IntegrityError: NOT NULL constraint failed: negotiations.employer_id
-            # try:
-            #     storage.negotiations.save(negotiation)
-            # except RepositoryError as e:
-            #     logger.exception(e)
-
-            # print(negotiation)
-            # raise RuntimeError()
 
             if self.args.older_than:
                 updated_at = parse_api_datetime(negotiation["updated_at"])

@@ -7,12 +7,10 @@ import json
 import logging
 import re
 import smtplib
-import sqlite3
 import sys
 from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import KW_ONLY, dataclass
-from datetime import datetime, timedelta
 from functools import cached_property
 from http.cookiejar import MozillaCookieJar
 from importlib import import_module
@@ -36,19 +34,16 @@ from .constants import (
     CONFIG_DIR,
     CONFIG_FILENAME,
     COOKIES_FILENAME,
-    DATABASE_FILENAME,
     DEFAULT_CAPTCHA_LANGUAGE,
     DEFAULT_DESKTOP_USERAGENT,
     HH_BASE_URL,
     LOG_FILENAME,
 )
 from .errors import Error, OperationCanceled, OperationError
-from .storage import StorageFacade
 from .utils.argparse import ArgumentFormatter
 from .utils.config import ConfigJSON, ConfigTOML
 from .utils.helpers import get_proxies_dict
 from .utils.log import setup_logger
-from .utils.package import get_package_version, parse_version
 from .utils.system import has_gui_support, is_docker
 from .utils.term import print_kitty_image, print_sixel_image, setup_terminal
 from .utils.user_agent import generate_android_useragent
@@ -340,19 +335,6 @@ class HHApplicantTool:
     @cached_property
     def cookies_file(self) -> Path:
         return self.config_dir_path / COOKIES_FILENAME
-
-    @cached_property
-    def db_path(self) -> Path:
-        return self.config_dir_path / DATABASE_FILENAME
-
-    @cached_property
-    def db(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        return conn
-
-    @cached_property
-    def storage(self) -> StorageFacade:
-        return StorageFacade(self.db)
 
     # def get_section_config(self, section: str) -> dict:
     #     keys = section.split(".")
@@ -1006,41 +988,6 @@ class HHApplicantTool:
         )
         setup_logger(logger, verbosity_level, self.log_file)
         setup_terminal()
-
-    def _get_latest_version(self) -> Literal[False] | str:
-        try:
-            response = self.session.get(
-                "https://pypi.org/pypi/hh-applicant-tool/json", timeout=15
-            )
-            ver = response.json().get("info", {}).get("version")
-            # logger.debug(ver)
-            return ver
-        except requests.RequestException:
-            return False
-
-    def _check_version(self) -> bool:
-        if datetime.now().timestamp() >= self.storage.settings.get_value(
-            "_next_version_check", 0
-        ):
-            if v := self._get_latest_version():
-                self.storage.settings.set_value("_latest_version", v)
-                self.storage.settings.set_value(
-                    "_next_version_check", datetime.now() + timedelta(hours=1)
-                )
-
-        if (
-            latest_ver := self.storage.settings.get_value("_latest_version")
-        ) and (cur_ver := get_package_version()):
-            if parse_version(latest_ver) > parse_version(cur_ver):
-                logger.warning(
-                    "ТЕКУЩАЯ ВЕРСИЯ %s УСТАРЕЛА. РЕКОМЕНДУЕТСЯ ОБНОВИТЬ ЕЁ ДО ВЕРСИИ %s.",
-                    cur_ver,
-                    latest_ver,
-                )
-
-    def _check_system(self):
-        if not self.storage.settings.get_value("disable_version_check", False):
-            self._check_version()
 
     def _assign_args(self, args: BaseNamespace) -> None:
         for k, v in vars(args).items():

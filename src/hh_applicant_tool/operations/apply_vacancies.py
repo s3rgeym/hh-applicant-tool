@@ -7,7 +7,6 @@ import logging
 import random
 import re
 import time
-from datetime import datetime
 from email.message import EmailMessage
 from itertools import chain
 from pathlib import Path
@@ -23,7 +22,6 @@ from ..api import BadResponse, Redirect, datatypes
 from ..api.datatypes import PaginatedItems, SearchVacancy
 from ..api.errors import ApiError, LimitExceeded
 from ..errors import OperationError
-from ..storage.repositories.errors import RepositoryError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.datatypes import VacancyTestsData
 from ..utils.string import (
@@ -529,10 +527,6 @@ class Operation(BaseOperation):
 
     def _apply_vacancies(self) -> None:
         resumes: list[datatypes.Resume] = self.tool.get_resumes()
-        try:
-            self.tool.storage.resumes.save_batch(resumes)
-        except RepositoryError as ex:
-            logger.exception(ex)
         if self.resume_id:
             resumes = [x for x in resumes if x["id"] == self.resume_id]
             if not resumes:
@@ -557,13 +551,6 @@ class Operation(BaseOperation):
                 )
                 print("⛔ Лимит откликов hh.ru исчерпан. Попробуйте позже.")
                 break
-
-        # Синхронизация откликов
-        # for neg in self.tool.get_negotiations():
-        #     try:
-        #         self.tool.storage.negotiations.save(neg)
-        #     except RepositoryError as e:
-        #         logger.warning(e)
 
         print("📝 Отклики на вакансии разосланы!")
 
@@ -596,7 +583,6 @@ class Operation(BaseOperation):
             placeholders.update(self._get_resume_info(resume.get("id")))
 
         do_apply = True
-        storage = self.tool.storage
         site_emails = {}
 
         for vacancy in self._get_vacancies(resume_id=resume["id"]):
@@ -616,22 +602,11 @@ class Operation(BaseOperation):
                     **placeholders,
                 }
 
-                try:
-                    storage.vacancies.save(vacancy)
-                except RepositoryError as ex:
-                    logger.debug(ex)
-
                 # По факту контакты можно получить только здесь?!
                 if vacancy.get("contacts"):
                     logger.debug(
                         f"Найдены контакты в вакансии: {vacancy['alternate_url']}"
                     )
-
-                    try:
-                        # logger.debug(vacancy)
-                        storage.vacancy_contacts.save(vacancy)
-                    except RepositoryError as ex:
-                        logger.exception(ex)
 
                 if not do_apply:
                     continue
@@ -681,10 +656,6 @@ class Operation(BaseOperation):
                     )
 
                     if not self.dry_run:
-                        self._save_skipped_vacancy(
-                            vacancy, "excluded_filter", resume["id"]
-                        )
-
                         self.api_client.put(
                             f"/vacancies/blacklisted/{vacancy['id']}"
                         )
@@ -696,17 +667,6 @@ class Operation(BaseOperation):
 
                 # AI фильтрация вакансий
                 if self.ai_filter and self.vacancy_filter_ai:
-                    if self._is_vacancy_already_skipped(vacancy, resume["id"]):
-                        logger.debug(
-                            "Вакансия уже была отклонена ранее: %s",
-                            vacancy["alternate_url"],
-                        )
-                        print(
-                            "⏩ Вакансия уже отклонена ранее",
-                            vacancy["alternate_url"],
-                        )
-                        continue
-
                     if not self._is_vacancy_suitable(
                         vacancy, message_placeholders
                     ):
@@ -718,10 +678,10 @@ class Operation(BaseOperation):
                             "🧠 AI посчитал неподходящей",
                             vacancy["alternate_url"],
                         )
-
-                        self._save_skipped_vacancy(
-                            vacancy, "ai_rejected", resume["id"]
-                        )
+                        if not self.dry_run:
+                            self.api_client.put(
+                                f"/vacancies/blacklisted/{vacancy['id']}"
+                            )
                         continue
 
                 # Перед откликом выгружаем профиль компании
@@ -733,11 +693,6 @@ class Operation(BaseOperation):
 
                     # Какая блядь эту строку стерла?
                     seen_employers.add(employer_id)
-
-                    try:
-                        storage.employers.save(employer_profile)
-                    except RepositoryError as ex:
-                        logger.exception(ex)
 
                     # Если есть сайт, то ищем на нем емейлы для отправки письма
                     if self.send_email and (
@@ -761,24 +716,6 @@ class Operation(BaseOperation):
 
                         if site_info:
                             logger.debug("site info: %r", site_info)
-
-                            # try:
-                            #     subdomains = self._get_subdomains(site_url)
-                            # except requests.RequestException as ex:
-                            #     subdomains = []
-                            #     logger.error(ex)
-
-                            try:
-                                storage.employer_sites.save(
-                                    {
-                                        "site_url": site_url,
-                                        "employer_id": employer_id,
-                                        "subdomains": [],
-                                        **site_info,
-                                    }
-                                )
-                            except RepositoryError as ex:
-                                logger.exception(ex)
 
                 letter = ""
 
@@ -1276,43 +1213,3 @@ class Operation(BaseOperation):
         description = res["description"]
         logger.debug("vacancy description: %.255s", description)
         return bool(self.excluded_pat.search(description))
-
-    def _is_vacancy_already_skipped(
-        self, vacancy: SearchVacancy, resume_id: str | None = None
-    ) -> bool:
-        vacancy_id = vacancy["id"]
-
-        if resume_id:
-            if any(
-                self.tool.storage.skipped_vacancies.find(
-                    resume_id=resume_id,
-                    vacancy_id=vacancy_id,
-                )
-            ):
-                return True
-
-        return any(
-            self.tool.storage.skipped_vacancies.find(
-                resume_id="",
-                vacancy_id=vacancy_id,
-            )
-        )
-
-    def _save_skipped_vacancy(
-        self,
-        vacancy: SearchVacancy,
-        reason: str,
-        resume_id: str | None = None,
-    ) -> None:
-        employer = vacancy.get("employer", {})
-        self.tool.storage.skipped_vacancies.save(
-            {
-                "resume_id": resume_id or "",
-                "vacancy_id": vacancy["id"],
-                "reason": reason,
-                "alternate_url": vacancy.get("alternate_url"),
-                "name": vacancy.get("name"),
-                "employer_name": employer.get("name"),
-                "created_at": datetime.now(),
-            }
-        )

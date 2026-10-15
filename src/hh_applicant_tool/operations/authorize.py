@@ -8,7 +8,6 @@ import random
 import re
 import time
 from dataclasses import dataclass
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urljoin, urlsplit
 
@@ -63,30 +62,25 @@ class Operation(BaseOperation):
         parser.add_argument("password", nargs="?", help="Пароль")
 
     def run(self, tool: HHApplicantTool, args) -> int | None:
+        self.tool = tool
         api_client = tool.api_client
-        storage = tool.storage
         session = tool.session
 
         username = (
-            args.username
-            or storage.settings.get_value("auth.username")
-            or input("👤 Введите email или телефон: ")
+            args.username or input("👤 Введите email или телефон: ")
         ).strip()
         if not username:
             raise OperationError("Empty username")
         logger.debug("authenticate with: %s", username)
 
         # Пароль необязателен: если его нет, авторизуемся по одноразовому коду
-        self.password = args.password or storage.settings.get_value(
-            "auth.password"
-        )
+        password = args.password
 
         self.is_email = "@" in username
         if not self.is_email:
             username = self._normalize_phone_number(username)
 
         self.tool = tool
-        self.username = username
 
         # https://api.hh.ru/openapi/redoc#section/Avtorizaciya/Zapros-avtorizacii-pod-drugim-polzovatelem
         # Если аккаунт еще и как работодатель может войти, то по умолчанию перекидывает на авторизацию
@@ -110,10 +104,10 @@ class Operation(BaseOperation):
 
         data = tool.parse_initial_state(r)
 
-        self.xsrf = data["xsrfToken"]
+        xsrf = data["xsrfToken"]
 
         # На всякий случай проверим, что значение из cookie совпадает с тем, что на странице
-        assert self.xsrf == tool.xsrf_token
+        assert xsrf == tool.xsrf_token
 
         self.pubkey = data["loginTrustFlagsSecret"]
 
@@ -124,7 +118,7 @@ class Operation(BaseOperation):
         while True:
             time.sleep(random.uniform(3.0, 5.0))
 
-            result = self.login(username, self.password, **captcha)
+            result = self.login(username, password, **captcha)
 
             if result.success:
                 break
@@ -153,9 +147,9 @@ class Operation(BaseOperation):
             }
 
         # По паролю мы уже вошли, а для OTP нужно еще ввести полученный код
-        if not self.password:
+        if not password:
             try:
-                self._confirm_otp()
+                self._confirm_otp(username)
             except OtpConfirmError as ex:
                 raise OperationError(str(ex)) from ex
 
@@ -186,8 +180,6 @@ class Operation(BaseOperation):
         # 5. Обмен кода на токен
         token = api_client.oauth_client.authenticate(auth_code)
         api_client.handle_access_token(token)
-        storage.settings.set_value("auth.username", username)
-        storage.settings.set_value("auth.last_login", datetime.now())
         # Куки уже лежат в tool.session — копировать ничего не нужно.
         print("🎉 Авторизация прошла успешно!")
 
@@ -218,13 +210,6 @@ class Operation(BaseOperation):
 
     @staticmethod
     def _log_response(r) -> None:
-        # r.url и r.request.url у финального ответа совпадают, а вот
-        # промежуточные редиректы лежат в r.history, их и выводим отдельно
-        for h in r.history:
-            logger.debug(
-                f"{h.request.method} {h.url} {h.status_code} "
-                f"-> {h.headers.get('location')}"
-            )
         logger.debug(f"{r.request.method} {r.url} {r.status_code}")
 
     def _login_headers(self) -> dict[str, str]:
@@ -235,7 +220,7 @@ class Operation(BaseOperation):
             "X-Hhtmfrom": "",
             "X-Hhtmsource": "account_login",
             "X-Requested-With": "XMLHttpRequest",
-            "X-Xsrftoken": self.xsrf,
+            "X-Xsrftoken": self.tool.xsrf_token,
             "Referer": self.redirect_url,
         }
 
@@ -341,7 +326,7 @@ class Operation(BaseOperation):
             captcha_error=bool(hhcaptcha.get("captchaError")),
         )
 
-    def _confirm_otp(self) -> None:
+    def _confirm_otp(self, username) -> None:
         """Ввод кода из SMS/Email и подтверждение входа."""
         code_from = ["SMS", "Email"][self.is_email]
         code_icon = ["📱", "📧"][self.is_email]
@@ -353,7 +338,7 @@ class Operation(BaseOperation):
             raise OtpConfirmError("Код подтверждения не может быть пустым.")
 
         params = {
-            "username": self.username,
+            "username": username,
             "code": code,
             "backurl": self.redirect_url,
             "operationType": "applicant_otp_auth",
