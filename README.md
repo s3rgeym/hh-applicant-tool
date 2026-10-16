@@ -265,6 +265,14 @@ $ hh-applicant-tool update-resumes
 # Запускаем автоответчик в чате (если настроен openai)
 $ hh-applicant-tool reply-chats
 
+# Чистим отказы
+$ hh-applicant-tool clear-negotiations
+
+# Проверка доступных обновлений
+$ hh-applicant-tool check-updates
+🚀 Доступна новая версия: 2.3.4 (у вас 2.3.3)
+📦 Обновить: pip install -U hh-applicant-tool
+
 # Просмотр лога в реальном времени
 $ hh-applicant-tool log -f
 
@@ -284,9 +292,6 @@ $ hh-applicant-tool config openai.default.proxy_url
 # Удалить значение из конфига
 # Эта операция тоже форматирует конфиг, удаляя из него комментарии
 $ hh-applicant-tool config -d openai.default.proxy_url
-
-# Чистим отказы
-$ hh-applicant-tool clear-negotiations
 ```
 
 AI (ChatGPT и тп) будет использоваться автоматически, если в [конфиге](#конфигурационный-файл) заданы настройки для `openai`.
