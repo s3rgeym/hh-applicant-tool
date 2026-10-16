@@ -72,7 +72,7 @@
   - [Капча](#капча)
   - [Настройки и данные приложения](#настройки-и-данные-приложения)
     - [Конфигурационный файл](#конфигурационный-файл)
-    - [auth.json](#authjson)
+    - [token.json](#tokenjson)
     - [cookies.txt](#cookiestxt)
     - [Логи](#логи)
     - [Переменные окружения](#переменные-окружения)
@@ -203,7 +203,7 @@ $ hh-applicant-tool whoami
 🆔 27405918 Кузнецов Андрей Владимирович [ 📄 1 | 👁️ +115 | ✉️ +28 ]
 ```
 
-В случае успешной авторизации токены будут сохранены в [auth.json](#authjson):
+В случае успешной авторизации токены будут сохранены в [token.json](#tokenjson):
 
 Токен доступа выдается на две недели. <s>Для его обновления нужно выполнить:
 
@@ -288,13 +288,13 @@ AI (ChatGPT и тп) будет использоваться автоматич�
 
 Глобальные флаги:
 
-| Флаг                                                                                               | Описание                                                                                             |
-| -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `-v`                                                                                               | используется для вывода отладочной информации. Два таких флага, например, выводят запросы к **API**. |
-| `-c <path>`                                                                                        | путь до каталога, где хранятся конфигурации.                                                         |
-| `--profile <profile-id>`                                                                           | можно указать профиль, данные которого будут храниться в подкаталоге. |
-| `--use-kitty/--use-sixel`                                                                          | использовать опр протокол для отображения капчи в терминале. Если не указывать, то капча будет отображена через `tkinter`, если тот установлен.... |
-| `--no-use-ai/--no-ai`                                                                              | игнорировать настройки AI в конфиге. |
+| Флаг                      | Описание                                                                                                                                           |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-v`                      | используется для вывода отладочной информации. Два таких флага, например, выводят запросы к **API**.                                               |
+| `-c <path>`               | путь до каталога, где хранятся конфигурации.                                                                                                       |
+| `--profile <profile-id>`  | можно указать профиль, данные которого будут храниться в подкаталоге.                                                                              |
+| `--use-kitty/--use-sixel` | использовать опр протокол для отображения капчи в терминале. Если не указывать, то капча будет отображена через `tkinter`, если тот установлен.... |
+| `--no-use-ai/--no-ai`     | игнорировать настройки AI в конфиге.                                                                                                               |
 
 Доступные операции (имеют свои флаги, название операции идет после флагов самого hh-applicant-tool):
 
@@ -714,9 +714,9 @@ TypeError: ApiClient.__init__() got an unexpected keyword argument 'timeoutt'
 
 Это универсальнее rate limit'ов, так как работать будет везде, а не только там, где можно друг-другом пять запросов выполнить, а на 6 лимит сработает. Много где 5 запросов в секунду - это 5 запросов с задержкой до 200мс.
 
-### auth.json
+### token.json
 
-Хранит токены авторизации.
+Токены авторизации вынесены в отдельный конфиг, так как при программном сохранении конфига TOML, из того пропадают комментарии. Для хранения в JSON особых причин нет, TOML то же бы подошел, но этот так исторически сложилось...
 
 ### cookies.txt
 
@@ -788,96 +788,104 @@ TypeError: ApiClient.__init__() got an unexpected keyword argument 'timeoutt'
 
 ---
 
----
-
 ## Запуск через Docker
 
-Это самый простой способ запуска и использования утилиты, требующий скопипастить 5 команд. Если не работает стандартная установка, используйте его.
-
-Для начала нужно установить `docker` и `docker-compose`:
-
 ```sh
-sudo apt install docker.io docker-compose-v2
-```
+# git clone ...
+# cd http-applicant-tool
 
-Выкачиваем репозиторий и переходим в каталог:
+# Создаем образ из Dockerfile
+sudo docker build -t hh_applicant_tool \
+  --build-arg UID=$(id -u) --build-arg GID=$(id -g) .
 
-```sh
-git clone https://github.com/s3rgeym/hh-applicant-tool
-cd hh-applicant-tool
+# Потом можно авторизоваться
+sudo docker run --rm -it \
+  -v /path/to/config:/config \
+  -v /etc/localtime:/etc/localtime:ro \
+  hh_applicant_tool authorize '79...' 'your_password'
+
+# Авторизацию проверить
+sudo docker run --rm -it \
+  -v /path/to/config:/config \
+  -v /etc/localtime:/etc/localtime:ro \
+  hh_applicant_tool whoami
 ```
 
 > [!IMPORTANT]
-> Команды с docker compose нужно запускать строго, находясь в данном каталоге!
+> В примерах выше и ниже замените `/path/to/config` на реальный путь,
+> существующий в системе
 
-Теперь авторизуемся:
+Для удобства можно создать композ типа такого:
 
-```sh
-# Чтобы ввести капчу в терминале укажите флаги --use-sixel/-s или --use-kitty/-k
-# Это названия протоколов, которые исп-ся терминалом для отображения изображений
-# Sixel поддерживается большинством терминалов
-# А вот Windows Terminal поддерживает только Kitty
-docker compose run --rm -it hh_applicant_tool -vv authorize
+`docker-compose.yml`
+
+```yaml
+x-common: &common
+  image: hh_applicant_tool:latest
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      UID: ${UID:-1000}
+      GID: ${GID:-1000}
+  volumes:
+    - /path/to/config:/config:rw
+    - /etc/localtime:/etc/localtime:ro
+  restart: unless-stopped
+  environment:
+    - TERM=${TERM:-xterm}
+  # В Dockerfile ENTRYPOINT = hh-applicant-tool, поэтому для цикла подменяем его на sh
+  entrypoint: ['sh', '-c']
+
+services:
+  # Разовые команды: docker compose run --rm manual authorize
+  manual:
+    <<: *common
+    entrypoint: ['hh-applicant-tool']
+    profiles: ['manual']
+    restart: 'no'
+
+  apply-vacancies:
+    <<: *common
+    command:
+      - |
+        while true; do
+          hh-applicant-tool apply-vacancies
+          sleep 7200
+        done
+
+  update-resumes:
+    <<: *common
+    command:
+      - |
+        while true; do
+          hh-applicant-tool update-resumes
+          sleep 14400
+        done
+
+  reply-chats:
+    <<: *common
+    command:
+      - |
+        while true; do
+          hh-applicant-tool reply-chats
+          sleep 300
+        done
 ```
 
-Все аргументы, переданные после имени сервиса, попадают напрямую в `hh-applicant-tool`.
-
-Подробно про авторизацию можно почитать [здесь](#авторизация).
-
-При успешно авторизации будет создан `auth.json`:
+И далее авторизуемся:
 
 ```sh
-$ cat config/auth.json
-{"token":{"access_token":"USERXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX","refresh_token":"USERXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX","access_expires_at":1790000000}}
+sudo docker compose run --rm manual authorize
 ```
 
-После авторизации нужно настроить AI в файле `config/config.toml`.
-
-Далее запускаем сервисы:
+А потом запускаем рассылки, автоответчик и поднятие резюме:
 
 ```sh
-docker compose up -d
+sudo docker compose up -d
 ```
 
-Что делает при запуске:
-
-- рассылает отклики со всех опубликованных резюме раз в сутки
-- поднимает ВСЕ резюме раз в 4 часа
-- запускает автоответчик в чате, с проверкой чатов раз в 5 минут.
-
-Просмотр логов:
-
-```sh
-docker compose logs -f
-```
-
-Чтобы прекратить просмотр логов, нажмите `Ctrl-C`.
-
-Запущенные сервисы докер стартуют автоматически после перезагрузки и перезапускаются при падении. Остановить их можно выполнив:
-
-```sh
-docker compose down
-```
-
-Чтобы обновить утилиту, в большинстве случаев достаточно в каталоге выполнить:
-
-```sh
-git pull
-```
-
-В редких случаях нужно пересобрать все:
-
-```sh
-docker compose up -d --build
-```
-
-Профиль, под которым работает утилита, можно задать переменной окружения `HH_PROFILE_ID`.
-
-[Команды](#описание-команд) можно потестировать в контейнере:
-
-```sh
-docker compose run --rm -it hh_applicant_tool whoami
-```
+Композ я советую свой написать, этот не лучший, поэтому я его и не стал добавлять в репозиторий.
 
 ---
 

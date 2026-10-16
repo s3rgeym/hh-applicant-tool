@@ -253,6 +253,7 @@ class ApiClient(BaseClient):
     captcha_handler: Callable[[str], bool] | None = None
     captcha_cooldown: float | None = None
     max_captcha_attempts: int | None = None
+    on_token_change: Callable[[str], None] | None = None
 
     _captcha_lock: Lock = field(
         default_factory=Lock, init=False, compare=False, repr=False
@@ -354,7 +355,7 @@ class ApiClient(BaseClient):
                     try:
                         self.refresh_access_token()
                     # Ошибка слишком общая
-                    except errors.ApiError:
+                    except (errors.BadRequest, errors.Forbidden):
                         self.reset_tokens()
                         raise
                     refreshed = True
@@ -363,11 +364,15 @@ class ApiClient(BaseClient):
         self.access_token = None
         self.refresh_token = None
         self.access_expires_at = 0
+        if self.on_token_change:
+            self.on_token_change(self.get_access_token())
 
     def handle_access_token(self, token: AccessToken) -> None:
         for name in ("access_token", "refresh_token", "access_expires_at"):
             if name in token and hasattr(self, name):
                 setattr(self, name, token[name])
+        if self.on_token_change:
+            self.on_token_change(self.get_access_token())
 
     def refresh_access_token(self) -> None:
         if not self.refresh_token:

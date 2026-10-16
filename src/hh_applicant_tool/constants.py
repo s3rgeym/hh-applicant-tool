@@ -3,11 +3,13 @@
 # подмодуле
 from __future__ import annotations
 
+import re
+
 from .utils import config
 
 CONFIG_DIR = config.get_config_directory()
 CONFIG_FILENAME = "config.toml"
-AUTH_CONFIG_FILENAME = "auth.json"
+TOKEN_CONFIG_FILENAME = "token.json"
 LOG_FILENAME = "log.txt"
 COOKIES_FILENAME = "cookies.txt"
 HH_BASE_URL = "https://hh.ru"
@@ -44,3 +46,7 @@ ANDROID_CLIENT_SECRET = (
 # Android-приложение перенаправляет на данную ссылку.
 # Не знаю учитывается ли.
 CAPTCHA_SUCCESS_BACKURL = "hh://applicant/captchaSuccessBackUrl"
+
+HH_DOMAIN_RE = re.compile(
+    r"^(?:.*\.)?(?:hh\.(?:ru|kz|uz|by|net|com)|rabota\.by)\.?$"
+)

@@ -5,10 +5,9 @@ import copy
 import html
 import json
 import logging
-import re
+import signal
 import smtplib
 import sys
-import time
 from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import KW_ONLY, dataclass
@@ -32,7 +31,6 @@ from .constants import (
     ANDROID_CLIENT_ID,
     ANDROID_CLIENT_SECRET,
     ANDROID_WEBVIEW_USERAGENT,
-    AUTH_CONFIG_FILENAME,
     CAPTCHA_SUCCESS_BACKURL,
     CONFIG_DIR,
     CONFIG_FILENAME,
@@ -40,8 +38,10 @@ from .constants import (
     DEFAULT_CAPTCHA_LANGUAGE,
     DEFAULT_DESKTOP_USERAGENT,
     HH_BASE_URL,
+    HH_DOMAIN_RE,
     LOG_FILENAME,
     REPO_URL,
+    TOKEN_CONFIG_FILENAME,
 )
 from .errors import Error, OperationCanceled, OperationError
 from .utils.argparse import ArgumentFormatter
@@ -310,7 +310,9 @@ class HHApplicantTool:
             session.cookies.update(jar)
 
         # Запоминаем куки, которые были при инициализации
-        self._original_cookies = list(session.cookies)
+        self._cookies_fingerprint = self._get_cookie_fingerprint(
+            self._get_hh_cookies(session.cookies)
+        )
         return session
 
     @property
@@ -345,8 +347,8 @@ class HHApplicantTool:
         return ConfigTOML(self.config_dir_path / CONFIG_FILENAME)
 
     @cached_property
-    def auth_config(self) -> ConfigJSON:
-        return ConfigJSON(self.config_dir_path / AUTH_CONFIG_FILENAME)
+    def token_config(self) -> ConfigJSON:
+        return ConfigJSON(self.config_dir_path / TOKEN_CONFIG_FILENAME)
 
     @cached_property
     def log_file(self) -> Path:
@@ -383,8 +385,8 @@ class HHApplicantTool:
 
     @cached_property
     def api_client(self) -> api.client.ApiClient:
-        token = self.auth_config.get("token", self.config.get("token", {}))
-        client_config = self.config.get("api_client", {}).copy()
+        token = self.token_config.get("token") or {}
+        client_config = dict(self.config.get("api_client") or {})
         client_config.setdefault("proxy_url", self.proxy_url)
         if self.api_delay:
             client_config["delay"] = self.api_delay
@@ -397,10 +399,10 @@ class HHApplicantTool:
             client_secret=ANDROID_CLIENT_SECRET,
             user_agent=generate_android_useragent(),
             captcha_handler=self.handle_captcha,
+            on_token_change=self._save_token,
             **client_config,
         )
 
-        self._original_token = client.get_access_token()
         return client
 
     def get_ai_client(
@@ -580,43 +582,40 @@ class HHApplicantTool:
         logger.debug("check initial state: %s %d", r.url, r.status_code)
         return self.parse_initial_state(r)
 
-    def save_token(self) -> bool:
-        # Методы API не вызывались
-        if not hasattr(self, "_original_token"):
-            return False
+    @staticmethod
+    def _get_cookie_fingerprint(cookies) -> frozenset:
+        return frozenset(
+            (c.domain, c.path, c.name, c.value, c.expires, c.secure)
+            for c in cookies
+        )
 
-        token = self.api_client.get_access_token()
-
-        # Поля токена не изменились
-        if token == self._original_token:
-            return False
-
-        self.auth_config.save(token=token)
-        self._original_token = token
-        return True
+    def _get_hh_cookies(self, cookies) -> list:
+        return [
+            c for c in cookies if not c.domain or HH_DOMAIN_RE.search(c.domain)
+        ]
 
     def save_cookies(self) -> None:
         """Сохраняет cookies сессии hh в файл."""
-        if not hasattr(self, "_original_cookies"):
+        if "session" not in self.__dict__:
+            logger.debug("Session not created, no cookies to save")
+            return
+
+        cookies = self._get_hh_cookies(self.session.cookies)
+        fingerprint = self._get_cookie_fingerprint(cookies)
+        if fingerprint == self._cookies_fingerprint:
+            logger.debug("Cookies not changed")
             return
 
         jar = MozillaCookieJar(str(self.cookies_file))
         for c in self.session.cookies:
-            if c.domain and not re.search(
-                r"^((?:.*?\.)?hh\.(ru|kz|uz|by|net|com)|rabota\.by)\.?$",
-                c.domain,
-            ):
+            if c.domain and not HH_DOMAIN_RE.search(c.domain):
                 continue
 
             jar.set_cookie(copy.copy(c))
 
-        current_cookies = list(jar)
-        if self._original_cookies == current_cookies:
-            return
-
         jar.save(ignore_discard=True, ignore_expires=True)
-        self._original_cookies = current_cookies
-        logger.debug("Cookies saved to %s", self.cookies_file)
+        self._cookies_fingerprint = fingerprint
+        logger.info("Cookies saved to %s", self.cookies_file)
 
     @property
     def is_logged_in(self) -> bool:
@@ -987,16 +986,16 @@ class HHApplicantTool:
     def captcha_ai(self) -> ai.ChatOpenAI:
         return self._get_captcha_ai()
 
+    def _save_token(self, token: dict[str, Any]) -> None:
+        self.token_config.update(token=token)
+        self.token_config.save()
+        logger.info("Token saved: %s", self.token_config.path)
+
     def create_config_dir(self) -> None:
         self.config_dir_path.mkdir(
             parents=True,
             exist_ok=True,
         )
-
-    def _save_config_if_needed(self) -> None:
-        """Нужен для сохранения загруженного конфига в старом формате в новом"""
-        if self.config and not self.config.exists():
-            self.config.save()
 
     def setup_logging(
         self,
@@ -1028,6 +1027,12 @@ class HHApplicantTool:
             self._parser.print_help(file=sys.stderr)
             return 2
 
+        def on_sigterm(signum, frame):
+            raise KeyboardInterrupt
+
+        # Костыль для докер
+        signal.signal(signal.SIGTERM, on_sigterm)
+
         try:
             return self.operation_run(self, args)
         except (OperationCanceled, KeyboardInterrupt, EOFError):
@@ -1037,15 +1042,10 @@ class HHApplicantTool:
             logger.error(ex)
         except Exception as ex:
             logger.exception(ex)
+        finally:
+            try:
+                self.save_cookies()
+            except Exception as ex:
+                logger.error(f"Не удалось сохранить cookies: {ex}")
 
-        # Токен мог автоматически обновиться
-        if self.save_token():
-            logger.debug("Токен был сохранен после обновления.")
-
-        try:
-            self.save_cookies()
-        except Exception as ex:
-            logger.error(f"Не удалось сохранить cookies: {ex}")
-
-        self._save_config_if_needed()
         return 1
