@@ -368,9 +368,9 @@ class ApiClient(BaseClient):
             self.on_token_change(self.get_access_token())
 
     def handle_access_token(self, token: AccessToken) -> None:
-        for name in ("access_token", "refresh_token", "access_expires_at"):
-            if name in token and hasattr(self, name):
-                setattr(self, name, token[name])
+        for k, v in token.items():
+            if k in ["access_token", "refresh_token", "access_expires_at"]:
+                setattr(self, k, v)
         if self.on_token_change:
             self.on_token_change(self.get_access_token())
 
