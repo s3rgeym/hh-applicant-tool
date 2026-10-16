@@ -192,7 +192,7 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Откликнуться на все подходящие вакансии."""
 
-    __aliases__ = ("apply", "apply-similar")
+    __aliases__ = ("apply", )
 
     # Инициализируются в run()
     tool: HHApplicantTool
