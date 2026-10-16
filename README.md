@@ -363,7 +363,7 @@ Golang) NOT PHP NOT JavaScript`... И забудьте. Он вроде в API �
   <br><em>Капча в винде</em>
 </p>
 
-Язык капчи можно передать с помощью специального флага:
+Язык капчи можно сменить с помощью специального флага:
 
 ```sh
 hh-applicant-tool --captcha-lang EN <operation>
