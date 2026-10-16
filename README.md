@@ -405,8 +405,9 @@ code $(hh-applicant-tool config -p)
 
 > [!IMPORTANT]
 > Описание формата частично сгенерировано нейронкой, она могла спутать названия флагов и их порядок.
-> Всегда смотрите, что выводи -h операции
-Формат файла:
+> Всегда смотрите, что выводит -h операции
+> Формат файла:
+
 ```toml
 [general]
 # Прокси для запросов к hh.ru
@@ -679,7 +680,7 @@ system_prompt = """
 """
 temperature = 0.2
 
-# Настройки для AI-фильтра вакансий (apply-vacancies --use-ai --ai-filter)
+# Настройки для AI-фильтра вакансий (apply-vacancies --ai-filter)
 # Переопределяют соответствующие значения из openai.default
 # system_prompt — обычный текст, без плейсхолдеров.
 # Если не указать, используется DEFAULT_AI_FILTER_SYSTEM_PROMPT (ответ «да» или «нет»)
@@ -707,6 +708,15 @@ user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 [openai.default]
 base_url = "http://localhost:11434/v1"
 model = "llama3"
+```
+
+Для решения капчи:
+
+```toml
+[openai.captcha]
+# Можно не писать base_url, если у default такой же
+base_url = "http://localhost:11434/v1"
+model = "gemma4:e2b"
 ```
 
 <p align="center">
