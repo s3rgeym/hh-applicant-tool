@@ -23,7 +23,6 @@ from urllib.parse import parse_qs, quote, urljoin, urlsplit
 
 import requests
 
-from hh_applicant_tool.ai.base import AIError
 from hh_applicant_tool.utils.package import PACKAGE_NAME
 
 from . import ai, api
@@ -663,25 +662,29 @@ class HHApplicantTool:
 
         return server
 
-    def _solve_captcha(self, image_data: bytes) -> str | None:
+    def _solve_captcha(self, image_data: bytes) -> str:
         if self.ai_enabled and not self.captcha_manual:
-            try:
-                return self.captcha_ai.recognize_text(image_data)
-            except AIError as ex:
-                logger.warning(ex)
-                return None
+            return self.captcha_ai.recognize_text(image_data)
 
-        if not has_gui_support() or self.use_kitty or self.use_sixel:
-            if self.use_kitty:
-                print_kitty_image(image_data)
-            else:
-                print_sixel_image(image_data)
+        if has_gui_support() and not self.use_kitty and not self.use_sixel:
             try:
-                return input("\nВведите текст с картинки выше: ").strip()
-            except KeyboardInterrupt:
-                return None
+                return self.prompt_captcha_tk(image_data)
+            except ImportError:
+                logger.warning(
+                    "tkinter is not installed, falling back to sixel image display."
+                )
 
-        return self.prompt_captcha_tk(image_data)
+        if self.use_kitty:
+            print_kitty_image(image_data)
+        else:
+            print_sixel_image(image_data)
+
+        return input(
+            (
+                "Если изображения не видно, значит ваш терминал не поддерживает вывод графики.\n"
+                "Введите текст с картинки выше: "
+            )
+        ).strip()
 
     def solve_captcha(
         self,
@@ -769,12 +772,6 @@ class HHApplicantTool:
             xsrf_token=xsrf_token,
             session=session,
         )
-
-        if solution.text is None:
-            print(f"Перейдите по ссылке и решите капчу: {captcha_url}")
-            print()
-            input("После прохождения капчи нажмите Enter")
-            return True
 
         return self._send_captcha(
             text=solution.text,
@@ -920,18 +917,14 @@ class HHApplicantTool:
         logger.debug(r.text[:255])
         return False
 
-    def prompt_captcha_tk(self, image_data: bytes) -> str | None:
+    def prompt_captcha_tk(self, image_data: bytes) -> str:
         """Показывает капчу в окне Tk и возвращает введённый текст.
 
         Если окно закрыли, не введя текст, бросает KeyboardInterrupt.
         """
         import base64
-
-        try:
-            import tkinter as tk
-            from tkinter import ttk
-        except ImportError:
-            return None
+        import tkinter as tk
+        from tkinter import ttk
 
         placeholder = "Введите текст с картинки"
         result: list[str] = []
@@ -989,10 +982,7 @@ class HHApplicantTool:
         root.focus_force()
         root.mainloop()
 
-        if not result:
-            return None
-
-        return result[0]
+        return (result or [""])[0]
 
     def logout(self) -> None:
         self.session.get(f"{self.base_url}/logout", {"hhtmFrom": "main"})
