@@ -438,7 +438,21 @@ def _parse_dt(value: str) -> datetime:
 class Operation(BaseOperation):
     """Автоответчик в чатах."""
 
-    __aliases__: list[str] = ["respond-chats"]
+    __aliases__: list[str] = ["respond-chats", "auto-reply", "auto-respond"]
+
+    # Инициализируются в run()
+    tool: HHApplicantTool
+    resume_id: str | None
+    max_pages: int
+    max_age: timedelta | None
+    max_history: int
+    dry_run: bool
+    ignored_chats: set[int]
+    user_prompt: str
+    options_prompt: str
+    ai_init_args: dict[str, Any]
+    user: datatypes.User
+    base_placeholders: dict[str, str]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
