@@ -206,7 +206,7 @@ $ hh-applicant-tool whoami
 В случае успешной авторизации токены будут сохранены в [token.json](#tokenjson):
 
 ```json
-{"token":{"access_token":"USEROYUEPWJKLACWTSSJFISJZXAGOZYYNZBBMHJFEOUYCMVXPIXCJBVVPMFYEFGO","refresh_token":"USERENPQSTKCKTXZHUXKBUDJQKTFVBZDUDXXFOQAEXLHFXOYINTJQLREKSBCYWAP","access_expires_at":1791234567}}
+{"token":{"access_token":"USER7K2QX9MZ4TBW8LRN3VYD6HJ5CFA1GEP0UXSO7IQKZ2WMT9BNL4RYV8DHC3JF","refresh_token":"USERX4PN8QWZ1KDT6VHB3MRJ9YLC2FGS5UEA7OIX0NBQ4WTZ8KMV1DPH6RJC3YLF","access_expires_at":1798765432}}
 ```
 
 Токен доступа выдается на две недели. <s>Для его обновления нужно выполнить:
