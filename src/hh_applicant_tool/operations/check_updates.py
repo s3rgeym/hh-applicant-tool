@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import requests
 
 from ..tool import BaseNamespace, BaseOperation
-from ..utils.package import get_package_version, parse_version
+from ..utils.package import PACKAGE_NAME, get_package_version, parse_version
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
@@ -41,7 +41,7 @@ class Operation(BaseOperation):
 
         if local_ver < remote_ver:
             print(f"🚀 Доступна новая версия: {pypi_ver} (у вас {local_str})")
-            print("📦 Обновить: pip install -U hh-applicant-tool")
+            print(f"📦 Обновить: pip install -U {PACKAGE_NAME}")
         elif local_ver > remote_ver:
             print(
                 f"🧪 Локальная версия {local_str} новее, чем на PyPI ({pypi_ver}). "

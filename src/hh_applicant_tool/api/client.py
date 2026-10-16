@@ -105,10 +105,11 @@ class BaseClient:
         params.update(kwargs)
         url = self.resolve_url(endpoint)
 
-        if method in ("POST", "PUT"):
-            payload = {"json" if as_json else "data": params}
-        else:
-            payload = {"params": params}
+        params_key = (
+            ("json" if as_json else "data")
+            if method in ("POST", "PUT")
+            else "params"
+        )
 
         last_exc: Exception | None = None
 
@@ -116,11 +117,8 @@ class BaseClient:
             with self._lock:
                 self._wait_for_delay(delay)
 
-                def kv(d: dict) -> str:
-                    return "; ".join(f"{k}={v!r}" for k, v in d.items())
-
                 logger.debug(
-                    f"({attempt}/{self.max_retries}) {method} {url} {kv(payload)}",
+                    f"({attempt}/{self.max_retries}) {method} {url} {params_key}={params!r}",
                 )
 
                 try:
@@ -132,7 +130,7 @@ class BaseClient:
                         headers=self._default_headers(),
                         proxies=get_proxies_dict(self.proxy_url),
                         allow_redirects=False,
-                        **payload,
+                        **{params_key: params},
                     )
                 except requests.ConnectionError as ex:
                     logger.warning(
