@@ -21,7 +21,7 @@
 > отношения он не имеет!!! Все барыги торгующие моей утилитой прокляты в веках!
 
 <div align="center">
-  <img width="1254" height="1254" alt="image" src="https://github.com/user-attachments/assets/ac3d52c6-2faf-420e-a3ca-b17b99e36d44" />
+  <img width="500" height="500" alt="image" src="https://github.com/user-attachments/assets/ac3d52c6-2faf-420e-a3ca-b17b99e36d44" />
 </div>
 
 > Авторские права на изображение принадлежат <s>Кандинскому</s> Chat GPT...
