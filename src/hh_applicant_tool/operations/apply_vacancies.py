@@ -194,6 +194,63 @@ class Operation(BaseOperation):
 
     __aliases__ = ("apply", "apply-similar")
 
+    # Инициализируются в run()
+    tool: HHApplicantTool
+    cover_letter: str
+    dry_run: bool
+    excluded_pat: re.Pattern[str] | None
+    force_letter: bool | None
+    max_responses: int | None
+    resume_id: str | None
+    send_email: bool | None
+    skip_tests: bool | None
+    total_pages: int
+
+    # Шаблоны промптов и писем
+    cover_letter_prompt: str
+    ai_filter_prompt: str
+    test_choice_prompt: str
+    test_text_prompt: str
+    apply_mail_subject: str
+    apply_mail_body: str
+
+    # AI
+    ai_filter: bool
+    cover_letter_ai: AIClient | None
+    vacancy_filter_ai: AIClient | None
+    test_ai: AIClient | None
+
+    # Параметры поиска (проставляются через setattr из SEARCH_PARAM_NAMES)
+    text: str | None
+    search_field: list[str] | None
+    order_by: str | None
+    per_page: int
+    experience: str | None
+    schedule: str | None
+    work_format: list[str] | None
+    employment: list[str] | None
+    area: list[str] | None
+    metro: list[str] | None
+    professional_role: list[str] | None
+    industry: list[str] | None
+    employer_id: list[str] | None
+    excluded_employer_id: list[str] | None
+    currency: str | None
+    salary: int | None
+    only_with_salary: bool | None
+    label: list[str] | None
+    period: int | None
+    date_from: str | None
+    date_to: str | None
+    top_lat: float | None
+    bottom_lat: float | None
+    left_lng: float | None
+    right_lng: float | None
+    sort_point_lat: float | None
+    sort_point_lng: float | None
+    no_magic: bool | None
+    premium: bool | None
+
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
         parser.add_argument(
