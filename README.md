@@ -817,8 +817,7 @@ sudo docker run --rm -it \
 
 Для удобства можно создать композ типа такого:
 
-`docker-compose.yml`
-
+`docker-compose.yml`:
 ```yaml
 x-common: &common
   image: hh_applicant_tool:latest
