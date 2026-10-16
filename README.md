@@ -21,11 +21,10 @@
 > отношения он не имеет!!! Все барыги торгующие моей утилитой прокляты в веках!
 
 <div align="center">
-  <img src="https://github.com/user-attachments/assets/29d91490-2c83-4e3f-a573-c7a6182a4044" width="500">
+  <img width="1254" height="1254" alt="image" src="https://github.com/user-attachments/assets/ac3d52c6-2faf-420e-a3ca-b17b99e36d44" />
 </div>
 
-> Авторские права на изображение принадлежат Кандинскому... нет, не человеку, а
-> боту от говносбера
+> Авторские права на изображение принадлежат <s>Кандинскому</s> Chat GPT...
 
 ### ☕ Поддержать проект
 
