@@ -19,10 +19,14 @@ HH_BASE_URL = "https://hh.ru"
 # Хотя если к API со скрепного браузера запрос сделать, выскочит капча
 DEFAULT_DESKTOP_USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
 
-# Влияет на язык контента.
+ACCEPT_HEADER = (
+    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+)
+
+# Влияет на язык контента, поэтому проверяется
 # По значениям от сюда показываются английские версии сайтов...
 # На хх не знаю что делает, может их антибот его проверяет
-ACCEPT_LANGUAGE = "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
+ACCEPT_LANGUAGE_HEADER = "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
 
 REPO_URL = "https://github.com/s3rgeym/hh-applicant-tool/"
 
@@ -50,3 +54,5 @@ CAPTCHA_SUCCESS_BACKURL = "hh://applicant/captchaSuccessBackUrl"
 HH_DOMAIN_RE = re.compile(
     r"^(?:.*\.)?(?:hh\.(?:ru|kz|uz|by|net|com)|rabota\.by)\.?$"
 )
+
+TG_CHAT_URL = "https://t.me/s3rgeym_chat"

@@ -27,7 +27,8 @@ from hh_applicant_tool.utils.package import PACKAGE_NAME
 
 from . import ai, api
 from .constants import (
-    ACCEPT_LANGUAGE,
+    ACCEPT_HEADER,
+    ACCEPT_LANGUAGE_HEADER,
     ANDROID_CLIENT_ID,
     ANDROID_CLIENT_SECRET,
     ANDROID_WEBVIEW_USERAGENT,
@@ -41,6 +42,7 @@ from .constants import (
     HH_DOMAIN_RE,
     LOG_FILENAME,
     REPO_URL,
+    TG_CHAT_URL,
     TOKEN_CONFIG_FILENAME,
 )
 from .errors import Error, OperationCanceled, OperationError
@@ -108,10 +110,10 @@ class BaseNamespace(argparse.Namespace):
 class HHApplicantTool:
     """Утилита для автоматизации действий соискателя на сайте hh.ru.
 
-    Исходники и предложения: <https://github.com/s3rgeym/hh-applicant-tool>
+    Исходники и предложения: <{repo_url}>
 
-    Группа поддержки: <https://t.me/s3rgeym_chat>
-    """
+    Группа поддержки: <{tg_url}>
+    """.format(repo_url=REPO_URL, tg_url=TG_CHAT_URL)
 
     _: KW_ONLY
     api_delay: float | None = None
@@ -291,8 +293,8 @@ class HHApplicantTool:
         session.headers.update(
             {
                 "User-Agent": user_agent or self.user_agent,
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": ACCEPT_LANGUAGE,
+                "Accept": ACCEPT_HEADER,
+                "Accept-Language": ACCEPT_LANGUAGE_HEADER,
             }
         )
 
