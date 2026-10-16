@@ -193,7 +193,7 @@ $ hh-applicant-tool authorize 79012345678
 
 Для авторизации по паролю передайте вторым аргументом пароль (после регистрации его нужно установить).
 
-> Если у вас есть еще профиль работодятла или овчар-менеХера, то тип авторизации
+> Если у вас есть еще профиль работодятла или овчара, то тип авторизации
 > принудительно будет сменен на соискателя (applicant)
 
 Проверка авторизации:
@@ -204,6 +204,10 @@ $ hh-applicant-tool whoami
 ```
 
 В случае успешной авторизации токены будут сохранены в [token.json](#tokenjson):
+
+```json
+{"token":{"access_token":"USEROYUEPWJKLACWTSSJFISJZXAGOZYYNZBBMHJFEOUYCMVXPIXCJBVVPMFYEFGO","refresh_token":"USERENPQSTKCKTXZHUXKBUDJQKTFVBZDUDXXFOQAEXLHFXOYINTJQLREKSBCYWAP","access_expires_at":1791234567}}
+```
 
 Токен доступа выдается на две недели. <s>Для его обновления нужно выполнить:
 
