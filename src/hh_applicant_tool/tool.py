@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, quote, urljoin, urlsplit
 
 import requests
 
+from hh_applicant_tool.ai.base import AIError
 from hh_applicant_tool.utils.package import PACKAGE_NAME
 
 from . import ai, api
@@ -104,6 +105,7 @@ class BaseNamespace(argparse.Namespace):
     use_kitty: bool
     use_sixel: bool
     captcha_lang: Literal["RU", "EN"]
+    captcha_handling: bool
 
 
 @dataclass
@@ -119,6 +121,7 @@ class HHApplicantTool:
     api_delay: float | None = None
     base_url: str | None = None
     captcha_manual: bool = False
+    captcha_handling: bool = True
     captcha_lang: str | None = None
     config_dir: Path | None = None
     openai_connect_timeout: float | None = None
@@ -229,6 +232,13 @@ class HHApplicantTool:
             "--captcha-lang",
             choices=["RU", "EN"],
             help="Язык капчи. Некоторые модели распознают лучше текст на английском",
+        )
+        parser.add_argument(
+            "--handle-captcha",
+            dest="captcha_handling",
+            help="Добавлять перехватчик ошибок капчи при вызове API",
+            action=argparse.BooleanOptionalAction,
+            default=True,
         )
         parser.add_argument(
             "--captcha-manual",
@@ -400,7 +410,9 @@ class HHApplicantTool:
             client_id=ANDROID_CLIENT_ID,
             client_secret=ANDROID_CLIENT_SECRET,
             user_agent=generate_android_useragent(),
-            captcha_handler=self.handle_captcha,
+            captcha_handler=self.handle_captcha
+            if self.captcha_handling
+            else None,
             on_token_change=self._save_token,
             **client_config,
         )
@@ -411,9 +423,9 @@ class HHApplicantTool:
         self,
         system_prompt: str | None = None,
         **kwargs,
-    ) -> ai.ChatOpenAI:
+    ) -> ai.OpenAIClient:
         kwargs.setdefault("session", self.ai_session)
-        return ai.ChatOpenAI(system_prompt=system_prompt, **kwargs)
+        return ai.OpenAIClient(system_prompt=system_prompt, **kwargs)
 
     def get_openai_config(self, section: str | None = None) -> dict:
         """Возвращает копию конфига openai с учетом наследования от главной"""
@@ -486,7 +498,7 @@ class HHApplicantTool:
             ]
         }
 
-    def _get_captcha_ai(self) -> ai.ChatOpenAI:
+    def _get_captcha_ai(self) -> ai.OpenAIClient:
         c = self.get_openai_settings("openai.captcha")
         c.setdefault(
             "system_prompt",
@@ -651,16 +663,23 @@ class HHApplicantTool:
 
         return server
 
-    def _solve_captcha(self, image_data: bytes) -> str:
+    def _solve_captcha(self, image_data: bytes) -> str | None:
         if self.ai_enabled and not self.captcha_manual:
-            return self.captcha_ai.recognize_text(image_data)
+            try:
+                return self.captcha_ai.recognize_text(image_data)
+            except AIError as ex:
+                logger.warning(ex)
+                return None
 
         if not has_gui_support() or self.use_kitty or self.use_sixel:
             if self.use_kitty:
                 print_kitty_image(image_data)
             else:
                 print_sixel_image(image_data)
-            return input("\nВведите текст с картинки выше: ").strip()
+            try:
+                return input("\nВведите текст с картинки выше: ").strip()
+            except KeyboardInterrupt:
+                return None
 
         return self.prompt_captcha_tk(image_data)
 
@@ -750,6 +769,12 @@ class HHApplicantTool:
             xsrf_token=xsrf_token,
             session=session,
         )
+
+        if solution.text is None:
+            print(f"Перейдите по ссылке и решите капчу: {captcha_url}")
+            print()
+            input("После прохождения капчи нажмите Enter")
+            return True
 
         return self._send_captcha(
             text=solution.text,
@@ -895,14 +920,18 @@ class HHApplicantTool:
         logger.debug(r.text[:255])
         return False
 
-    def prompt_captcha_tk(self, image_data: bytes) -> str:
+    def prompt_captcha_tk(self, image_data: bytes) -> str | None:
         """Показывает капчу в окне Tk и возвращает введённый текст.
 
         Если окно закрыли, не введя текст, бросает KeyboardInterrupt.
         """
         import base64
-        import tkinter as tk
-        from tkinter import ttk
+
+        try:
+            import tkinter as tk
+            from tkinter import ttk
+        except ImportError:
+            return None
 
         placeholder = "Введите текст с картинки"
         result: list[str] = []
@@ -960,13 +989,10 @@ class HHApplicantTool:
         root.focus_force()
         root.mainloop()
 
-        # Окно было закрыто
-        # if not result:
-        #     raise KeyboardInterrupt()
+        if not result:
+            return None
 
-        # Пусть падает.
-        # Правильное решение тут только дать случиться неизбежному.
-        return result[0].strip()
+        return result[0]
 
     def logout(self) -> None:
         self.session.get(f"{self.base_url}/logout", {"hhtmFrom": "main"})
@@ -985,7 +1011,7 @@ class HHApplicantTool:
             self.api_client.reset_tokens()
 
     @cached_property
-    def captcha_ai(self) -> ai.ChatOpenAI:
+    def captcha_ai(self) -> ai.OpenAIClient:
         return self._get_captcha_ai()
 
     def _save_token(self, token: dict[str, Any]) -> None:

@@ -1,4 +1,4 @@
 from .openai import (
-    ChatOpenAI,
+    OpenAIClient,
     OpenAIError,
 )

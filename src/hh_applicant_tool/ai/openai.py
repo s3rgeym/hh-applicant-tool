@@ -12,7 +12,7 @@ import requests
 from urllib3.util import Timeout
 
 from ..utils.helpers import get_proxies_dict
-from .base import AIError
+from .base import AIClient, AIError
 
 DEFAULT_DELAY = 0.5
 DEFAULT_TIMEOUT = 90.0
@@ -29,7 +29,7 @@ class OpenAIError(AIError):
 
 
 @dataclass
-class ChatOpenAI:
+class OpenAIClient(AIClient):
     base_url: str
     model: str
     _: KW_ONLY

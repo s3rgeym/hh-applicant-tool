@@ -18,6 +18,7 @@ from urllib.parse import (
 import requests
 
 from ..ai.base import AIError
+from ..ai.openai import OpenAIClient
 from ..api import BadResponse, Redirect, datatypes
 from ..api.datatypes import PaginatedItems, SearchVacancy
 from ..api.errors import ApiError, LimitExceeded
@@ -192,7 +193,7 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Откликнуться на все подходящие вакансии."""
 
-    __aliases__ = ("apply", )
+    __aliases__ = ("apply",)
 
     # Инициализируются в run()
     tool: HHApplicantTool
@@ -216,9 +217,9 @@ class Operation(BaseOperation):
 
     # AI
     ai_filter: bool
-    cover_letter_ai: AIClient | None
-    vacancy_filter_ai: AIClient | None
-    test_ai: AIClient | None
+    cover_letter_ai: OpenAIClient | None
+    vacancy_filter_ai: OpenAIClient | None
+    test_ai: OpenAIClient | None
 
     # Параметры поиска (проставляются через setattr из SEARCH_PARAM_NAMES)
     text: str | None
