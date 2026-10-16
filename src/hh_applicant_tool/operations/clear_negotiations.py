@@ -14,7 +14,7 @@ from ..utils.date import parse_api_datetime
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
-logger = logging.getLogger("hh-applicant-tool")
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 class Namespace(BaseNamespace):

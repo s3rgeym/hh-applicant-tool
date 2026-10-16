@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 MAX_RETRIES = 10
 
-logger = logging.getLogger("hh-applicant-tool")
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 @dataclass

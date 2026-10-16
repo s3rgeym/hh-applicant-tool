@@ -98,7 +98,7 @@ BOT_RECRUITER_ANSWER = (
 )
 
 
-logger = logging.getLogger("hh-applicant-tool")
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 class Namespace(BaseNamespace):

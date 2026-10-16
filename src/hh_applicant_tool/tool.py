@@ -6,9 +6,11 @@ import copy
 import html
 import json
 import logging
+import random
 import signal
 import smtplib
 import sys
+import time
 from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import KW_ONLY, dataclass
@@ -65,7 +67,7 @@ except ImportError:
     TKINTER_IMPORTED = False
 
 
-logger = logging.getLogger("hh-applicant-tool")
+logger = logging.getLogger(__name__.split(".")[0])
 
 OPERATIONS = "operations"
 
@@ -251,8 +253,9 @@ class HHApplicantTool:
             default=True,
         )
         parser.add_argument(
-            "--captcha-manual",
+            "--manual-captcha",
             "--manual",
+            dest="captcha_manual",
             help="Ручной ввод капчи. Полезен, если модель не поддерживает vision",
             action="store_true",
             default=False,
@@ -675,6 +678,7 @@ class HHApplicantTool:
 
     def _solve_captcha(self, image_data: bytes) -> str:
         if self.ai_enabled and not self.captcha_manual:
+            logger.debug("Try recognize CAPTCHA text via AI")
             return self.captcha_ai.recognize_text(image_data)
 
         if self._can_use_tkinter():
@@ -719,6 +723,10 @@ class HHApplicantTool:
             key=captcha_img.key,
         )
 
+    @cached_property
+    def webview_session(self) -> requests.Session:
+        return self._create_session(user_agent=ANDROID_WEBVIEW_USERAGENT)
+
     def handle_captcha(
         self,
         captcha_url: str,
@@ -745,8 +753,9 @@ class HHApplicantTool:
         """
         logger.debug("captcha url: %s", captcha_url)
 
-        # Создадим новую пустую сессию для прохождения капчи
-        session = self._create_session(user_agent=ANDROID_WEBVIEW_USERAGENT)
+        # На Андроиде WebView сохраняет куки между вызовами, поэтому будем
+        # симулировать это поведение
+        session = self.webview_session
 
         r = session.get(
             captcha_url,
@@ -780,6 +789,9 @@ class HHApplicantTool:
             xsrf_token=xsrf_token,
             session=session,
         )
+
+        # Типа вводили вручную
+        time.sleep(random.uniform(5.0, 10.0))
 
         return self._send_captcha(
             text=solution.text,

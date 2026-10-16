@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
 
-logger = logging.getLogger("hh-applicant-tool")
+logger = logging.getLogger(__name__.split(".")[0])
 
 # Параметры поиска вакансий, задаваемые флагами
 SEARCH_PARAM_NAMES = (
@@ -146,7 +146,7 @@ class Namespace(BaseNamespace):
     resume_id: str | None
     cover_letter: str | None
     ignore_employers: Path | None
-    force_letter: bool
+    force_cover_letter: bool
     ai_filter: bool | None
     ai_filter_system_prompt: str
     ai_filter_prompt: str
@@ -200,7 +200,7 @@ class Operation(BaseOperation):
     cover_letter: str
     dry_run: bool
     excluded_pat: re.Pattern[str] | None
-    force_letter: bool | None
+    force_cover_letter: bool | None
     max_responses: int | None
     resume_id: str | None
     send_email: bool | None
@@ -255,21 +255,21 @@ class Operation(BaseOperation):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--resume-id", help="Идентефикатор резюме")
         parser.add_argument(
-            "-l",
+            "--force-cover-letter",
             "--force-letter",
-            "--letter",
-            help="Всегда отправлять сопроводительное письмо при отклике",
+            help="Всегда отправлять сопроводительное письмо при отклике, даже когда оно не требуется",
             action=argparse.BooleanOptionalAction,
+            default=True,
         )
         parser.add_argument(
             "--ai-filter",
-            help="Использовать AI для фильтрации вакансий",
+            help="Использовать дополнительную фильтрацию вакансий через AI (вакансии непрошедшие фильтр попадают в черный список)",
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
             "--total-pages",
             "--pages",
-            help="Количество обрабатываемых страниц поиска",  # noqa: E501
+            help="Количество обрабатываемых страниц поиска. Больше 2000 результатов API не отдает",  # noqa: E501
             default=20,
             type=int,
         )
@@ -286,7 +286,7 @@ class Operation(BaseOperation):
         parser.add_argument(
             "--excluded-filter",
             type=str,
-            help="Исключить вакансии, если название или описание не соответствует шаблону. Например, `--excluded-filter 'junior|стажир|bitrix|дружн\\w+ коллектив|полиграф|open\\s*space|опенспейс|хакатон|конкурс|тестов\\w+ задан'`",
+            help="Исключить вакансии, если название или описание не соответствует шаблону. Например, `--excluded-filter 'junior|стажир|bitrix|дружн\\w+ коллектив|полиграф|open\\s*space|опенспейс|хакатон|конкурс|тестов\\w+ задан'`. Вакансии попапвшие под фильтр попадают в черный список",
         )
         parser.add_argument(
             "--max-responses",
@@ -458,7 +458,7 @@ class Operation(BaseOperation):
                 raise OperationError(
                     f"Некорректное регулярное выражение в --excluded-filter: {ex}"
                 ) from ex
-        self.force_letter = args.force_letter
+        self.force_cover_letter = args.force_cover_letter
         self.max_responses = args.max_responses
         self.resume_id = args.resume_id
         self.send_email = args.send_email
@@ -778,7 +778,9 @@ class Operation(BaseOperation):
 
                 letter = ""
 
-                if self.force_letter or vacancy.get("response_letter_required"):
+                if self.force_cover_letter or vacancy.get(
+                    "response_letter_required"
+                ):
                     if self.cover_letter_ai:
                         prompt = render_template(
                             self.cover_letter_prompt,
@@ -1152,7 +1154,7 @@ class Operation(BaseOperation):
 
     def _get_search_params(self, page: int) -> dict:
         params = {
-            "page": page,
+            **({"page": page} if page else {}),
             "per_page": self.per_page,
         }
         if self.order_by:

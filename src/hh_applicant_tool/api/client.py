@@ -37,7 +37,7 @@ AllowedMethods = Literal[
 
 T = TypeVar("T")
 
-logger = logging.getLogger("hh-applicant-tool")
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 # Thread-safe

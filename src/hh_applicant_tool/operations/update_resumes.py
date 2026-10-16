@@ -12,8 +12,7 @@ from ..utils.string import shorten
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
-
-logger = logging.getLogger("hh-applicant-tool")
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 class Namespace(BaseNamespace):
@@ -23,7 +22,7 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Обновить все резюме"""
 
-    __aliases__ = ["update"]
+    __aliases__: list[str] = []
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         pass

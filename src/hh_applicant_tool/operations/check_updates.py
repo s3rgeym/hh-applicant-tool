@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
 
-logger = logging.getLogger("hh-applicant-tool")
+logger = logging.getLogger(__name__.split(".")[0])
 
 PYPI_URL = "https://pypi.org/pypi/hh-applicant-tool/json"
 

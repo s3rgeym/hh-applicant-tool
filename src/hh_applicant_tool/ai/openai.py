@@ -21,7 +21,7 @@ DEFAULT_CONNECT_TIMEOUT = 15.0
 CHAT_COMPLETIONS_ENDPOINT = "/chat/completions"
 
 
-logger = logging.getLogger("hh-applicant-tool")
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 class OpenAIError(AIError):
