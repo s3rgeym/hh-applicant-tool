@@ -20,7 +20,7 @@ __all__ = ("ApiClient", "OAuthClient")
 HH_API_URL = "https://api.hh.ru"
 HH_OAUTH_URL = "https://hh.ru/oauth/"
 DEFAULT_DELAY = 0.345
-DEFAULT_CAPTCHA_COOLDOWN = 5.0
+DEFAULT_CAPTCHA_COOLDOWN = 1.0
 MAX_RETRIES = 3
 MAX_CAPTCHA_RETRIES = 5
 
@@ -303,8 +303,8 @@ class ApiClient(BaseClient):
         delay=None,
         as_json=False,
         *,
-        captcha_cooldown=None,
-        max_captcha_attempts=None,
+        captcha_cooldown: float | None = None,
+        max_captcha_attempts: int | None = None,
         **kwargs,
     ):
         captcha_cooldown = captcha_cooldown or self.captcha_cooldown

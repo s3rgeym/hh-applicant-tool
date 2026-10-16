@@ -790,8 +790,14 @@ class HHApplicantTool:
             session=session,
         )
 
-        # Типа вводили вручную
-        time.sleep(random.uniform(5.0, 10.0))
+        if not self.captcha_manual:
+            # Типа вводили вручную
+            wait_time = random.uniform(10.0, 15.0)
+            logger.info(
+                "Ждем %.2f перед отправкой капчи для симуляции ручного ввода",
+                wait_time,
+            )
+            time.sleep(wait_time)
 
         return self._send_captcha(
             text=solution.text,
