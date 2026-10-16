@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
 import html
 import json
@@ -32,17 +33,18 @@ from .constants import (
     ANDROID_CLIENT_ID,
     ANDROID_CLIENT_SECRET,
     ANDROID_WEBVIEW_USERAGENT,
+    CAPTCHA_PROMPT,
     CAPTCHA_SUCCESS_BACKURL,
     CONFIG_DIR,
     CONFIG_FILENAME,
     COOKIES_FILENAME,
     DEFAULT_CAPTCHA_LANGUAGE,
     DEFAULT_DESKTOP_USERAGENT,
+    GITHUB_REPO_URL,
     HH_BASE_URL,
     HH_DOMAIN_RE,
     LOG_FILENAME,
-    REPO_URL,
-    TG_CHAT_URL,
+    TELEGRAM_CHAT_URL,
     TOKEN_CONFIG_FILENAME,
 )
 from .errors import Error, OperationCanceled, OperationError
@@ -53,6 +55,15 @@ from .utils.log import setup_logger
 from .utils.system import has_gui_support, is_docker
 from .utils.term import print_kitty_image, print_sixel_image, setup_terminal
 from .utils.user_agent import generate_android_useragent
+
+try:
+    import tkinter as tk
+    from tkinter import ttk
+
+    TKINTER_IMPORTED = True
+except ImportError:
+    TKINTER_IMPORTED = False
+
 
 logger = logging.getLogger("hh-applicant-tool")
 
@@ -114,7 +125,7 @@ class HHApplicantTool:
     Исходники и предложения: <{repo_url}>
 
     Группа поддержки: <{tg_url}>
-    """.format(repo_url=REPO_URL, tg_url=TG_CHAT_URL)
+    """.format(repo_url=GITHUB_REPO_URL, tg_url=TELEGRAM_CHAT_URL)
 
     _: KW_ONLY
     api_delay: float | None = None
@@ -340,7 +351,7 @@ class HHApplicantTool:
         session = requests.Session()
         session.headers.update(
             {
-                "User-Agent": f"{PACKAGE_NAME} (+{REPO_URL})",
+                "User-Agent": f"{PACKAGE_NAME} (+{GITHUB_REPO_URL})",
             }
         )
         logger.debug("AI Default Headers: %r", session.headers)
@@ -666,25 +677,22 @@ class HHApplicantTool:
         if self.ai_enabled and not self.captcha_manual:
             return self.captcha_ai.recognize_text(image_data)
 
-        if has_gui_support() and not self.use_kitty and not self.use_sixel:
-            try:
-                return self.prompt_captcha_tk(image_data)
-            except ImportError:
-                logger.warning(
-                    "tkinter is not installed, falling back to sixel image display."
-                )
+        if self._can_use_tkinter():
+            return self.prompt_captcha_tkinter(image_data)
 
-        if self.use_kitty:
-            print_kitty_image(image_data)
-        else:
-            print_sixel_image(image_data)
+        return self._prompt_captcha_in_terminal(image_data)
 
-        return input(
-            (
-                "Если изображения не видно, значит ваш терминал не поддерживает вывод графики.\n"
-                "Введите текст с картинки выше: "
-            )
-        ).strip()
+    def _can_use_tkinter(self) -> bool:
+        return (
+            TKINTER_IMPORTED
+            and not (self.use_kitty or self.use_sixel)
+            and has_gui_support()
+        )
+
+    def _prompt_captcha_in_terminal(self, image_data: bytes) -> str:
+        show_image = print_kitty_image if self.use_kitty else print_sixel_image
+        show_image(image_data)
+        return input(CAPTCHA_PROMPT).strip()
 
     def solve_captcha(
         self,
@@ -917,15 +925,11 @@ class HHApplicantTool:
         logger.debug(r.text[:255])
         return False
 
-    def prompt_captcha_tk(self, image_data: bytes) -> str:
+    def prompt_captcha_tkinter(self, image_data: bytes) -> str:
         """Показывает капчу в окне Tk и возвращает введённый текст.
 
         Если окно закрыли, не введя текст, бросает KeyboardInterrupt.
         """
-        import base64
-        import tkinter as tk
-        from tkinter import ttk
-
         placeholder = "Введите текст с картинки"
         result: list[str] = []
 
