@@ -13,7 +13,9 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any, TypedDict
 from urllib.parse import urljoin
 
-from ..api import ApiError
+import requests
+
+from ..api import ApiError, datatypes
 from ..errors import OperationError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.date import parse_api_datetime
@@ -958,7 +960,12 @@ class Operation(BaseOperation):
             return
 
         for chat in chats:
-            self.process_chat(chat, blacklist)
+            time.sleep(random.uniform(5, 10))
+
+            try:
+                self.process_chat(chat, blacklist)
+            except requests.HTTPError as ex:
+                logger.error(ex)
 
         print("📝 Сообщения разосланы!")
 
@@ -1040,6 +1047,4 @@ class Operation(BaseOperation):
         self.send_chat_message(
             chat.chat_id, send_message, refer_url=self.chat_page_url
         )
-
         print(f"📨 Отправлено для {chat.vacancy_url}")
-        time.sleep(random.uniform(1, 3))
