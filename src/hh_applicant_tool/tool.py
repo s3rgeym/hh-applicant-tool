@@ -634,10 +634,7 @@ class HHApplicantTool:
             return
 
         jar = MozillaCookieJar(str(self.cookies_file))
-        for c in self.session.cookies:
-            if c.domain and not HH_DOMAIN_RE.search(c.domain):
-                continue
-
+        for c in cookies:
             jar.set_cookie(copy.copy(c))
 
         jar.save(ignore_discard=True, ignore_expires=True)
