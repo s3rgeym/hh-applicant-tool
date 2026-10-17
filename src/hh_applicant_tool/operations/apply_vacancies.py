@@ -140,7 +140,7 @@ DEFAULT_TEST_TEXT_PROMPT = """\
 Тебя зовут: %(first_name)s
 Ты ищешь работу в качестве: %(resume_title)s
 Твой профиль на github: %(github_profile_url)s
-Ты хочешь зарплату: %(resume_salary)
+Ты хочешь зарплату: %(resume_salary)s
 Подходящие форматы работы: %(resume_work_format)s
 
 Ответь на вопрос.
