@@ -244,7 +244,11 @@ class Operation(BaseOperation):
             "accountType": "APPLICANT",
             "failUrl": fail_url,
             "remember": "true",
-            "loginTrustFlags": self._login_trust_flags(),
+            # Пароль был предложен менеджером паролей
+            # А юзернейм типа из LocalStorage
+            "loginTrustFlags": self._login_trust_flags(
+                {"password": {"suggest": True, "paste": False}}
+            ),
             "username": username,
             "password": password,
             **captcha,
@@ -293,7 +297,10 @@ class Operation(BaseOperation):
             "authScenario": "APPLICANT_AUTH",
             "formatPhone": "true",
             "isSignupPage": "false",
-            "loginTrustFlags": self._login_trust_flags(),
+            # Данные подставлены менеджером паролей
+            "loginTrustFlags": self._login_trust_flags(
+                {"emailOrPhone": {"paste": False, "suggest": True}}
+            ),
             **captcha,
         }
 
@@ -388,7 +395,10 @@ class Operation(BaseOperation):
             # Временная метка при шифровании на фронте устанавливается принудительно
             "ts": int(time.time() * 1000),
         }
-        logger.debug("trust login data: %r", payload)
+        logger.debug(
+            "Данные для кодирования в JSON и шифрования публичным ключом: %r",
+            payload,
+        )
         # JSON.stringify -> компактный вывод, без пробелов
         plaintext = json.dumps(payload, separators=(",", ":")).encode()
         public_key = serialization.load_pem_public_key(self.pubkey.encode())
