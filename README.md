@@ -30,7 +30,7 @@
 > Остерегайтесь мошенников! Существует сайт HH Applicant Tool, который незаконно использует название проекта!
 
 <div align="center">
-  <img width="600" height="600" alt="image" src="https://github.com/user-attachments/assets/59d91caf-ff6c-4261-8a4a-271c6d724ab1" />
+  <img width="968" height="968" alt="image" src="https://github.com/user-attachments/assets/59d91caf-ff6c-4261-8a4a-271c6d724ab1" />
 </div>
 
 > Авторские права на изображение принадлежат <s>Кандинскому</s> Chat GPT...
