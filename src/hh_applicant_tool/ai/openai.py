@@ -31,9 +31,9 @@ class OpenAIError(AIError):
 @dataclass
 class OpenAIClient(AIClient):
     base_url: str
-    model: str
     _: KW_ONLY
     api_key: str | None = None
+    model: str | None = None
     system_prompt: str | None = None
     # Базовая история диалога, которая подставляется в каждый запрос
     # перед history из вызова complete()/recognize_text()
@@ -44,7 +44,7 @@ class OpenAIClient(AIClient):
     connect_timeout: float | None = None
 
     # Параметры для retry логики
-    max_retries: int = 3
+    max_retries: int = 5
 
     temperature: float = 0.0
     max_completion_tokens: int = 1000
@@ -175,8 +175,8 @@ class OpenAIClient(AIClient):
         Любые дополнительные параметры (top_p, seed, response_format...)
         добавляются в payload как есть.
         """
+        model = model or self.model
         payload = {
-            "model": model if model is not None else self.model,
             "messages": messages,
             "temperature": (
                 temperature if temperature is not None else self.temperature
@@ -189,6 +189,9 @@ class OpenAIClient(AIClient):
             "stream": False,
             **extra,
         }
+
+        if model:
+            payload |= {"model": model}
 
         for attempt in range(self.max_retries + 1):
             try:

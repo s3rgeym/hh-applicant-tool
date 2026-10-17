@@ -6,7 +6,6 @@ import copy
 import html
 import json
 import logging
-import random
 import signal
 import smtplib
 import sys
@@ -35,6 +34,7 @@ from .constants import (
     ANDROID_CLIENT_ID,
     ANDROID_CLIENT_SECRET,
     ANDROID_WEBVIEW_USERAGENT,
+    CAPTCHA_MIN_SOLVE_DELAY,
     CAPTCHA_PROMPT,
     CAPTCHA_SUCCESS_BACKURL,
     CONFIG_DIR,
@@ -354,10 +354,10 @@ class HHApplicantTool:
         session = requests.Session()
         session.headers.update(
             {
-                "User-Agent": f"{PACKAGE_NAME} (+{GITHUB_REPO_URL})",
+                "User-Agent": f"Mozilla/5.0 (compatible; {PACKAGE_NAME}; +{GITHUB_REPO_URL})",
             }
         )
-        logger.debug("AI Default Headers: %r", session.headers)
+        logger.debug("AI Session Headers: %r", session.headers)
         return session
 
     @cached_property
@@ -477,7 +477,8 @@ class HHApplicantTool:
 
         required("base_url")
         # required("api_key")
-        required("model")
+        # Для llama.cpp это поле не является обязательным
+        # required("model")
 
         if self.openai_delay:
             c.setdefault("delay", self.openai_delay)
@@ -780,6 +781,8 @@ class HHApplicantTool:
         if not xsrf_token:
             raise ValueError("xsrf token отсутствует в Cookies!")
 
+        dt = -time.monotonic()
+
         solution = self.solve_captcha(
             captcha_state=state,
             lang=lang,
@@ -788,14 +791,16 @@ class HHApplicantTool:
             session=session,
         )
 
-        if not self.captcha_manual:
-            # Типа вводили вручную
-            wait_time = random.uniform(10.0, 15.0)
+        dt += time.monotonic()
+
+        logger.debug("Время затраченное на решение капчи: %.2f сек")
+
+        if dt < CAPTCHA_MIN_SOLVE_DELAY:
             logger.info(
-                "Ждем %.2f перед отправкой капчи для симуляции ручного ввода",
-                wait_time,
+                "Ждем %.2f сек перед отправкой капчи на проверку",
+                dt,
             )
-            time.sleep(wait_time)
+            time.sleep(dt)
 
         return self._send_captcha(
             text=solution.text,
@@ -1023,6 +1028,90 @@ class HHApplicantTool:
     @cached_property
     def captcha_ai(self) -> ai.OpenAIClient:
         return self._get_captcha_ai()
+
+    @staticmethod
+    def _format_experience(
+        experience: list[dict[str, Any]] | None, limit: int = 3
+    ) -> str:
+        blocks = []
+        for exp in (experience or [])[:limit]:
+            end = exp.get("end") or "по настоящее время"
+            head = "\n".join(
+                filter(
+                    None,
+                    [
+                        exp.get("position"),
+                        exp.get("company"),
+                        f"{exp.get('start') or ''} - {end}",
+                    ],
+                )
+            )
+            description = (exp.get("description") or "").strip()
+            blocks.append(f"{head}\n\n{description}".strip())
+        return "\n\n".join(blocks)
+
+    def get_resume_placeholders(self, resume_id: str) -> dict[str, str]:
+        """Данные резюме для подстановки в шаблон промпта AI-фильтра."""
+
+        resume: api.datatypes.Resume = self.api_client.get(
+            f"/resumes/{resume_id}"
+        )
+
+        # logger.debug("resume: %r", resume)
+
+        rv = {
+            k: v
+            for k, v in resume.items()
+            if k in ["first_name", "middle_name", "last_name"]
+        }
+
+        rv["resume_title"] = resume.get("title") or ""
+        rv["resume_city"] = resume.get("area", {}).get("name") or ""
+        # Почему тут ебаут?
+        rv["resume_about"] = resume.get("skills") or ""
+        rv["resume_skills"] = ", ".join(resume.get("skill_set") or [])
+        rv["resume_employment_form"] = ", ".join(
+            i["name"] for i in (resume.get("employment_form") or [])
+        )
+        rv["resume_work_format"] = ", ".join(
+            i["name"] for i in (resume.get("work_format") or [])
+        )
+        rv["resume_citizenship"] = ", ".join(
+            i["name"] for i in resume.get("citizenship", [])
+        )
+        salary = resume.get("salary", {})
+        rv["resume_salary"] = (
+            f"{salary.get('amount', '')} {salary.get('currency', '').replace('RUR', 'руб.')}".strip()
+        )
+        education = resume.get("education", {})
+
+        try:
+            primary_education = education["primary"][0]
+        except KeyError, IndexError:
+            primary_education = {}
+
+        rv["resume_education"] = ", ".join(
+            filter(
+                None,
+                [
+                    # высшее/среднее
+                    education.get("level", {}).get("name"),
+                    # Шарага
+                    primary_education.get("name"),
+                    # Факультет
+                    primary_education.get("organization"),
+                    # Специальность
+                    primary_education.get("result"),
+                    # Год
+                    str(primary_education.get("year") or ""),
+                ],
+            )
+        )
+
+        rv["resume_experience"] = self._format_experience(
+            resume["experience"] or []
+        )
+        return rv
 
     def _save_token(self, token: dict[str, Any]) -> None:
         self.token_config.update(token=token)

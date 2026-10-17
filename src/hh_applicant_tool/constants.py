@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 
 from .utils import config
+from .utils.package import PACKAGE_NAME
 
 CONFIG_DIR = config.get_config_directory()
 CONFIG_FILENAME = "config.toml"
@@ -54,10 +55,15 @@ CAPTCHA_PROMPT = (
     "Введите текст с картинки выше: "
 )
 
+# Миниммальное время которое должно пройти после решения капчи перед ее
+# отправкой на проверку
+CAPTCHA_MIN_SOLVE_DELAY = 10.0
+
 HH_DOMAIN_RE = re.compile(
     r"^(?:.*\.)?(?:hh\.(?:ru|kz|uz|by|net|com)|rabota\.by)\.?$"
 )
 
 TELEGRAM_CHAT_URL = "https://t.me/s3rgeym_chat"
 
-GITHUB_REPO_URL = "https://github.com/s3rgeym/hh-applicant-tool/"
+GITHUB_PROFILE_URL = "https://github.com/s3rgeym"
+GITHUB_REPO_URL = f"{GITHUB_PROFILE_URL}/{PACKAGE_NAME}"

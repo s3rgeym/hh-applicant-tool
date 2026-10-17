@@ -22,6 +22,7 @@ from ..ai.openai import OpenAIClient
 from ..api import BadResponse, Redirect, datatypes
 from ..api.datatypes import PaginatedItems, SearchVacancy, Vacancy
 from ..api.errors import ApiError, LimitExceeded
+from ..constants import GITHUB_PROFILE_URL
 from ..errors import OperationError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.datatypes import VacancyTestsData
@@ -118,13 +119,14 @@ DEFAULT_COVER_LETTER_PROMPT = (
 )
 
 DEFAULT_AI_FILTER_PROMPT = """\
-Резюме кандидата:
-Должность: %(resume_title)s
-Навыки: %(resume_skills)s
+Название резюме: %(resume_title)s
+Навыки, перечисленные в резюме: %(resume_skills)s
+Зарплата, указанная в резюме: %(resume_salary)s
+Предпочитаемый соискателем формат(ы) работы: %(resume_work_format)s
 
 Вакансия: %(vacancy_name)s
-Ключевые навыки: %(vacancy_key_skills)s
-Описание: %(vacancy_description)s
+Навыки, требуемые в вакансии: %(vacancy_key_skills)s
+Описание вакансии: %(vacancy_description)s
 
 Подходит ли эта вакансия кандидату?"""
 
@@ -134,9 +136,18 @@ DEFAULT_TEST_CHOICE_PROMPT = (
     "Выбери правильный вариант. Ответь только его ID."
 )
 
-DEFAULT_TEST_TEXT_PROMPT = (
-    "Вопрос: %(question)s\nДай краткий ответ. Только текст ответа."
-)
+DEFAULT_TEST_TEXT_PROMPT = """\
+Тебя зовут: %(first_name)s
+Ты ищешь работу в качестве: %(resume_title)s
+Твой профиль на github: %(github_profile_url)s
+Ты хочешь зарплату: %(resume_salary)
+Подходящие форматы работы: %(resume_work_format)s
+
+Ответь на вопрос.
+
+Вопрос: %(question)s
+
+Верни только текст."""
 
 DEFAULT_APPLY_MAIL_SUBJECT = "{Отклик|Резюме} на вакансию %(vacancy_name)s"
 DEFAULT_APPLY_MAIL_BODY = "{Здравствуйте|Добрый день}, {прошу рассмотреть|пожалуйста рассмотрите} мое резюме %(resume_url)s на вакансию %(vacancy_name)s."
@@ -509,43 +520,12 @@ class Operation(BaseOperation):
 
         self._apply_vacancies()
 
-    def _get_resume_info(self, resume_id: str | None) -> dict[str, str]:
-        """Данные резюме для подстановки в шаблон промпта AI-фильтра."""
-        info = {
-            "resume_skills": "",
-            "resume_about": "",
-            "resume_experience": "",
-        }
-        if not resume_id:
-            return info
-
-        full_resume = self.api_client.get(f"/resumes/{resume_id}")
-
-        # hh.ru отдаёт skills как null, когда поле не заполнено,
-        # и .get(..., "") тут не спасает: null уже есть в ответе
-        info["resume_about"] = full_resume.get("skills") or ""
-        info["resume_skills"] = ", ".join(full_resume.get("skill_set") or [])
-
-        lines = []
-        for exp in full_resume.get("experience") or []:
-            end = exp.get("end") or "по настоящее время"
-            lines.append(
-                f"- {exp.get('company') or 'Не указано'}, "
-                f"{exp.get('position') or 'Не указано'} "
-                f"({exp.get('start') or ''} - {end})"
-            )
-            if exp.get("description"):
-                lines.append(f"  {exp['description']}")
-        info["resume_experience"] = "\n".join(lines)
-
-        return info
-
     # Если AI ответил что-то непонятное, лучше не отбрасывать вакансию
     @staticmethod
     def _parse_is_suitable_response(response: str) -> bool:
         answer = response.strip().lower().strip(" .!\"'«»")
 
-        if re.match(r"(нет|no|false)\b", answer):
+        if re.match(r"(нет?|no|false)\b", answer):
             return False
 
         return True
@@ -628,6 +608,7 @@ class Operation(BaseOperation):
         limit_reached = False
 
         placeholders = {
+            # Могут быть перезаписаны значениями из резюме
             "first_name": user.get("first_name") or "",
             "last_name": user.get("last_name") or "",
             "email": user.get("email") or "",
@@ -635,10 +616,16 @@ class Operation(BaseOperation):
             "resume_hash": resume.get("id") or "",
             "resume_title": resume.get("title") or "",
             "resume_url": resume.get("alternate_url") or "",
+            "github_profile_url": self.tool.general_config.get(
+                "github_profile_url", GITHUB_PROFILE_URL
+            ),
         }
 
-        if self.ai_filter:
-            placeholders.update(self._get_resume_info(resume.get("id")))
+        placeholders.update(
+            self.tool.get_resume_placeholders(
+                resume.get("id"),
+            ),
+        )
 
         do_apply = True
         site_emails = {}
@@ -802,6 +789,7 @@ class Operation(BaseOperation):
                     vacancy["alternate_url"],
                 )
 
+                # logger.debug("placeholders: %r", message_placeholders)
                 if vacancy.get("has_test"):
                     logger.debug(
                         "Решаем тест: %s",
@@ -814,6 +802,7 @@ class Operation(BaseOperation):
                                 vacancy_id=vacancy["id"],
                                 resume_hash=resume["id"],
                                 letter=letter,
+                                placeholders=message_placeholders,
                             )
                             if result.get("success") == "true":
                                 applied_count += 1
@@ -953,8 +942,10 @@ class Operation(BaseOperation):
         vacancy_id: str | int,
         resume_hash: str,
         letter: str = "",
+        placeholders: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Загружает тест, ждет паузу и отправляет отклик."""
+        placeholders = placeholders or {}
         response_url = f"{self.tool.base_url}/applicant/vacancy_response?vacancyId={vacancy_id}&startedWithQuestion=false&hhtmFrom=vacancy"
 
         if not (tests_data := self._get_vacancy_tests(response_url)):
@@ -996,7 +987,11 @@ class Operation(BaseOperation):
                     )
                     prompt = render_template(
                         self.test_choice_prompt,
-                        {"question": question, "options": options},
+                        {
+                            **placeholders,
+                            "question": question,
+                            "options": options,
+                        },
                         "промпта выбора ответа в тесте",
                     )
                     ai_answer = self.test_ai.complete(prompt).strip()
@@ -1039,7 +1034,7 @@ class Operation(BaseOperation):
                 elif self.test_ai:
                     prompt = render_template(
                         self.test_text_prompt,
-                        {"question": question},
+                        {**placeholders, "question": question},
                         "промпта текстового ответа в тесте",
                     )
                     answer = self.test_ai.complete(prompt)

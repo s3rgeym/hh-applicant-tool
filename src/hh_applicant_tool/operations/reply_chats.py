@@ -16,6 +16,7 @@ from urllib.parse import urljoin
 import requests
 
 from ..api import ApiError, datatypes
+from ..constants import GITHUB_PROFILE_URL
 from ..errors import OperationError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.date import parse_api_datetime
@@ -46,8 +47,12 @@ DEFAULT_SYSTEM_PROMPT = """\
 
 Тебя зовут: %(first_name)s
 Ты ищешь работу в качестве: %(resume_title)s.
+Предпочитаемый формат работы: %(resume_work_format)s
 Твои зарплатные ожидания: %(resume_salary)s
 Твои навыки: %(resume_skills)s
+Твое образование: %(resume_education)s
+Твой профиль на github: %(github_profile_url)s
+
 Твой опыт:
 
 %(resume_experience)s"""
@@ -90,6 +95,20 @@ DEFAULT_OPTIONS_PROMPT = """\
 
 %(options)s"""
 
+DEFAULT_BUMP_PROMPT = """\
+Ты написал работодателю, но он давно не отвечает.
+
+Название вакансии: %(vacancy_name)s
+Компания: %(employer_name)s
+Контактное лицо: %(contact_name)s
+
+История переписки:
+
+%(history)s
+
+Напиши короткое вежливое напоминание о себе (1-2 предложения): уточни, актуальна ли вакансия и в силе ли интерес к твоей кандидатуре. Не повторяй свои прошлые сообщения дословно."""
+
+# Он вроде больше не выскакивает
 # Автоответ hh после заполнения анкеты, на него отвечать не нужно
 BOT_RECRUITER_ANSWER = (
     "Спасибо!\nВаши ответы отправлены работодателю. Если ваш отклик его "
@@ -412,12 +431,14 @@ class ChatToReply:
     employer_name: str
     applicant_id: int
     resume_id: str
-    resume_title: str
-    resume_experience: str
-    salary: str
-    skills: str
-    last_is_mine: bool = False
-    is_discard: bool = False
+    # resume_title: str
+    # resume_experience: str
+    # salary: str
+    # skills: str
+    is_discard: bool
+    last_is_mine: bool
+    last_message_at: datetime | None
+    last_message_id: str
 
 
 def _parse_dt(value: str) -> datetime:
@@ -453,8 +474,10 @@ class Operation(BaseOperation):
     max_history: int
     dry_run: bool
     ignored_chats: set[int]
+    ignored_messages: set[int]
     user_prompt: str
     options_prompt: str
+    bump_prompt: str
     ai_init_args: dict[str, Any]
     user: datatypes.User
     base_placeholders: dict[str, str]
@@ -468,7 +491,7 @@ class Operation(BaseOperation):
         parser.add_argument(
             "--period",
             type=int,
-            help="Игнорировать чаты, в которых последнее сообщение старше N часов",  # noqa: E501
+            help="Бампать чаты в которых тебе не отвечали больше N часов, игнорировать те, где ты сам не стал отвечать (бот иногда тупит, давая постоянно неправильные ответы на варианты ответа)",
             default=72,
         )
         parser.add_argument(
@@ -517,6 +540,8 @@ class Operation(BaseOperation):
         self.dry_run = args.dry_run
         self.loop = args.loop
         self.ignored_chats: set[int] = set()
+        # Сообщения с вариантами ответов на которых тупит нейронка
+        self.ignored_messages: set[str] = set()
 
         self.user_prompt: str = (
             tool.general_config.get("reply_chat_user_prompt")
@@ -525,6 +550,10 @@ class Operation(BaseOperation):
         self.options_prompt: str = (
             tool.general_config.get("reply_chat_options_prompt")
             or DEFAULT_OPTIONS_PROMPT
+        )
+        self.bump_prompt: str = (
+            tool.general_config.get("reply_chat_bump_prompt")
+            or DEFAULT_BUMP_PROMPT
         )
 
         # Используется AI — отвечает он, нет — открываем редактор
@@ -539,6 +568,9 @@ class Operation(BaseOperation):
             "last_name": self.user.get("last_name") or "",
             "email": self.user.get("email") or "",
             "phone": self.user.get("phone") or "",
+            "github_profile_url": tool.general_config.get(
+                "github_profile_url", GITHUB_PROFILE_URL
+            ),
         }
 
         return self.reply_chats()
@@ -673,43 +705,6 @@ class Operation(BaseOperation):
         response.raise_for_status()
 
     # ----------------------------------------------------------- formatting
-
-    @staticmethod
-    def format_salary(salary: dict[str, Any] | None) -> str:
-        if not salary or not salary.get("amount"):
-            return "не указаны"
-        cur = (salary.get("currency") or "").replace("RUR", "руб")
-        return f"{salary['amount']} {cur}".strip()
-
-    @staticmethod
-    def format_skills(skills: Any) -> str:
-        if not skills:
-            return ""
-        if isinstance(skills, str):
-            return skills
-        return ", ".join(str(s) for s in skills)
-
-    @staticmethod
-    def format_experience(
-        experience: list[dict[str, Any]] | None, limit: int = 3
-    ) -> str:
-        blocks = []
-        for exp in (experience or [])[:limit]:
-            end = exp.get("end") or "по настоящее время"
-            head = "\n".join(
-                filter(
-                    None,
-                    [
-                        exp.get("position"),
-                        exp.get("company"),
-                        f"{exp.get('start') or ''} - {end}",
-                    ],
-                )
-            )
-            description = (exp.get("description") or "").strip()
-            blocks.append(f"{head}\n\n{description}".strip())
-        return "\n\n".join(blocks)
-
     @staticmethod
     def format_compensation(comp: dict[str, Any] | None) -> str:
         if not comp:
@@ -756,7 +751,7 @@ class Operation(BaseOperation):
     @staticmethod
     def trim_history(
         lines: list[str],
-        tail: int = 10,
+        tail: int = 4,
     ) -> list[str]:
         """Оставляет первое сообщение и последние `tail`.
 
@@ -774,14 +769,6 @@ class Operation(BaseOperation):
         ]
 
     # --------------------------------------------------- collecting chats
-
-    def is_stale(self, item: ChatItem) -> bool:
-        last = item.get("lastMessage")
-        if not self.max_age or not last or not last.get("creationTime"):
-            return False
-        created = _parse_dt(last["creationTime"])
-        return datetime.now(created.tzinfo) - created > self.max_age
-
     def parse_chat_item(
         self,
         item: ChatItem,
@@ -826,22 +813,49 @@ class Operation(BaseOperation):
             employer_name=company.get("name") or "",
             applicant_id=applicant_id,
             resume_id=resume["id"],
-            resume_title=resume.get("title") or "",
-            resume_experience=self.format_experience(resume.get("experience")),
-            salary=self.format_salary(resume.get("salary")),
-            skills=self.format_skills(
-                resume.get("skills") or resume.get("skill_set")
-            ),
+            # resume_title=resume.get("title") or "",
+            # resume_experience=self.format_experience(resume.get("experience")),
+            # salary=self.format_salary(resume.get("salary")),
+            # skills=self.format_skills(
+            #     resume.get("skills") or resume.get("skill_set")
+            # ),
             last_is_mine=last_is_mine,
+            last_message_id=last["id"],
+            last_message_at=(
+                _parse_dt(last["creationTime"])
+                if last.get("creationTime")
+                else None
+            ),
             is_discard=(
                 not last_is_mine
                 and transition.get("applicantState") == "DISCARD"
             ),
         )
 
-    def is_chat_awaiting_reply(self, chat: ChatToReply) -> bool:
-        if chat.last_is_mine or chat.chat_id in self.ignored_chats:
+    def last_message_expired(self, chat: ChatToReply) -> bool:
+        """Последнему сообщению в чате больше --period часов."""
+        if not self.max_age or not chat.last_message_at:
             return False
+        created = chat.last_message_at
+        return datetime.now(created.tzinfo) - created > self.max_age
+
+    def is_chat_awaiting_reply(self, chat: ChatToReply) -> bool:
+        if chat.chat_id in self.ignored_chats:
+            return False
+
+        if chat.last_message_id in self.ignored_messages:
+            return False
+
+        expired = self.last_message_expired(chat)
+
+        if chat.last_is_mine:
+            # Я написал последним и мне давно не отвечают: бампаем
+            return expired
+
+        # Мне написали, а я не ответил дольше периода: пропускаем
+        if expired:
+            return False
+
         text = chat.reply_to_message.strip()
         return bool(text) and text != BOT_RECRUITER_ANSWER
 
@@ -866,7 +880,8 @@ class Operation(BaseOperation):
 
         for page in range(max_pages):
             data = self.get_chats(
-                page, refer_url=self.chat_page_url, unread=True
+                page,
+                refer_url=self.chat_page_url,
             )
             chats = data.get("chats") or {}
             items = chats.get("items") or []
@@ -878,12 +893,6 @@ class Operation(BaseOperation):
             chat_resumes = resources.get("resumes") or {}
 
             for item in items:
-                # Я не знаю что pinned=true значит
-                # if self.is_stale(item):
-                #     if item.get("pinned"):
-                #         continue
-                #     return result
-
                 if item["id"] in self.ignored_chats:
                     continue
 
@@ -934,14 +943,11 @@ class Operation(BaseOperation):
             "vacancy_compensation": chat.vacancy_compensation,
             "employer_name": chat.employer_name,
             "contact_name": chat.contact_name,
-            "resume_title": chat.resume_title,
-            "resume_salary": chat.salary,
-            "resume_skills": chat.skills,
-            "resume_experience": chat.resume_experience,
             "reply_to_message": chat.reply_to_message.strip(),
             "options": "\n".join(f"- {o}" for o in chat.reply_options),
             "history": history,
             "message_count": message_count,
+            **self.tool.get_resume_placeholders(chat.resume_id),
         }
 
     @staticmethod
@@ -967,7 +973,6 @@ class Operation(BaseOperation):
             logger.debug("Чатов для ответа: %d", len(chats))
             if not chats:
                 print("📝 Нет чатов, требующих ответа")
-                return
 
             for chat in chats:
                 time.sleep(random.uniform(5, 10))
@@ -980,21 +985,21 @@ class Operation(BaseOperation):
             if not self.loop:
                 break
 
-            time.sleep(random.uniform(15.0, 30.0))
+            t = random.uniform(60.0, 90.0)
+            print(f"⏳ Ждем {t:.2f} сек...")
+            time.sleep(t)
 
         print("📝 Сообщения разосланы!")
 
     def load_history(self, chat: ChatToReply) -> tuple[list[str], int, bool]:
         """Возвращает сообщения чата, их число и можно ли писать в чат."""
         chat_data = self.get_chat_data(chat.chat_id)
-        if not self.dry_run:
-            last_message = chat_data["chat"]["messages"]["items"][-1]
-            self.mark_chat_read(chat.chat_id, last_message["id"])
         state = (chat_data.get("chatStates") or {}).get(
             "writeMessageState"
         ) or {}
+        write_allowed = state.get("allowed", True)
         lines, count = self.format_history_lines(chat_data)
-        return lines, count, state.get("allowed", True)
+        return lines, count, write_allowed
 
     def process_chat(self, chat: ChatToReply, blacklist: set[str]) -> None:
         if chat.employer_id and chat.employer_id in blacklist:
@@ -1018,7 +1023,9 @@ class Operation(BaseOperation):
         if chat.reply_options:
             template = self.options_prompt
         else:
-            template = self.user_prompt
+            template = (
+                self.bump_prompt if chat.last_is_mine else self.user_prompt
+            )
             lines, count, writable = self.load_history(chat)
             if not writable or count >= self.max_history:
                 logger.debug("Игнорируем чат #%s", chat.chat_id)
@@ -1033,6 +1040,8 @@ class Operation(BaseOperation):
             cfg["system_prompt"], placeholders, randomize_text=False
         )
         ai = self.tool.get_ai_client(**cfg)
+        logger.debug("System Prompt: %s", ai.system_prompt)
+
         send_message = ai.complete(
             render_template(template, placeholders, randomize_text=False)
         ).strip()
@@ -1041,16 +1050,19 @@ class Operation(BaseOperation):
             option = self.match_option(send_message, chat.reply_options)
             if option is None:
                 logger.warning(
-                    "AI вернул не вариант ответа в чате %s: %r",
+                    "AI не может выбрать подходящий вариант ответа в чате %s: %r. Игнорируем. Ответьте ии-рекрутеру вручную.",
                     chat.chat_id,
                     send_message,
                 )
+
+                self.ignored_messages.add(chat.last_message_id)
                 return
+
             send_message = option
 
-        if not send_message.strip():
-            logger.warning("Пустой ответ для чата %s", chat.chat_id)
-            return
+        # if not send_message.strip():
+        #     logger.warning("Пустой ответ для чата %s", chat.chat_id)
+        #     return
 
         if self.dry_run:
             logger.debug(
@@ -1061,4 +1073,5 @@ class Operation(BaseOperation):
         self.send_chat_message(
             chat.chat_id, send_message, refer_url=self.chat_page_url
         )
+
         print(f"📨 Отправлено для {chat.vacancy_url}")
