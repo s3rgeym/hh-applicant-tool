@@ -156,7 +156,6 @@ DEFAULT_APPLY_MAIL_BODY = "{Здравствуйте|Добрый день}, {п
 class Namespace(BaseNamespace):
     resume_id: str | None
     cover_letter: str | None
-    ignore_employers: Path | None
     force_cover_letter: bool
     ai_filter: bool | None
     ai_filter_system_prompt: str
