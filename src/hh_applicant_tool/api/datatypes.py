@@ -1,14 +1,15 @@
-from __future__ import annotations
-
-from typing import Any, Generic, List, Literal, Optional, TypedDict, TypeVar
+from typing import Any, Literal, TypedDict
 
 NegotiationStateId = Literal[
-    "discard",  # отказ
-    "interview",  # собес
-    "response",  # отклик
-    "invitation",  # приглашение
-    "hired",  # выход на работу
+    "discard",
+    "interview",
+    "response",
+    "invitation",
+    "hired",
 ]
+
+
+# --- Общие ---------------------------------------------------------------
 
 
 class AccessToken(TypedDict):
@@ -18,22 +19,16 @@ class AccessToken(TypedDict):
     token_type: Literal["bearer"]
 
 
-Item = TypeVar("T")
-
-
-class PaginatedItems(TypedDict, Generic[Item]):
-    items: list[Item]
+class PaginatedItems[T](TypedDict):
+    items: list[T]
     found: int
     page: int
     pages: int
     per_page: int
-    # Это не все поля
-    clusters: Optional[Any]
-    arguments: Optional[Any]
-    fixes: Optional[Any]
-    suggests: Optional[Any]
-    # Это выглядит как глюк. Я нейронке скармливал выхлоп апи, а она писала эти
-    # типы
+    clusters: Any
+    arguments: Any
+    fixes: Any
+    suggests: Any
     alternate_url: str
 
 
@@ -42,46 +37,27 @@ class IdName(TypedDict):
     name: str
 
 
-class Snippet(TypedDict):
-    requirement: Optional[str]
-    responsibility: Optional[str]
-
-
-class ManagerActivity(TypedDict):
-    last_activity_at: str
-
-
+# Ключи "from" и "90"/"240" не годятся для class-синтаксиса,
+# поэтому эти два типа остаются в функциональной форме.
 Salary = TypedDict(
     "Salary",
     {
-        "from": Optional[int],
-        "to": Optional[int],
+        "from": int | None,
+        "to": int | None,
         "currency": str,
         "gross": bool,
     },
 )
 
-SalaryRange = TypedDict(
-    "SalaryRange",
-    {
-        "from": Optional[int],
-        "to": Optional[int],
-        "currency": str,
-        "gross": bool,
-        "mode": IdName,
-        "frequency": IdName,
-    },
-)
+LogoUrls = TypedDict("LogoUrls", {"original": str, "90": str, "240": str})
 
 
-LogoUrls = TypedDict(
-    "LogoUrls",
-    {
-        "original": str,
-        "90": str,
-        "240": str,
-    },
-)
+class SalaryRange(Salary):
+    mode: IdName
+    frequency: IdName | None
+
+
+# --- Работодатели --------------------------------------------------------
 
 
 class EmployerShort(TypedDict):
@@ -89,96 +65,155 @@ class EmployerShort(TypedDict):
     name: str
     url: str
     alternate_url: str
-    logo_urls: Optional[LogoUrls]
+    logo_urls: LogoUrls | None
     vacancies_url: str
     accredited_it_employer: bool
     trusted: bool
 
 
+type NegotiationEmployer = EmployerShort
+
+
 class SearchEmployer(EmployerShort):
-    country_id: Optional[int]
+    country_id: int | None
 
 
-class NegotiationEmployer(EmployerShort):
-    pass
+class VacancyEmployer(SearchEmployer):
+    badges: list[Any]
+    applicant_services: dict[str, dict[str, int]]
+    blacklisted: bool
+    is_identified_by_esia: bool
+    employer_on_additional_check: bool
 
 
-class VacancyShort(TypedDict):
+class Employer(EmployerShort):
+    has_divisions: bool
+    type: str
+    description: str | None
+    site_url: str
+    relations: list[Any]
+    area: IdName
+    country_code: str
+    industries: list[Any]
+    is_identified_by_esia: bool
+    badges: list[Any]
+    branded_description: str | None
+    branding: dict[str, Any] | None
+    insider_interviews: list[Any]
+    open_vacancies: int
+    applicant_services: dict[str, dict[str, int]]
+
+
+# --- Вакансии ------------------------------------------------------------
+
+
+class VacancyBase(TypedDict):
+    """Поля, общие для всех представлений вакансии."""
+
     id: str
     premium: bool
     name: str
-    department: Optional[dict]
+    department: dict[str, Any] | None
     has_test: bool
-    # HH API fields
     response_letter_required: bool
     area: IdName
-    salary: Optional[Salary]
-    salary_range: Optional[SalaryRange]
+    salary: Salary | None
+    salary_range: SalaryRange | None
     type: IdName
-    address: Optional[dict]
-    response_url: Optional[str]
-    sort_point_distance: Optional[float]
+    address: dict[str, Any] | None
+    response_url: str | None
     published_at: str
     created_at: str
     archived: bool
     apply_alternate_url: str
     show_contacts: bool
-    benefits: List[Any]
-    insider_interview: Optional[dict]
-    url: str
+    insider_interview: dict[str, Any] | None
     alternate_url: str
-    professional_roles: List[IdName]
+    professional_roles: list[IdName]
 
 
-class NegotiationVacancy(VacancyShort):
-    employer: NegotiationEmployer
-    show_logo_in_search: Optional[bool]
+class VacancyDetails(VacancyBase):
+    """Поля, которые есть и в поиске, и в полной вакансии."""
 
-
-class Phone(TypedDict):
-    country: str
-    city: str
-    number: str
-    formatted: str
-    comment: Optional[str]
-
-
-class ContactData(TypedDict):
-    name: Optional[str]
-    email: Optional[str]
-    phones: List[Phone]
-    call_tracking_enabled: bool
-
-
-class SearchVacancy(VacancyShort):
-    employer: SearchEmployer
-    relations: List[Any]
-    experimental_modes: List[str]
-    manager_activity: Optional[ManagerActivity]
-    snippet: Snippet
-    contacts: ContactData
+    relations: list[Any]
+    experimental_modes: list[str]
+    contacts: dict[str, Any] | None
     schedule: IdName
-    working_days: List[Any]
-    working_time_intervals: List[Any]
-    working_time_modes: List[Any]
+    working_days: list[Any]
+    working_time_intervals: list[IdName]
+    working_time_modes: list[Any]
     accept_temporary: bool
-    fly_in_fly_out_duration: List[Any]
-    work_format: List[IdName]
-    working_hours: List[IdName]
-    work_schedule_by_days: List[IdName]
+    fly_in_fly_out_duration: list[Any]
+    work_format: list[IdName]
+    working_hours: list[IdName]
+    work_schedule_by_days: list[IdName]
     accept_labor_contract: bool
-    civil_law_contracts: List[Any]
+    civil_law_contracts: list[IdName]
     night_shifts: bool
     accept_incomplete_resumes: bool
     experience: IdName
     employment: IdName
     employment_form: IdName
     internship: bool
-    adv_response_url: Optional[str]
-    is_adv_vacancy: bool
-    adv_context: Optional[dict]
     allow_chat_with_manager: bool
-    key_skills: Optional[List[dict]]
+
+
+class VacancyShort(VacancyBase):
+    sort_point_distance: float | None
+    benefits: list[Any]
+    url: str
+
+
+class NegotiationVacancy(VacancyShort):
+    employer: EmployerShort
+    show_logo_in_search: bool | None
+
+
+class SearchVacancy(VacancyShort, VacancyDetails):
+    employer: SearchEmployer
+    manager_activity: dict[str, str] | None
+    snippet: dict[str, str | None]
+    adv_response_url: str | None
+    is_adv_vacancy: bool
+    adv_context: dict[str, Any] | None
+    key_skills: list[dict[str, str]] | None
+
+
+class Vacancy(VacancyDetails):
+    employer: VacancyEmployer
+    billing_type: IdName
+    allow_messages: bool
+    description: str
+    inclusiveness_description: Any
+    inclusiveness_types: list[Any]
+    branded_description: Any
+    vacancy_constructor_template: Any
+    key_skills: list[dict[str, str]]
+    auto_response: dict[str, bool]
+    accept_handicapped: bool
+    accept_kids: bool
+    age_restriction: Any
+    specializations: list[Any]
+    code: Any
+    hidden: bool
+    quick_responses_allowed: bool
+    driver_license_types: list[Any]
+    initial_created_at: str
+    negotiations_url: str
+    suitable_resumes_url: str
+    has_test: bool
+    test: Any
+    immediate_redirect_url: str
+    languages: list[Any]
+    branding: Any
+    approved: bool
+    show_logo_in_search: bool
+    closed_for_applicants: bool
+    vacancy_properties: dict[str, Any]
+    show_question_input: bool
+
+
+# --- Резюме и пользователь -----------------------------------------------
 
 
 class ResumeShort(TypedDict):
@@ -188,69 +223,48 @@ class ResumeShort(TypedDict):
     alternate_url: str
 
 
-class ResumeCounters(TypedDict):
-    total_views: int
-    new_views: int
-    invitations: int
-    new_invitations: int
-
-
 class Resume(ResumeShort):
     status: IdName
     created_at: str
     updated_at: str
     can_publish_or_update: bool
-    counters: ResumeCounters
-
-
-class UserCounters(TypedDict):
-    resumes_count: int
-    new_resume_views: int
-    unread_negotiations: int
-    # ... and more
+    counters: dict[str, int]
 
 
 class User(TypedDict):
     id: int
     first_name: str
     last_name: str
-    middle_name: Optional[str]
-    email: Optional[str]
-    phone: Optional[str]
+    middle_name: str | None
+    email: str | None
+    phone: str | None
     is_applicant: bool
     is_employer: bool
     is_admin: bool
     is_anonymous: bool
     is_application: bool
-    counters: UserCounters
-    # ... and more
+    counters: dict[str, int]
+
+
+# --- Отклики -------------------------------------------------------------
 
 
 class Message(TypedDict):
     id: str
     text: str
-    author: dict  # Could be more specific, e.g. Participant(TypedDict)
+    author: dict[str, Any]
     created_at: str
     viewed_by_opponent: bool
 
 
-class Counters(TypedDict):
-    messages: int
-    unread_messages: int
-
-
-class ChatStates(TypedDict):
-    # response_reminder_state: {"allowed": bool}
-    response_reminder_state: dict[str, bool]
-
-
-class NegotiaionState(IdName):
+class NegotiationState(TypedDict):
     id: NegotiationStateId
+    name: str
 
 
 class Negotiation(TypedDict):
     id: str
-    state: IdName
+    state: NegotiationState
     created_at: str
     updated_at: str
     resume: ResumeShort
@@ -258,8 +272,8 @@ class Negotiation(TypedDict):
     has_updates: bool
     messages_url: str
     url: str
-    counters: Counters
-    chat_states: ChatStates
+    counters: dict[str, int]
+    chat_states: dict[str, dict[str, bool]]
     source: str
     chat_id: int
     messaging_status: str
@@ -269,26 +283,4 @@ class Negotiation(TypedDict):
     applicant_question_state: bool
     hidden: bool
     vacancy: NegotiationVacancy
-    tags: List[Any]
-
-
-class EmployerApplicantServices(TypedDict):
-    target_employer: dict[str, int]
-
-
-class Employer(EmployerShort):
-    has_divisions: bool
-    type: str
-    description: Optional[str]
-    site_url: str
-    relations: List[Any]
-    area: IdName
-    country_code: str
-    industries: List[Any]
-    is_identified_by_esia: bool
-    badges: List[Any]
-    branded_description: Optional[str]
-    branding: Optional[dict]
-    insider_interviews: List[Any]
-    open_vacancies: int
-    applicant_services: EmployerApplicantServices
+    tags: list[Any]

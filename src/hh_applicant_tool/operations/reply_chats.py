@@ -101,16 +101,6 @@ BOT_RECRUITER_ANSWER = (
 logger = logging.getLogger(__name__.split(".")[0])
 
 
-class Namespace(BaseNamespace):
-    resume_id: str | None
-    max_pages: int
-    period: int | None
-    max_history: int
-    dry_run: bool
-    loop_delay: int | None
-    editor: str
-
-
 # ------------------------------------------------------------ типы ответов
 
 
@@ -437,10 +427,23 @@ def _parse_dt(value: str) -> datetime:
         return parse_api_datetime(value)
 
 
+class Namespace(BaseNamespace):
+    resume_id: str | None
+    max_pages: int
+    period: int | None
+    max_history: int
+    dry_run: bool
+    loop: bool
+
+
 class Operation(BaseOperation):
     """Автоответчик в чатах."""
 
-    __aliases__: list[str] = ["respond-chats", "auto-reply", "auto-respond"]
+    __aliases__: list[str] = [
+        "respond-chats",
+        "reply",
+        "respond",
+    ]
 
     # Инициализируются в run()
     tool: HHApplicantTool
@@ -455,6 +458,7 @@ class Operation(BaseOperation):
     ai_init_args: dict[str, Any]
     user: datatypes.User
     base_placeholders: dict[str, str]
+    loop: bool
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
@@ -490,6 +494,12 @@ class Operation(BaseOperation):
             default=False,
             action=argparse.BooleanOptionalAction,
         )
+        parser.add_argument(
+            "--loop",
+            action="store_true",
+            default=False,
+            help="Запустить в цикле",
+        )
 
     # ---------------------------------------------------------------- run
 
@@ -505,6 +515,7 @@ class Operation(BaseOperation):
         self.max_age = timedelta(hours=args.period) if args.period else None
         self.max_history = args.max_history
         self.dry_run = args.dry_run
+        self.loop = args.loop
         self.ignored_chats: set[int] = set()
 
         self.user_prompt: str = (
@@ -935,37 +946,41 @@ class Operation(BaseOperation):
 
     @staticmethod
     def match_option(reply: str, options: list[str]) -> str | None:
-        cleaned = reply.strip().lstrip("-•* ").strip()
+        # Нейронка постоянно помимо черточек в начале еще в конце точку ставит
+        cleaned = reply.lstrip("-•* ").rstrip(" .")
         for o in options:
-            if cleaned == o:
-                return o
-        for o in options:
-            if cleaned.casefold() == o.casefold():
+            # Хитрецы добавляют пробел в конце варианта, чтобы спалить нейронку
+            if cleaned.casefold() == o.strip().casefold():
                 return o
         return None
 
     # ---------------------------------------------------------- main logic
 
     def reply_chats(self) -> None:
-        """Один проход по чатам."""
         blacklist = set(self.tool.get_blacklisted())
 
         cnt = self.get_unread_count()
         logger.debug("Счетчик непрочитанных: %d", cnt["unreadCount"])
 
-        chats = self.get_chats_awaiting_reply(self.max_pages)
-        logger.debug("Чатов для ответа: %d", len(chats))
-        if not chats:
-            print("📝 Нет чатов, требующих ответа")
-            return
+        while True:
+            chats = self.get_chats_awaiting_reply(self.max_pages)
+            logger.debug("Чатов для ответа: %d", len(chats))
+            if not chats:
+                print("📝 Нет чатов, требующих ответа")
+                return
 
-        for chat in chats:
-            time.sleep(random.uniform(5, 10))
+            for chat in chats:
+                time.sleep(random.uniform(5, 10))
 
-            try:
-                self.process_chat(chat, blacklist)
-            except requests.HTTPError as ex:
-                logger.error(ex)
+                try:
+                    self.process_chat(chat, blacklist)
+                except requests.HTTPError as ex:
+                    logger.error(ex)
+
+            if not self.loop:
+                break
+
+            time.sleep(random.uniform(15.0, 30.0))
 
         print("📝 Сообщения разосланы!")
 
@@ -1022,7 +1037,6 @@ class Operation(BaseOperation):
             render_template(template, placeholders, randomize_text=False)
         ).strip()
         logger.debug(f"AI message: {send_message}")
-
         if chat.reply_options:
             option = self.match_option(send_message, chat.reply_options)
             if option is None:

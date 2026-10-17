@@ -713,6 +713,7 @@ class HHApplicantTool:
             session=session,
         )
         text = self._solve_captcha(image_data=captcha_img.data)
+        logger.debug(f"Текст с капчи: {text}")
 
         return CaptchaSolution(
             text=text,

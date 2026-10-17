@@ -270,7 +270,7 @@ $ hh-applicant-tool apply-vacancies --search "Python Backend" --excluded-filter 
 $ hh-applicant-tool update-resumes
 
 # Запускаем автоответчик в чате (если настроен openai)
-$ hh-applicant-tool reply-chats
+$ hh-applicant-tool reply-chats --loop
 
 # Чистим отказы
 $ hh-applicant-tool clear-negotiations

@@ -20,7 +20,7 @@ import requests
 from ..ai.base import AIError
 from ..ai.openai import OpenAIClient
 from ..api import BadResponse, Redirect, datatypes
-from ..api.datatypes import PaginatedItems, SearchVacancy
+from ..api.datatypes import PaginatedItems, SearchVacancy, Vacancy
 from ..api.errors import ApiError, LimitExceeded
 from ..errors import OperationError
 from ..tool import BaseNamespace, BaseOperation
@@ -556,11 +556,10 @@ class Operation(BaseOperation):
         if not self.vacancy_filter_ai:
             return True
 
-        full_vacancy = (
-            self.api_client.get(f"/vacancies/{vacancy['id']}")
-            if vacancy.get("id")
-            else {}
+        full_vacancy: Vacancy = self.api_client.get(
+            f"/vacancies/{vacancy['id']}"
         )
+
         key_skills = ", ".join(
             s["name"]
             for s in (full_vacancy.get("key_skills") or [])
