@@ -301,9 +301,6 @@ $ hh-applicant-tool check-updates
 # Просмотр лога в реальном времени
 $ hh-applicant-tool log -f
 
-# Посмотреть содержимое конфига
-$ hh-applicant-tool config
-
 # Редактировать конфиг в стандартном редакторе
 $ hh-applicant-tool config -e
 
