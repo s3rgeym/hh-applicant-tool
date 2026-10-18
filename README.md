@@ -405,11 +405,11 @@ code $(hh-applicant-tool config -p)
 user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 YaBrowser/26.8.0.0 Safari/537.36"
 
 # Поддержка Ollama
-# Если вы запускаете утилиту через Docker, то вместо localhost нужно использовать
-# свой локальный ip типа 192.168.1.100
 [openai.default]
 # Тут надо указывать путь предшествующий /chat/completions
 # у большинства нейронок он /v1, но есть ряд исключений
+# Если вы запускаете утилиту через Docker, то вместо localhost нужно использовать
+# свой локальный ip типа 192.168.1.100
 base_url = "http://localhost:11434/v1"
 # Модель с поддержкой распознания изображений
 # vl = vision language
