@@ -399,7 +399,7 @@ code $(hh-applicant-tool config -p)
 # Дефолтный очень быстро устаревает, и сайт может начать вас считать подозрительным
 user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 YaBrowser/26.8.0.0 Safari/537.36"
 
-# Поддержка Ollama для запуска hh-applicant-tool с флагом --ai/--use-ai
+# Поддержка Ollama
 # Если вы запускаете утилиту через Docker, то вместо localhost нужно использовать
 # свой локальный ip типа 192.168.1.100
 [openai.default]
