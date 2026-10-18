@@ -64,8 +64,20 @@ def render_template(
         ) from ex
 
 
-def bool2str(v: bool) -> str:
-    return str(v).lower()
+def bool2str(v: Any) -> str:
+    """
+    Возвращает переданное значение в виде строки: true/false
+
+        >>> bool2str(1)
+        'true'
+        >>> bool2str(True)
+        'true'
+        >>> bool2str({})
+        'false'
+        >>> bool2str(' ')
+        'true'
+    """
+    return str(bool(v)).lower()
 
 
 # К удалению
