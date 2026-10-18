@@ -28,6 +28,7 @@ from ..tool import BaseNamespace, BaseOperation
 from ..utils.datatypes import VacancyTestsData
 from ..utils.string import (
     bool2str,
+    choose_similar,
     rand_text,
     render_template,
     shorten,
@@ -1115,23 +1116,18 @@ class Operation(BaseOperation):
                         },
                         "промпта выбора ответа в тесте",
                     )
-                    ai_answer = self.test_ai.complete(prompt).strip()
-                    logger.debug("AI ответ (выбор): %.255s", ai_answer)
+                    answer = self.test_ai.complete(prompt).strip(". ")
+                    logger.debug("AI ответ (выбор): %.255s", answer)
                     # Берём только ID, который реально есть среди вариантов
-                    valid_ids = {str(s["id"]) for s in solutions}
-                    selected_id = next(
-                        (
-                            x
-                            for x in re.findall(r"\d+", ai_answer)
-                            if x in valid_ids
-                        ),
-                        str(solutions[len(solutions) // 2]["id"]),
+                    # К сожалению нейронка постоянно возвращает мусор
+                    # И поэтому через difflib ищем вариант, который макчимально
+                    # похож на ответ от нейронки
+                    payload[field_name] = choose_similar(
+                        answer, [str(s["id"]) for s in solutions]
                     )
-                    payload[field_name] = selected_id
                 else:
-                    yes_solution = next(
-                        filter(lambda x: x["text"].lower() == "да", solutions),
-                        None,
+                    yes_solution = choose_similar(
+                        "да", [s["text"] for s in solutions]
                     )
 
                     payload[field_name] = (
@@ -1148,11 +1144,7 @@ class Operation(BaseOperation):
                 #     for _ in range(random.randint(3, 15))
                 # )
 
-                if "://" in question:
-                    answer = rand_text(
-                        "{{Простите|Извините}, но я не перехожу по {внешним|сторонним} ссылкам, так как {опасаюсь взлома|не хочу {быть взломанным|подхватить вирус|чтобы у меня {со|с банковского} счета украли деньги}}.|У меня нет времени на заполнение анкет и гуглодоков}"
-                    )
-                elif self.test_ai:
+                if self.test_ai:
                     prompt = render_template(
                         self.test_text_prompt,
                         {**placeholders, "question": question},
@@ -1161,6 +1153,10 @@ class Operation(BaseOperation):
                     answer = self.test_ai.complete(prompt)
                     ## добавляем ответ AI на вопрос теста##
                     logger.debug("AI ответ: %.255s", answer)
+                elif "://" in question:
+                    answer = rand_text(
+                        "{{Простите|Извините}, но я не перехожу по {внешним|сторонним} ссылкам, так как {опасаюсь взлома|не хочу {быть взломанным|подхватить вирус|чтобы у меня {со|с банковского} счета украли деньги}}.|У меня нет времени на заполнение анкет и гуглодоков}"
+                    )
                 # Тупоеблые любят вопросы с ответами да/нет, где ответ да является правильным в большинстве случаев.
                 else:
                     answer = "Да"

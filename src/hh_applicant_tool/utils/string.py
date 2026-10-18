@@ -3,7 +3,24 @@ from __future__ import annotations
 import html
 import random
 import re
+from difflib import SequenceMatcher
 from typing import Any
+
+
+def choose_similar(input_text: str, options: list[str]) -> str | None:
+    """Возвращает элемент из options, максимально похожий на input_text."""
+    if not options:
+        return None
+
+    def normalize(s: str) -> str:
+        return " ".join(s.casefold().split())
+
+    query = normalize(input_text)
+
+    def score(option: str) -> float:
+        return SequenceMatcher(None, query, normalize(option)).ratio()
+
+    return max(options, key=score)
 
 
 def shorten(s: str, limit: int = 75, ellipsis: str = "…") -> str:

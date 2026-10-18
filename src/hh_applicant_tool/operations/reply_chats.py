@@ -22,7 +22,7 @@ from ..constants import GITHUB_PROFILE_URL
 from ..errors import OperationError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.date import parse_api_datetime
-from ..utils.string import render_template
+from ..utils.string import choose_similar, render_template
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
@@ -960,16 +960,6 @@ class Operation(BaseOperation):
             **self.tool.get_resume_placeholders(chat.resume_id),
         }
 
-    @staticmethod
-    def match_option(reply: str, options: list[str]) -> str | None:
-        # Нейронка постоянно помимо черточек в начале еще в конце точку ставит
-        cleaned = reply.lstrip("-•* ").rstrip(" .")
-        for o in options:
-            # Хитрецы добавляют пробел в конце варианта, чтобы спалить нейронку
-            if cleaned.casefold() == o.strip().casefold():
-                return o
-        return None
-
     # ---------------------------------------------------------- main logic
 
     def reply_chats(self) -> None:
@@ -1065,22 +1055,11 @@ class Operation(BaseOperation):
         ).strip()
         logger.debug(f"AI message: {send_message}")
         if chat.reply_options:
-            option = self.match_option(send_message, chat.reply_options)
-            if option is None:
-                logger.warning(
-                    "AI не может выбрать подходящий вариант ответа в чате %s: %r. Игнорируем. Ответьте ии-рекрутеру вручную.",
-                    chat.chat_id,
-                    send_message,
-                )
+            send_message = choose_similar(send_message, chat.reply_options)
 
-                self.ignored_messages.add(chat.last_message_id)
-                return
-
-            send_message = option
-
-        # if not send_message.strip():
-        #     logger.warning("Пустой ответ для чата %s", chat.chat_id)
-        #     return
+        if not send_message.strip():
+            logger.error("Пустой ответ для чата %s", chat.chat_id)
+            return
 
         if self.dry_run:
             logger.debug(
