@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import html
 import logging
 import random
 import re
-import time
 from email.message import EmailMessage
 from itertools import chain
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterator, NamedTuple
 from urllib.parse import (
     urlparse,
 )
@@ -21,7 +21,7 @@ from ..ai.openai import OpenAIClient
 from ..api import BadResponse, Redirect, datatypes
 from ..api.datatypes import PaginatedItems, SearchVacancy, Vacancy
 from ..api.errors import ApiError, LimitExceeded
-from ..constants import GITHUB_PROFILE_URL
+from ..constants import GITHUB_PROFILE_URL, MAX_CAPTCHA_ATTEMPTS
 from ..errors import OperationError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.datatypes import VacancyTestsData
@@ -152,6 +152,13 @@ DEFAULT_TEST_TEXT_PROMPT = """\
 
 DEFAULT_APPLY_MAIL_SUBJECT = "{Отклик|Резюме} на вакансию %(vacancy_name)s"
 DEFAULT_APPLY_MAIL_BODY = "{Здравствуйте|Добрый день}, {прошу рассмотреть|пожалуйста рассмотрите} мое резюме %(resume_url)s на вакансию %(vacancy_name)s."
+
+
+class VacancyTestResponse(NamedTuple):
+    result: dict
+    status_code: int
+    payload: dict
+    referer_url: str
 
 
 class Namespace(BaseNamespace):
@@ -801,39 +808,72 @@ class Operation(BaseOperation):
 
                     try:
                         if not self.dry_run:
-                            result = self._solve_vacancy_test(
+                            response = self._solve_vacancy_test(
                                 vacancy_id=vacancy["id"],
                                 resume_hash=resume["id"],
                                 letter=letter,
                                 placeholders=message_placeholders,
                             )
-                            if result.get("success") == "true":
-                                applied_count += 1
-                                logger.info(
-                                    "Отправили отклик на вакансию с тестом: %s",
-                                    vacancy["alternate_url"],
-                                )
-                                print(
-                                    "📨 Отправили отклик на вакансию с тестом",
-                                    vacancy["alternate_url"],
-                                )
-                            else:
-                                err = (
-                                    result.get("error")
-                                    if isinstance(result, dict)
-                                    else None
-                                )
+                            captcha_attempts = 0
+                            while True:
+                                result = response.result or {}
 
-                                if err == "negotiations-limit-exceeded":
+                                if str(result.get("success")).lower() == "true":
+                                    applied_count += 1
+                                    logger.info(
+                                        "Отправили отклик на вакансию с тестом: %s",
+                                        vacancy["alternate_url"],
+                                    )
+                                    print(
+                                        "📨 Отправили отклик на вакансию с тестом",
+                                        vacancy["alternate_url"],
+                                    )
+                                    break
+
+                                if hh_captcha := result.get("hhcaptcha"):
+                                    if captcha_attempts >= MAX_CAPTCHA_ATTEMPTS:
+                                        logger.error(
+                                            "Не удалось решить капчу за %d попыток: %s",
+                                            captcha_attempts,
+                                            vacancy["alternate_url"],
+                                        )
+                                        break
+
+                                    logger.debug(
+                                        "(%d/%d) Требуется ввод капчи: %s",
+                                        captcha_attempts + 1,
+                                        MAX_CAPTCHA_ATTEMPTS,
+                                        vacancy["alternate_url"],
+                                    )
+
+                                    solution = self.tool.solve_captcha(
+                                        hh_captcha["captchaState"]
+                                    )
+                                    payload = copy.deepcopy(response.payload)
+                                    payload |= {
+                                        "captchaText": solution.text,
+                                        "captchaKey": solution.key,
+                                        "captchaState": solution.state,
+                                    }
+                                    response = self._send_vacancy_test(
+                                        payload,
+                                        response.referer_url,
+                                    )
+                                    captcha_attempts += 1
+                                    continue  # ответ проверится на следующей итерации
+
+                                error_id = result.get("error")
+                                if error_id == "negotiations-limit-exceeded":
+                                    logger.warning("Достигнут лимит откликов")
                                     do_apply = False
                                     limit_reached = True
-                                    break
                                 else:
                                     logger.error(
                                         "Произошла ошибка при отклике на вакансию с тестом: %s, result: %.300s",
                                         vacancy["alternate_url"],
-                                        result,
+                                        response,
                                     )
+                                break
 
                             # Какой-то негодяй тут continue убрал и отклик
                             # повторно отправлялся
@@ -946,7 +986,7 @@ class Operation(BaseOperation):
         resume_hash: str,
         letter: str = "",
         placeholders: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> VacancyTestResponse:
         """Загружает тест, ждет паузу и отправляет отклик."""
         placeholders = placeholders or {}
         response_url = f"{self.tool.base_url}/applicant/vacancy_response?vacancyId={vacancy_id}&startedWithQuestion=false&hhtmFrom=vacancy"
@@ -1051,14 +1091,18 @@ class Operation(BaseOperation):
 
         logger.debug(f"{payload = }")
 
-        # Ожидание перед отправкой (float)
-        time.sleep(random.uniform(2.0, 3.0))
+        return self._send_vacancy_test(payload, response_url)
 
+    def _send_vacancy_test(
+        self,
+        payload: dict,
+        referer_url: str,
+    ) -> VacancyTestResponse:
         response = self.tool.session.post(
             f"{self.tool.base_url}/applicant/vacancy_response/popup",
             data=payload,
             headers={
-                "Referer": response_url,
+                "Referer": referer_url,
                 # x-gib-fgsscgib-w-hh и x-gib-gsscgib-w-hh вроде в куках
                 # передаются и не нужны
                 "X-Hhtmfrom": "vacancy",
@@ -1076,7 +1120,12 @@ class Operation(BaseOperation):
         )
 
         try:
-            data = response.json()
+            return VacancyTestResponse(
+                result=response.json(),
+                status_code=response.status_code,
+                referer_url=referer_url,
+                payload=payload,
+            )
         except (ValueError, requests.exceptions.JSONDecodeError) as ex:
             logger.warning(
                 "Ответ на отклик с тестом не является JSON (status=%s, %s), result: %s",
@@ -1088,8 +1137,6 @@ class Operation(BaseOperation):
                 "Эндпоинт отклика на тест вернул не-JSON ответ "
                 "(возможно, перенаправление на капчу или форму)."
             ) from ex
-
-        return data
 
     def _parse_site(self, url: str) -> dict[str, Any]:
         with self.tool.session.get(url, timeout=10) as r:

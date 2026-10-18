@@ -44,7 +44,7 @@ ANDROID_CLIENT_SECRET = (
 # Язык картинки капчи. Задаётся параметром lang у POST /captcha,
 # значение приходит от hh.ru в верхнем регистре, но понимает и в
 # нижнем
-DEFAULT_CAPTCHA_LANGUAGE = "RU"
+DEFAULT_CAPTCHA_LANGUAGE = "EN"
 
 # Android-приложение перенаправляет на данную ссылку.
 # Не знаю учитывается ли.
@@ -58,6 +58,8 @@ CAPTCHA_PROMPT = (
 # Миниммальное время которое должно пройти после решения капчи перед ее
 # отправкой на проверку
 CAPTCHA_MIN_SOLVE_DELAY = 10.0
+
+MAX_CAPTCHA_ATTEMPTS = 5
 
 HH_DOMAIN_RE = re.compile(
     r"^(?:.*\.)?(?:hh\.(?:ru|kz|uz|by|net|com)|rabota\.by)\.?$"

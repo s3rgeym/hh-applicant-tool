@@ -14,13 +14,12 @@ from urllib.parse import parse_qs, urljoin, urlsplit
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
+from ..constants import MAX_CAPTCHA_ATTEMPTS
 from ..tool import BaseOperation, OperationError
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
-
-MAX_RETRIES = 10
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -114,10 +113,10 @@ class Operation(BaseOperation):
 
         # Вход по паролю или запрос OTP-кода, с повторами при капче
         captcha: dict[str, Any] = {}
-        tries = 0
+        captcha_attempts = 0
 
         while True:
-            time.sleep(random.uniform(3.0, 5.0))
+            time.sleep(random.uniform(5.0, 10.0))
 
             result = self.login(username, password, **captcha)
 
@@ -132,8 +131,7 @@ class Operation(BaseOperation):
             if result.captcha_error:
                 logger.warning("Капча была введена неверно!")
 
-            tries += 1
-            if tries >= MAX_RETRIES:
+            if captcha_attempts >= MAX_CAPTCHA_ATTEMPTS:
                 raise OperationError("Исчерпано количество неверных попыток!")
 
             solution = tool.solve_captcha(
@@ -141,6 +139,7 @@ class Operation(BaseOperation):
                 referer_url=self.redirect_url,
             )
 
+            captcha_attempts += 1
             captcha = {
                 "captcha_text": solution.text,
                 "captcha_key": solution.key,

@@ -27,7 +27,7 @@ DEFAULT_DELAY = 0.345
 DEFAULT_CAPTCHA_COOLDOWN = 1.0
 MAX_RETRIES = 3
 # Это, считай, костыль ради хуии, потому как тот может бесконечно херню вместо распознанного текста слать
-MAX_CAPTCHA_RETRIES = 5
+MAX_CAPTCHA_ATTEMPTS = 5
 
 AllowedMethods = Literal[
     "GET",
@@ -270,7 +270,7 @@ class ApiClient(BaseClient):
             self.captcha_cooldown or DEFAULT_CAPTCHA_COOLDOWN
         )
         self.max_captcha_attempts = (
-            self.max_captcha_attempts or MAX_CAPTCHA_RETRIES
+            self.max_captcha_attempts or MAX_CAPTCHA_ATTEMPTS
         )
         return super().__post_init__()
 

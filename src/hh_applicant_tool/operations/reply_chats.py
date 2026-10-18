@@ -898,15 +898,20 @@ class Operation(BaseOperation):
                 if item["id"] in self.ignored_chats:
                     continue
 
-                resume = None
-                resume_ref = None
-                for ref in (item.get("resources") or {}).get("RESUME") or []:
-                    resume = resumes.get(hashes.get(ref, ""))
-                    if resume:
-                        resume_ref = ref
-                        break
-                if not resume:
+                resume_ref = next(
+                    (
+                        ref
+                        for ref in (item.get("resources") or {}).get(
+                            "RESUME", []
+                        )
+                        if resumes.get(hashes.get(ref, ""))
+                    ),
+                    None,
+                )
+                if not resume_ref:
                     continue
+
+                resume = resumes[hashes[resume_ref]]
 
                 applicant_id = int(
                     (chat_resumes.get(resume_ref) or {}).get("userId")
@@ -965,12 +970,12 @@ class Operation(BaseOperation):
     # ---------------------------------------------------------- main logic
 
     def reply_chats(self) -> None:
-        blacklist = set(self.tool.get_blacklisted())
 
         cnt = self.get_unread_count()
         logger.debug("Счетчик непрочитанных: %d", cnt["unreadCount"])
 
         while "хх.сру — сайт для общения нейродебилов друг с другом":
+            blacklist = set(self.tool.get_blacklisted())
             chats = self.get_chats_awaiting_reply(self.max_pages)
             logger.debug("Чатов для ответа: %d", len(chats))
             if chats:

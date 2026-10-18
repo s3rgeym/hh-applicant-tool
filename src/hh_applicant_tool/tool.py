@@ -46,6 +46,7 @@ from .constants import (
     HH_BASE_URL,
     HH_DOMAIN_RE,
     LOG_FILENAME,
+    MAX_CAPTCHA_ATTEMPTS,
     TELEGRAM_CHAT_URL,
     TOKEN_CONFIG_FILENAME,
 )
@@ -243,7 +244,7 @@ class HHApplicantTool:
         )
         parser.add_argument(
             "--captcha-lang",
-            choices=["RU", "EN"],
+            choices=["RU", "EN", "ru", "en"],
             help="Язык капчи. Некоторые модели распознают лучше текст на английском",
         )
         parser.add_argument(
@@ -427,6 +428,7 @@ class HHApplicantTool:
             captcha_handler=self.handle_captcha
             if self.captcha_handling
             else None,
+            max_captcha_attempts=MAX_CAPTCHA_ATTEMPTS,
             on_token_change=self._save_token,
             **client_config,
         )
@@ -1046,7 +1048,8 @@ class HHApplicantTool:
                     ],
                 )
             )
-            description = (exp.get("description") or "").strip()
+            # Не надо в описании поэмы писать
+            description = (exp.get("description")[:1000] or "").strip()
             blocks.append(f"{head}\n\n{description}".strip())
         return "\n\n".join(blocks)
 
