@@ -1426,13 +1426,6 @@ from hh_applicant_tool import HHApplicantTool
 
 tool = HHApplicantTool()
 print(tool.api_client.get('/me'))
-
-# Какую-то вспомогательную информацию можно сохранять в настройках
-import datetime as dt
-
-# Учтите, что в таком случае токены, которые могут обновиться при выполнении запросов,
-# нужно сохранять вручную
-tool.save_token()
 ```
 
 Команды тоже можно вызывать:
