@@ -785,7 +785,7 @@ class Operation(BaseOperation):
                             "сопроводительного письма",
                         )
 
-                    logger.debug("Сопроводительное письмло: %.255s", letter)
+                    logger.debug("Сопроводительное письмо: %.255s", letter)
 
                 logger.debug(
                     "Пробуем откликнуться на вакансию: %s",
