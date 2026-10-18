@@ -25,6 +25,8 @@ from ..utils.string import render_template
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
+MAX_IGNORED = 10_000
+
 
 class XHRError(Exception):
     pass
@@ -62,12 +64,6 @@ DEFAULT_SYSTEM_PROMPT = """\
 %(resume_experience)s"""
 
 DEFAULT_USER_PROMPT = """\
-Сообщение работодателя:
-
-%(reply_to_message)s
-
----
-
 Название вакансии: %(vacancy_name)s
 Зарплата: %(vacancy_compensation)s
 Компания: %(employer_name)s
@@ -85,7 +81,7 @@ DEFAULT_USER_PROMPT = """\
 
 %(history)s
 
-Напиши короткий ответ работодателю на основе истории переписки."""
+Напиши короткий ответ на последнее сообщение работодателю в истории переписки с учетом предыдущих сообщений."""
 
 DEFAULT_OPTIONS_PROMPT = """\
 Сообщение работодателя:
@@ -728,13 +724,15 @@ class Operation(BaseOperation):
     @staticmethod
     def format_history_lines(
         chat_data: ChatDataResponse,
+        last_included: bool = True,
     ) -> tuple[list[str], int]:
         """Возвращает сообщения чата по одному и их общее число."""
         chat = chat_data.get("chat") or {}
         me = chat.get("currentParticipantId")
         items = (chat.get("messages") or {}).get("items") or []
         lines = []
-        for msg in items:
+        # Последнее не выводим
+        for msg in items if last_included else items[:-1]:
             text = (msg.get("text") or "").strip()
             if not text:
                 continue
@@ -989,6 +987,15 @@ class Operation(BaseOperation):
 
             if not self.loop:
                 break
+
+            # Этого никогда не произойдет, но бесконечный рост лучше ограничить
+            if len(self.ignored_chats) > MAX_IGNORED:
+                logger.warning("ignored chats overflow!")
+                self.ignored_chats.clear()
+
+            if len(self.ignored_messages) > MAX_IGNORED:
+                logger.warning("ignored messages overflow!")
+                self.ignored_messages.clear()
 
             t = random.uniform(30.0, 60.0)
             print(f"⏳ Ждем {t:.2f} сек...")
