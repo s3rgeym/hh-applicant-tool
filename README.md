@@ -275,7 +275,7 @@ $ hh-applicant-tool -vv apply-vacancies --search "Python разработчик"
 # Вакансии, не прошедшие фильтр, добавляются в черный список
 # см hh.ru/applicant/blacklist/vacancy?hhtmFrom=main&hhtmFromLabel=header
 # Работает очень быстро, но пропускает всякий мусор (пояснение см далее)
-$ hh-applicant-tool apply-vacancies --search "Python Backend" --excluded-filter "fullstack,junior,php,java"
+$ hh-applicant-tool apply-vacancies --search "Python Backend" --excluded-filter "fullstack|junior|php|java"
 
 # То же самое, но с использованием нейронки (работает очень медленно)
 # Если не переписывать шаблоны промпта, то будет сравнивать вакансию с названием резюме и ключевыми навыками,
