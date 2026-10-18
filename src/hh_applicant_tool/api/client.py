@@ -24,7 +24,7 @@ DEFAULT_DELAY = 0.345
 # если она не была введена вручную, эта настройка ни на что не влияет,
 # она разве что симулирует задержку перед редиректом через JS, когда капча
 # была успешно решена
-DEFAULT_CAPTCHA_COOLDOWN = 1.0
+DEFAULT_CAPTCHA_COOLDOWN = 0.0
 MAX_RETRIES = 3
 # Это, считай, костыль ради хуии, потому как тот может бесконечно херню вместо распознанного текста слать
 MAX_CAPTCHA_ATTEMPTS = 5
@@ -342,8 +342,11 @@ class ApiClient(BaseClient):
                             break
                         attempts -= 1
                     if accepted:
-                        logger.debug(f"captcha cooldown: {captcha_cooldown}")
-                        time.sleep(captcha_cooldown)
+                        if self.captcha_cooldown > 0:
+                            logger.debug(
+                                f"captcha cooldown: {captcha_cooldown}"
+                            )
+                            time.sleep(captcha_cooldown)
                         continue
                 raise
             except errors.Forbidden:

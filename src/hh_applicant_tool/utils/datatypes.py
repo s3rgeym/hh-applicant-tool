@@ -41,3 +41,4 @@ class ResumePlaceholders(TypedDict):
     resume_salary: str
     resume_education: str
     resume_experience: str
+    resume_total_experience: str

@@ -56,6 +56,7 @@ from .utils.config import ConfigJSON, ConfigTOML
 from .utils.datatypes import ResumePlaceholders
 from .utils.helpers import get_proxies_dict
 from .utils.log import setup_logger
+from .utils.string import shorten
 from .utils.system import has_gui_support, is_docker
 from .utils.term import print_kitty_image, print_sixel_image, setup_terminal
 from .utils.user_agent import generate_android_useragent
@@ -1049,7 +1050,10 @@ class HHApplicantTool:
                 )
             )
             # Не надо в описании поэмы писать
-            description = (exp.get("description")[:1000] or "").strip()
+            description = shorten(
+                (exp.get("description") or "").strip(),
+                limit=1000,
+            )
             blocks.append(f"{head}\n\n{description}".strip())
         return "\n\n".join(blocks)
 
@@ -1114,7 +1118,17 @@ class HHApplicantTool:
         rv["resume_experience"] = self._format_experience(
             resume.get("experience") or []
         )
+        rv["resume_total_experience"] = self._format_total_expirience(
+            resume.get("total_experience", {}).get("months") or 0
+        )
         return rv
+
+    @staticmethod
+    def _format_total_expirience(months: int) -> str:
+        if not months:
+            return "без опыта"
+        years, rest = divmod(months, 12)
+        return f"{years} г. {rest} мес."
 
     def _save_token(self, token: dict[str, Any]) -> None:
         self.token_config.update(token=token)
