@@ -9,7 +9,6 @@ import re
 import time
 from email.message import EmailMessage
 from itertools import chain
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator
 from urllib.parse import (
     urlparse,
@@ -122,11 +121,13 @@ DEFAULT_AI_FILTER_PROMPT = """\
 Название резюме: %(resume_title)s
 Навыки, перечисленные в резюме: %(resume_skills)s
 Зарплата, указанная в резюме: %(resume_salary)s
-Предпочитаемый соискателем формат(ы) работы: %(resume_work_format)s
+Предпочитаемый соискателем формат работы: %(resume_work_format)s
+
+========================================
 
 Вакансия: %(vacancy_name)s
 Навыки, требуемые в вакансии: %(vacancy_key_skills)s
-Описание вакансии: %(vacancy_description)s
+Описание вакансии: %(vacancy_description).2000s
 
 Подходит ли эта вакансия кандидату?"""
 
@@ -563,14 +564,17 @@ class Operation(BaseOperation):
 
     def _apply_vacancies(self) -> None:
         resumes: list[datatypes.Resume] = self.tool.get_resumes()
+
+        # Выбираем только опубликованные
+        resumes = [x for x in resumes if x["status"]["id"] == "published"]
+
+        if not resumes:
+            raise OperationError("У вас нет опубликованных резюме")
+
         if self.resume_id:
             resumes = [x for x in resumes if x["id"] == self.resume_id]
             if not resumes:
                 raise OperationError(f"Резюме {self.resume_id} не найдено")
-        # Выбираем только опубликованные
-        resumes = [x for x in resumes if x["status"]["id"] == "published"]
-        if not resumes:
-            raise OperationError("У вас нет опубликованных резюме")
 
         me: datatypes.User = self.tool.get_me()
         seen_employers = set()

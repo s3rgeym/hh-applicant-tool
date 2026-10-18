@@ -22,15 +22,20 @@ class Namespace(BaseNamespace):
 
 
 class Operation(BaseOperation):
-    """Просмотр файла-лога"""
+    """Просмотр и очистка лог-файла"""
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
-        # Изменено на -F для соответствия стандарту less/tail
-        parser.add_argument(
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument(
             "-f",
             "--follow",
             action="store_true",
             help="Следить за файлом (режим follow, аналог less +F)",
+        )
+        group.add_argument(
+            "--clear",
+            action="store_true",
+            help="Очистить логи",
         )
 
     def run(self, tool: HHApplicantTool, args: Namespace) -> None:
@@ -39,6 +44,18 @@ class Operation(BaseOperation):
         if not os.path.exists(log_path):
             logger.error("Файл лога не найден: %s", log_path)
             return 1
+
+        if args.clear:
+            try:
+                # Обрезаем файл, не удаляя его: открытые хендлеры логгера
+                # продолжат писать в тот же inode
+                with open(log_path, "w", encoding="utf-8"):
+                    pass
+            except OSError as ex:
+                logger.error("Не удалось очистить лог: %s", ex)
+                return 1
+            logger.info("Лог очищен")
+            return None
 
         if sys.platform == "win32":
             os.startfile(log_path)

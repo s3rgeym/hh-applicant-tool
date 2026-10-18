@@ -15,7 +15,7 @@ from urllib.parse import urljoin
 
 import requests
 
-from ..api import ApiError, datatypes
+from ..api import datatypes
 from ..constants import GITHUB_PROFILE_URL
 from ..errors import OperationError
 from ..tool import BaseNamespace, BaseOperation
@@ -24,6 +24,10 @@ from ..utils.string import render_template
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
+
+
+class XHRError(Exception):
+    pass
 
 
 # Шаблоны для AI. Переопределяются только в конфиге:
@@ -692,7 +696,7 @@ class Operation(BaseOperation):
 
         data = response.json()
         if "error" in data:
-            raise ApiError(data["error"])
+            raise XHRError(data["error"])
 
     def leave_chat(self, chat_id: int, refer_url: str | None = None) -> None:
         response = self.tool.session.post(
@@ -968,24 +972,25 @@ class Operation(BaseOperation):
         cnt = self.get_unread_count()
         logger.debug("Счетчик непрочитанных: %d", cnt["unreadCount"])
 
-        while True:
+        while "хх.сру — сайт для общения нейродебилов друг с другом":
             chats = self.get_chats_awaiting_reply(self.max_pages)
             logger.debug("Чатов для ответа: %d", len(chats))
-            if not chats:
+            if chats:
+                for chat in chats:
+                    time.sleep(random.uniform(10, 15))
+
+                    try:
+                        self.process_chat(chat, blacklist)
+                    except (requests.HTTPError, XHRError) as ex:
+                        logger.error(ex)
+
+            else:
                 print("📝 Нет чатов, требующих ответа")
-
-            for chat in chats:
-                time.sleep(random.uniform(5, 10))
-
-                try:
-                    self.process_chat(chat, blacklist)
-                except requests.HTTPError as ex:
-                    logger.error(ex)
 
             if not self.loop:
                 break
 
-            t = random.uniform(60.0, 90.0)
+            t = random.uniform(30.0, 60.0)
             print(f"⏳ Ждем {t:.2f} сек...")
             time.sleep(t)
 
@@ -1070,6 +1075,7 @@ class Operation(BaseOperation):
             )
             return
 
+        self.mark_chat_read(chat.chat_id, chat.last_message_id)
         self.send_chat_message(
             chat.chat_id, send_message, refer_url=self.chat_page_url
         )

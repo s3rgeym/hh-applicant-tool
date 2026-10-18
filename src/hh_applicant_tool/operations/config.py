@@ -59,7 +59,7 @@ def del_value(data: dict[str, Any], path: str) -> bool:
 
 def parse_scalar(value: str) -> bool | int | float | str | None:
     match value.lower():
-        case "null":
+        case "null" | "none" | "nil":
             return None
         case "true":
             return True
@@ -76,13 +76,13 @@ class Operation(BaseOperation):
     Операции с конфигурационным файлом.
     По умолчанию выводит содержимое конфига.
 
-    config                              показать весь конфиг
     config openai.defaul.model          вывести значение
     config openai.default.model gpt-4o  установить значение
     config -d openai.model              удалить ключ
     """
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
+        self.parser = parser
         parser.add_argument(
             "key",
             nargs="?",
@@ -120,7 +120,7 @@ class Operation(BaseOperation):
 
         if args.key and (args.edit or args.delete or args.show_path):
             logger.error("Ключ нельзя сочетать с -e, -d и -p.")
-            return
+            return 1
 
         if args.key:
             if args.value is None:
@@ -153,7 +153,8 @@ class Operation(BaseOperation):
             self._open_editor(config.path)
             return
 
-        print(config)
+        self.parser.print_help()
+        return 2
 
     def _open_editor(self, filepath: Path) -> None:
         """Открывает файл в редакторе по умолчанию в зависимости от ОС."""

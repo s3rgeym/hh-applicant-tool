@@ -52,6 +52,7 @@ from .constants import (
 from .errors import Error, OperationCanceled, OperationError
 from .utils.argparse import ArgumentFormatter
 from .utils.config import ConfigJSON, ConfigTOML
+from .utils.datatypes import ResumePlaceholders
 from .utils.helpers import get_proxies_dict
 from .utils.log import setup_logger
 from .utils.system import has_gui_support, is_docker
@@ -793,14 +794,13 @@ class HHApplicantTool:
 
         dt += time.monotonic()
 
-        logger.debug("Время затраченное на решение капчи: %.2f сек")
+        logger.debug("Время затраченное на решение капчи: %.2f сек", dt)
 
-        if dt < CAPTCHA_MIN_SOLVE_DELAY:
+        if (wait := CAPTCHA_MIN_SOLVE_DELAY - dt) > 0:
             logger.info(
-                "Ждем %.2f сек перед отправкой капчи на проверку",
-                dt,
+                f"Ждем {wait:.2f} сек перед отправкой капчи на проверку",
             )
-            time.sleep(dt)
+            time.sleep(wait)
 
         return self._send_captcha(
             text=solution.text,
@@ -1050,7 +1050,7 @@ class HHApplicantTool:
             blocks.append(f"{head}\n\n{description}".strip())
         return "\n\n".join(blocks)
 
-    def get_resume_placeholders(self, resume_id: str) -> dict[str, str]:
+    def get_resume_placeholders(self, resume_id: str) -> ResumePlaceholders:
         """Данные резюме для подстановки в шаблон промпта AI-фильтра."""
 
         resume: api.datatypes.Resume = self.api_client.get(
@@ -1109,7 +1109,7 @@ class HHApplicantTool:
         )
 
         rv["resume_experience"] = self._format_experience(
-            resume["experience"] or []
+            resume.get("experience") or []
         )
         return rv
 
