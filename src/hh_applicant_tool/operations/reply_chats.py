@@ -931,6 +931,24 @@ class Operation(BaseOperation):
             hashes = resources.get("resumeHashById") or {}
             chat_resumes = resources.get("resumes") or {}
 
+            # Если включены уведомления, то мы должны уведомить об открытии
+            # чата?
+            # chats.items[].notificationEnabled === true
+
+            # Если собеседник бот, то ему нужно ответить, решить тесты
+            # chats.items[].lastMessage.participantDisplay.isBot === true
+
+            # ...lastMessag.hasContent === true?
+
+            # Чат зпаблокирован, в нем писать нельзя
+            # chats.items[].ownerViolatesRules === false
+
+            # "operations": {
+            #     "allowed": [
+            #         "LEAVE_CHAT",
+            #         "DISABLE_NOTIFICATIONS"
+            #     ]
+            # },
             for item in items:
                 if item["id"] in self.ignored_chats:
                     continue
@@ -1108,7 +1126,8 @@ class Operation(BaseOperation):
             )
             return
 
-        self.mark_chat_read(chat.chat_id, chat.last_message_id)
+        # self.notify_chat_opened(chat.chat_id)
+        # self.mark_chat_read(chat.chat_id, chat.last_message_id)
         self.start_chat_typing(chat.chat_id)
         self.send_chat_message(
             chat.chat_id, send_message, refer_url=self.chat_page_url
@@ -1158,3 +1177,13 @@ class Operation(BaseOperation):
             referer_url=self.chat_referer(chat_id),
         )
         logger.debug("start typing: %r", res)
+
+    def notify_chat_opened(self, chat_id: int) -> None:
+        res = self._xhr(
+            "POST",
+            "/chatik/api/notify_chat_opened",
+            json={"chatId": chat_id},
+            hhtm_from="main",
+            referer_url=self.chat_referer(chat_id),
+        )
+        logger.debug("notify chat opened: %r", res)
