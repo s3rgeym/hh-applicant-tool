@@ -840,6 +840,68 @@ class HHApplicantTool:
             session=session,
         )
 
+    # --- Сборка запроса -----------------------------------------------------
+    @staticmethod
+    def _build_xhr_headers(
+        origin: str,
+        xsrf: str,
+        referer_url: str,
+        extra_headers: dict,
+    ) -> dict:
+        """Стандартные XHR-заголовки; `extra_headers` перекрывает стандартные.
+
+        Все значения уже определены и не None -- проверки делает вызывающий код.
+        """
+        return {
+            "Accept": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+            "X-XSRFToken": xsrf,
+            "Origin": origin,
+            "Referer": referer_url,
+            **extra_headers,
+        }
+
+    @staticmethod
+    def _parse_xhr_response(r: requests.Response) -> XHRResult:
+        """Разбирает ответ в словарь и проверяет, не требует ли сервер капчу.
+
+        - не JSON      -> {"text": ..., "http_status": ...}
+        - JSON не dict -> {"data": ..., "http_status": ...}
+        - в остальных случаях к словарю ответа добавляется "http_status".
+
+        Бросает CaptchaError, если в ответе есть hhcaptcha.captchaState
+        (такое бывает и при 200, и при 403).
+        """
+        try:
+            res = r.json()
+        except JSONDecodeError:
+            return {"text": r.text, "http_status": r.status_code}
+
+        if not isinstance(res, dict):
+            # Их говноапи может и список вернуть и null
+            res = {"data": res}
+
+        if captcha_state := (res.get("hhcaptcha") or {}).get("captchaState"):
+            raise CaptchaError(captcha_state)
+
+        # В res["recaptcha"]["key"] всегда лежит ключ, но не ясно, что еще должно быть, чтобы ошибку рекапчи бросить...
+
+        res.setdefault("http_status", r.status_code)
+        return res
+
+    @staticmethod
+    def _with_captcha(
+        json: dict | None,
+        data: dict | None,
+        captcha: dict,
+    ) -> tuple[dict | None, dict | None]:
+        """Подмешивает поля капчи в json (если он есть) или в form-data."""
+        if json is not None:
+            return {**json, **captcha}, data
+        return json, {**(data or {}), **captcha}
+
+    # --- Запросы ------------------------------------------------------------
+
     def _xhr_request(
         self,
         method: str,
@@ -851,18 +913,21 @@ class HHApplicantTool:
         headers: dict | None = None,
         xsrf_token: str | None = None,
         session: requests.Session | None = None,
-    ) -> requests.Response | XHRResult:
-        """XHR-запрос к внутреннему API hh.ru.
+    ) -> XHRResult:
+        """Одна попытка XHR-запроса к внутреннему API hh.ru (без решения капчи).
 
         endpoint     -- путь ("/shards/...") или полный URL (например, chatik.hh.ru).
         params       -- query string (и для GET, и для POST/PUT).
         data         -- тело запроса (form-data).
+        json         -- тело запроса (JSON).
         referer_url  -- страница, с которой "сделан" запрос. Если не передан,
                         берётся главная того же хоста.
         headers      -- дополнительные заголовки; перекрывают стандартные.
         xsrf_token   -- если не передан, берётся из куки _xsrf сессии.
 
-        Бросает XHRError, если код ответ от сервера >= 400
+        Статус ответа НЕ проверяется: код возвращается в поле "http_status".
+        Бросает CaptchaError, если сервер потребовал капчу, и ValueError,
+        если нет токена _xsrf.
         """
         session = session or self.session
         url = urljoin(self.base_url, endpoint)
@@ -874,16 +939,12 @@ class HHApplicantTool:
         if not xsrf:
             raise ValueError("Нет куки _xsrf: сначала авторизуйтесь")
 
-        request_headers = {
-            "Accept": "application/json",
-            "X-Requested-With": "XMLHttpRequest",
-            "X-XSRFToken": xsrf,
-            "Origin": origin,
-            "Referer": referer_url or f"{origin}/",
-        }
-
-        if headers:
-            request_headers.update(headers)
+        request_headers = self._build_xhr_headers(
+            origin=origin,
+            xsrf=xsrf,
+            referer_url=referer_url or f"{origin}/",
+            extra_headers=headers or {},
+        )
 
         r = session.request(
             method.upper(),
@@ -895,22 +956,7 @@ class HHApplicantTool:
             allow_redirects=False,
             timeout=(10, 30),
         )
-
-        try:
-            # При 200 и 403 статусе могут возвращаться
-            res = r.json()
-            if captcha_state := res.get("hhcaptcha", {}).get("captchaState"):
-                raise CaptchaError(captcha_state)
-
-            # Там еще что-то содержится при перекидывании на RECAPTCHA
-            # if recaptcha_key := res.get("recaptcha", {}).get("key"):
-            #     raise ReCaptchaError(recaptcha_key)
-        except JSONDecodeError:
-            res = {"text": r.text}
-        # На всякий случай лишнее поле добавим
-        res.setdefault("http_status", r.status_code)
-        # res.setdefault("http_headers", dict(r.headers))
-        return res
+        return self._parse_xhr_response(r)
 
     def xhr_request(
         self,
@@ -924,10 +970,12 @@ class HHApplicantTool:
         xsrf_token: str | None = None,
         session: requests.Session | None = None,
     ) -> XHRResult:
-        """Выполняет XHR-запрос с автоматическим решением капчи."""
-        captcha_attempts = 0
+        """XHR-запрос с автоматическим решением капчи.
 
-        while True:
+        Параметры те же, что у `_xhr_request`. При CaptchaError решает капчу
+        и повторяет запрос, но не более MAX_CAPTCHA_ATTEMPTS раз.
+        """
+        for attempt in range(MAX_CAPTCHA_ATTEMPTS + 1):
             try:
                 return self._xhr_request(
                     method,
@@ -941,13 +989,12 @@ class HHApplicantTool:
                     session=session,
                 )
             except CaptchaError as ex:
-                if captcha_attempts >= MAX_CAPTCHA_ATTEMPTS:
-                    raise ex
+                if attempt >= MAX_CAPTCHA_ATTEMPTS:
+                    raise
 
-                captcha_attempts += 1
                 logger.debug(
                     "(%d/%d) Требуется ввод капчи: %s %s",
-                    captcha_attempts,
+                    attempt + 1,
                     MAX_CAPTCHA_ATTEMPTS,
                     method,
                     endpoint,
@@ -957,18 +1004,17 @@ class HHApplicantTool:
                     captcha_state=ex.state,
                     referer_url=referer_url,
                 )
+                json, data = self._with_captcha(
+                    json,
+                    data,
+                    {
+                        "captchaState": ex.state,
+                        "captchaText": solution.text,
+                        "captchaKey": solution.key,
+                    },
+                )
 
-                captcha = {
-                    "captchaState": ex.state,
-                    "captchaText": solution.text,
-                    "captchaKey": solution.key,
-                }
-
-                if json is not None:
-                    json = {**json, **captcha}
-                else:
-                    data = {**(data or {}), **captcha}
-                continue
+        raise AssertionError("unreachable")
 
     def get_captcha_image(
         self,
