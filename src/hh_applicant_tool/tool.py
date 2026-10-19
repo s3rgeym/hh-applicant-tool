@@ -88,6 +88,8 @@ logger = logging.getLogger(__name__.split(".")[0])
 
 OPERATIONS = "operations"
 
+_CAPTCHA_HEADERS = {"X-Hhtmfrom": "", "X-Hhtmsource": "account_captcha"}
+
 
 class XHRResult(TypedDict):
     http_status: int
@@ -989,7 +991,7 @@ class HHApplicantTool:
             target_url,
             params={"lang": lang},
             referer_url=referer_url,
-            headers={"X-Hhtmfrom": "", "X-Hhtmsource": "account_captcha"},
+            headers=_CAPTCHA_HEADERS,
             xsrf_token=xsrf_token,
             session=session,
         )
@@ -1052,7 +1054,7 @@ class HHApplicantTool:
                 target_url,
                 params=payload,
                 referer_url=referer_url,
-                headers={"X-Hhtmfrom": "", "X-Hhtmsource": "account_captcha"},
+                headers=_CAPTCHA_HEADERS,
                 xsrf_token=xsrf_token,
                 session=session,
             )
