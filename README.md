@@ -459,7 +459,7 @@ ai_filter_prompt = """
 Вакансия:
 Название: %(vacancy_name)s
 Работодатель: %(employer_name)s
-Требуемые навыки: %(vacancy_key_skills)s
+Требуемые навыки: %(vacancy_skills)s
 Описание вакансии: %(vacancy_description).1000s
 
 ----------------------------------------
@@ -536,7 +536,7 @@ captcha_lang = "RU"
 #                                специальность, год через запятую
 #     resume_experience        - опыт работы списком
 #
-# Только в ai_filter_prompt:   vacancy_key_skills, vacancy_description
+# Только в ai_filter_prompt:   vacancy_skills, vacancy_description
 # Только в test_choice_prompt: question, options
 # Только в test_text_prompt:   question
 # Не использовать: middle_name (есть не всегда, подстановка упадет с ошибкой)
@@ -590,7 +590,7 @@ ai_filter_prompt = """
 === ВАКАНСИЯ ===
 Название: %(vacancy_name)s
 Компания: %(employer_name)s
-Ключевые навыки: %(vacancy_key_skills)s
+Ключевые навыки: %(vacancy_skills)s
 Описание: %(vacancy_description)s
 
 Подходит ли эта вакансия кандидату по специализации, уровню, формату работы, зарплате и требованиям к гражданству или городу?
@@ -700,7 +700,7 @@ Email: %(email)s</p>
 #     resume_experience        - опыт работы (до 3 последних мест)
 #
 # Осторожно:
-#   - resume_url, resume_hash и vacancy_key_skills в этой команде НЕТ,
+#   - resume_url, resume_hash и vacancy_skills в этой команде НЕТ,
 #     подстановка упадет с ошибкой шаблона.
 #   - history и message_count заполнены только в обычных чатах и бампах. В чатах
 #     с кнопками они пустые, поэтому в reply_chat_options_prompt и в

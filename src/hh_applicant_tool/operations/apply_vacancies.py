@@ -143,7 +143,7 @@ DEFAULT_AI_FILTER_PROMPT = """\
 ========================================
 
 Вакансия: %(vacancy_name)s
-Навыки, требуемые в вакансии: %(vacancy_key_skills)s
+Навыки, требуемые в вакансии: %(vacancy_skills)s
 Описание вакансии: %(vacancy_description).2000s
 
 Подходит ли эта вакансия кандидату?"""
@@ -572,7 +572,7 @@ class Operation(BaseOperation):
                 "vacancy_description": strip_tags(
                     full_vacancy.get("description") or ""
                 ),
-                "vacancy_key_skills": key_skills,
+                "vacancy_skills": key_skills,
             },
             "промпта AI-фильтра",
         )
