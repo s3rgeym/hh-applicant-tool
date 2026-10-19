@@ -1254,7 +1254,7 @@ class HHApplicantTool:
 
         try:
             primary_education = education["primary"][0]
-        except KeyError, IndexError:
+        except (KeyError, IndexError):
             primary_education = {}
 
         rv["resume_education"] = ", ".join(
