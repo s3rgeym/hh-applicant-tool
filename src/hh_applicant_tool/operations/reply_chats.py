@@ -19,7 +19,7 @@ from hh_applicant_tool.api.errors import ApiError
 
 from ..api import datatypes
 from ..constants import GITHUB_PROFILE_URL
-from ..errors import OperationError
+from ..errors import OperationError, XHRError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.date import parse_api_datetime
 from ..utils.string import choose_similar, render_template
@@ -28,10 +28,6 @@ if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
 MAX_IGNORED = 10_000
-
-
-class XHRError(Exception):
-    pass
 
 
 # Шаблоны для AI. Переопределяются только в конфиге:
@@ -444,6 +440,29 @@ class ChatToReply:
     last_message_id: str
 
 
+class QuickReplySource(TypedDict):
+    source_type: str
+    template_id: str
+    nlu_class: str
+    customization_level: str
+
+
+class QuickReplyMetadata(TypedDict):
+    source: QuickReplySource
+
+
+class QuickReply(TypedDict):
+    id: str
+    type: str
+    text: str
+    label: str
+    metadata: QuickReplyMetadata
+
+
+class QuickRepliesResponse(TypedDict):
+    quick_replies: list[QuickReply]
+
+
 def _parse_dt(value: str) -> datetime:
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -454,7 +473,8 @@ def _parse_dt(value: str) -> datetime:
 class Namespace(BaseNamespace):
     resume_id: str | None
     max_pages: int
-    period: int | None
+    bump_period: int | None
+    ignore_period: int | None
     max_history: int
     dry_run: bool
     loop: bool
@@ -465,15 +485,14 @@ class Operation(BaseOperation):
 
     __aliases__: list[str] = [
         "respond-chats",
-        "reply",
-        "respond",
     ]
 
     # Инициализируются в run()
     tool: HHApplicantTool
     resume_id: str | None
     max_pages: int
-    max_age: timedelta | None
+    bump_age: timedelta | None
+    ignore_age: timedelta | None
     max_history: int
     dry_run: bool
     ignored_chats: set[int]
@@ -492,9 +511,15 @@ class Operation(BaseOperation):
             help="Идентификатор резюме. Если не указан, то просматриваем чаты для всех резюме",
         )
         parser.add_argument(
-            "--period",
+            "--bump-period",
             type=int,
-            help="Бампать чаты в которых тебе не отвечали больше N часов, игнорировать те, где ты сам не стал отвечать (бот иногда тупит, давая постоянно неправильные ответы на варианты ответа)",
+            help="Через сколько часов бампать чаты, в которых работодатель не ответил на твое последнее сообщение (0 — не бампать)",
+            default=72,
+        )
+        parser.add_argument(
+            "--ignore-period",
+            type=int,
+            help="Через сколько часов игнорировать чаты, в которых работодатель написал последним, а ты не ответил (бот иногда тупит, давая постоянно неправильные ответы на варианты ответа). 0 — не игнорировать",
             default=72,
         )
         parser.add_argument(
@@ -538,7 +563,12 @@ class Operation(BaseOperation):
         self.tool = tool
         self.resume_id = args.resume_id
         self.max_pages = args.max_pages
-        self.max_age = timedelta(hours=args.period) if args.period else None
+        self.bump_age = (
+            timedelta(hours=args.bump_period) if args.bump_period else None
+        )
+        self.ignore_age = (
+            timedelta(hours=args.ignore_period) if args.ignore_period else None
+        )
         self.max_history = args.max_history
         self.dry_run = args.dry_run
         self.loop = args.loop
@@ -558,8 +588,6 @@ class Operation(BaseOperation):
             tool.general_config.get("reply_chat_bump_prompt")
             or DEFAULT_BUMP_PROMPT
         )
-
-        # Используется AI — отвечает он, нет — открываем редактор
 
         c = tool.get_openai_settings("openai.reply_chat")
         c.setdefault("system_prompt", DEFAULT_SYSTEM_PROMPT)
@@ -599,28 +627,46 @@ class Operation(BaseOperation):
         response.raise_for_status()
         return response.url
 
-    def _headers(
-        self, refer_url: str | None = None, **extra: str
+    @staticmethod
+    def _get_hhtm_headers(
+        hhtm_from: str = "resume_profile_front",
     ) -> dict[str, str]:
-        headers = {
-            "Accept": "application/json",
-            "X-hhtmFrom": "resume_profile_front",
-            "X-hhtmFromLabel": "resume_profile_front",
+        """Специфичные для chatik заголовки.
+
+        Accept, X-Requested-With, X-Xsrftoken, Origin и Referer ставит
+        xhr_request.
+        """
+        return {
+            "X-hhtmFrom": hhtm_from,
+            "X-hhtmFromLabel": hhtm_from,
             "X-hhtmSource": "app",
-            "X-hhtmSourceLabel": "resume_profile_front",
-            "X-Requested-With": "XMLHttpRequest",
-            "X-Xsrftoken": self.tool.xsrf_token,
-            **extra,
+            "X-hhtmSourceLabel": hhtm_from,
         }
-        if refer_url:
-            headers["Referer"] = refer_url
-        return headers
+
+    def _xhr(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        referer_url: str | None = None,
+        hhtm_from: str = "resume_profile_front",
+    ) -> dict:
+        """XHR-запрос к chatik."""
+        return self.tool.xhr_request(
+            method,
+            f"{self.chat_url}{path}",
+            params=params,
+            json=json,
+            referer_url=referer_url,
+            headers=self._get_hhtm_headers(hhtm_from),
+            xsrf_token=self.tool.xsrf_token,
+        )
 
     def get_unread_count(self) -> UnreadCount:
-        """Количество непрочитанных чатов. Запрос без спецзаголовков."""
-        response = self.tool.session.get(f"{self.chat_url}/chatik/api/unread")
-        response.raise_for_status()
-        return response.json()
+        """Количество непрочитанных чатов."""
+        return self._xhr("GET", "/chatik/api/unread")
 
     def get_chats(
         self,
@@ -636,50 +682,46 @@ class Operation(BaseOperation):
         if page > 0:
             params["page"] = page
 
-        response = self.tool.session.get(
-            f"{self.chat_url}/chatik/api/chats",
+        return self._xhr(
+            "GET",
+            "/chatik/api/chats",
             params=params,
-            headers=self._headers(refer_url),
+            referer_url=refer_url,
         )
-        response.raise_for_status()
-        return response.json()
 
     def chat_referer(self, chat_id: int) -> str:
         """Адрес страницы конкретного чата, он же Referer запросов к нему."""
         return f"{self.chat_url}/chat/{chat_id}"
 
     def get_chat_data(self, chat_id: int) -> ChatDataResponse:
-        response = self.tool.session.get(
-            f"{self.chat_url}/chatik/api/chat_data",
+        return self._xhr(
+            "GET",
+            "/chatik/api/chat_data",
             params={
                 "chatId": chat_id,
                 "do_not_track_session_events": "true",
             },
-            headers=self._headers(self.chat_referer(chat_id)),
+            referer_url=self.chat_referer(chat_id),
         )
-        response.raise_for_status()
-        return response.json()
 
     def mark_chat_read(self, chat_id: int, message_id: int) -> None:
-        response = self.tool.session.post(
-            f"{self.chat_url}/chatik/api/mark_read",
+        self._xhr(
+            "POST",
+            "/chatik/api/mark_read",
             json={
                 "chatId": chat_id,
                 "messageId": message_id,
                 "hasUnreadDiscardMessage": False,
             },
-            headers=self._headers(
-                self.chat_referer(chat_id),
-                **{"Content-Type": "application/json"},
-            ),
+            referer_url=self.chat_referer(chat_id),
         )
-        response.raise_for_status()
 
     def send_chat_message(
         self, chat_id: int, text: str, refer_url: str | None = None
-    ) -> None:
-        response = self.tool.session.post(
-            f"{self.chat_url}/chatik/api/send",
+    ) -> dict:
+        return self._xhr(
+            "POST",
+            "/chatik/api/send",
             json={
                 "chatId": chat_id,
                 "text": text,
@@ -687,25 +729,16 @@ class Operation(BaseOperation):
                 # генерируется
                 "idempotencyKey": str(uuid.uuid4()),
             },
-            headers=self._headers(
-                refer_url, **{"Content-Type": "application/json"}
-            ),
+            referer_url=refer_url,
         )
-        response.raise_for_status()
 
-        data = response.json()
-        if "error" in data:
-            raise XHRError(data["error"])
-
-    def leave_chat(self, chat_id: int, refer_url: str | None = None) -> None:
-        response = self.tool.session.post(
-            f"{self.chat_url}/chatik/api/leave",
+    def leave_chat(self, chat_id: int, refer_url: str | None = None) -> dict:
+        return self._xhr(
+            "POST",
+            "/chatik/api/leave",
             json={"chatId": chat_id},
-            headers=self._headers(
-                refer_url, **{"Content-Type": "application/json"}
-            ),
+            referer_url=refer_url,
         )
-        response.raise_for_status()
 
     # ----------------------------------------------------------- formatting
     @staticmethod
@@ -837,12 +870,15 @@ class Operation(BaseOperation):
             ),
         )
 
-    def last_message_expired(self, chat: ChatToReply) -> bool:
-        """Последнему сообщению в чате больше --period часов."""
-        if not self.max_age or not chat.last_message_at:
+    @staticmethod
+    def last_message_older_than(
+        chat: ChatToReply, max_age: timedelta | None
+    ) -> bool:
+        """Последнему сообщению в чате больше max_age. Без лимита — False."""
+        if not max_age or not chat.last_message_at:
             return False
         created = chat.last_message_at
-        return datetime.now(created.tzinfo) - created > self.max_age
+        return datetime.now(created.tzinfo) - created > max_age
 
     def is_chat_awaiting_reply(self, chat: ChatToReply) -> bool:
         if chat.chat_id in self.ignored_chats:
@@ -851,14 +887,12 @@ class Operation(BaseOperation):
         if chat.last_message_id in self.ignored_messages:
             return False
 
-        expired = self.last_message_expired(chat)
-
         if chat.last_is_mine:
             # Я написал последним и мне давно не отвечают: бампаем
-            return expired
+            return self.last_message_older_than(chat, self.bump_age)
 
-        # Мне написали, а я не ответил дольше периода: пропускаем
-        if expired:
+        # Мне написали, а я не ответил дольше периода: игнорируем
+        if self.last_message_older_than(chat, self.ignore_age):
             return False
 
         text = chat.reply_to_message.strip()
@@ -1043,6 +1077,13 @@ class Operation(BaseOperation):
                 chat, "\n---\n".join(lines), count
             )
 
+            # Можно нейронку просить выбирать из одного варианта дополнения или
+            # сделать флуд чата без нейронок
+            # quick_replies = self.get_quick_replies(
+            #     chat_id=chat.chat_id, message_id=chat.last_message_id
+            # )
+            # logger.debug(quick_replies)
+
         cfg = dict(self.ai_init_args)
         cfg["system_prompt"] = render_template(
             cfg["system_prompt"], placeholders, randomize_text=False
@@ -1068,8 +1109,52 @@ class Operation(BaseOperation):
             return
 
         self.mark_chat_read(chat.chat_id, chat.last_message_id)
+        self.start_chat_typing(chat.chat_id)
         self.send_chat_message(
             chat.chat_id, send_message, refer_url=self.chat_page_url
         )
 
         print(f"📨 Отправлено для {chat.vacancy_url}")
+
+    def get_quick_replies(
+        self,
+        chat_id: int,
+        message_id: int,
+        referer: str | None = None,
+        do_not_track_events: bool = True,
+    ) -> list[str]:
+        """Быстрые ответы, которые hh предлагает на сообщение в чате."""
+        params: dict[str, Any] = {
+            "chatId": chat_id,
+            "messageId": message_id,
+        }
+        if do_not_track_events:
+            params["do_not_track_session_events"] = "true"
+
+        quick_replies: QuickRepliesResponse = self._xhr(
+            "GET",
+            "/chatik/api/quick_replies",
+            params=params,
+            referer_url=referer or self.chat_referer(chat_id),
+            hhtm_from="negotiation_list",
+        )
+        return [
+            i["text"]
+            for i in quick_replies["quick_replies"]
+            if i["type"] == "send"
+        ]
+
+    def start_chat_typing(self, chat_id: int) -> None:
+        """Сообщает chatik, что пользователь начал печатать в чате."""
+        res = self._xhr(
+            "POST",
+            "/chatik/api/participant_action",
+            json={
+                "chatId": chat_id,
+                "actionType": "TYPING",
+            },
+            # ChatGPT почему-то проебывает заголовки, когда ему скидываешь описание запроса и просишь написать ф-ию
+            hhtm_from="main",
+            referer_url=self.chat_referer(chat_id),
+        )
+        logger.debug("start typing: %r", res)

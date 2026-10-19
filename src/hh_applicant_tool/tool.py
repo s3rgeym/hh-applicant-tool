@@ -17,10 +17,19 @@ from functools import cached_property
 from http.cookiejar import MozillaCookieJar
 from importlib import import_module
 from itertools import count
+from json.decoder import JSONDecodeError
 from os import getenv
 from pathlib import Path
 from pkgutil import iter_modules
-from typing import Any, Callable, Iterable, Literal, NamedTuple, TypedDict
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    Literal,
+    NamedTuple,
+    NotRequired,
+    TypedDict,
+)
 from urllib.parse import parse_qs, quote, urljoin, urlsplit
 
 import requests
@@ -50,7 +59,12 @@ from .constants import (
     TELEGRAM_CHAT_URL,
     TOKEN_CONFIG_FILENAME,
 )
-from .errors import Error, OperationCanceled, OperationError
+from .errors import (
+    CaptchaError,
+    Error,
+    OperationCanceled,
+    OperationError,
+)
 from .utils.argparse import ArgumentFormatter
 from .utils.config import ConfigJSON, ConfigTOML
 from .utils.datatypes import ResumePlaceholders
@@ -73,6 +87,15 @@ except ImportError:
 logger = logging.getLogger(__name__.split(".")[0])
 
 OPERATIONS = "operations"
+
+
+class XHRResult(TypedDict):
+    http_status: int
+    http_headers: dict[str, str]
+    text: NotRequired[str]
+    success: NotRequired[bool]
+    hhcaptcha: NotRequired[dict[str, str]]
+    ...
 
 
 class HHLuxInitialState(TypedDict):
@@ -312,7 +335,7 @@ class HHApplicantTool:
             proxies = get_proxies_dict(self.proxy_url)
 
         if proxies:
-            logger.debug("session proxies: %r", proxies)
+            logger.debug("Session proxies: %r", proxies)
             session.proxies = proxies
 
         # В заголовки не лезь, если не понимаешь зачем они
@@ -324,7 +347,7 @@ class HHApplicantTool:
             }
         )
 
-        logger.debug("session headers: %r", session.headers)
+        logger.debug("Session headers: %r", session.headers)
 
         return session
 
@@ -360,7 +383,7 @@ class HHApplicantTool:
                 "User-Agent": f"Mozilla/5.0 (compatible; {PACKAGE_NAME}; +{GITHUB_REPO_URL})",
             }
         )
-        logger.debug("AI Session Headers: %r", session.headers)
+        logger.debug("AI Default Headers: %r", session.headers)
         return session
 
     @cached_property
@@ -815,6 +838,136 @@ class HHApplicantTool:
             session=session,
         )
 
+    def _xhr_request(
+        self,
+        method: str,
+        endpoint: str,
+        params: dict | None = None,
+        data: dict | None = None,
+        json: dict | None = None,
+        referer_url: str | None = None,
+        headers: dict | None = None,
+        xsrf_token: str | None = None,
+        session: requests.Session | None = None,
+    ) -> requests.Response | XHRResult:
+        """XHR-запрос к внутреннему API hh.ru.
+
+        endpoint     -- путь ("/shards/...") или полный URL (например, chatik.hh.ru).
+        params       -- query string (и для GET, и для POST/PUT).
+        data         -- тело запроса (form-data).
+        referer_url  -- страница, с которой "сделан" запрос. Если не передан,
+                        берётся главная того же хоста.
+        headers      -- дополнительные заголовки; перекрывают стандартные.
+        xsrf_token   -- если не передан, берётся из куки _xsrf сессии.
+
+        Бросает XHRError, если код ответ от сервера >= 400
+        """
+        session = session or self.session
+        url = urljoin(self.base_url, endpoint)
+
+        parts = urlsplit(url)
+        origin = f"{parts.scheme}://{parts.netloc}"
+
+        xsrf = xsrf_token or session.cookies.get("_xsrf")
+        if not xsrf:
+            raise ValueError("Нет куки _xsrf: сначала авторизуйтесь")
+
+        request_headers = {
+            "Accept": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+            "X-XSRFToken": xsrf,
+            "Origin": origin,
+            "Referer": referer_url or f"{origin}/",
+        }
+
+        if headers:
+            request_headers.update(headers)
+
+        r = session.request(
+            method.upper(),
+            url,
+            params=params,
+            data=data,
+            json=json,
+            headers=request_headers,
+            allow_redirects=False,
+            timeout=(10, 30),
+        )
+
+        try:
+            # При 200 и 403 статусе могут возвращаться
+            res = r.json()
+            if captcha_state := res.get("hhcaptcha", {}).get("captchaState"):
+                raise CaptchaError(captcha_state)
+
+            # Там еще что-то содержится при перекидывании на RECAPTCHA
+            # if recaptcha_key := res.get("recaptcha", {}).get("key"):
+            #     raise ReCaptchaError(recaptcha_key)
+        except JSONDecodeError:
+            res = {"text": r.text}
+        # На всякий случай лишнее поле добавим
+        res.setdefault("http_status", r.status_code)
+        # res.setdefault("http_headers", dict(r.headers))
+        return res
+
+    def xhr_request(
+        self,
+        method: str,
+        endpoint: str,
+        params: dict | None = None,
+        data: dict | None = None,
+        json: dict | None = None,
+        referer_url: str | None = None,
+        headers: dict | None = None,
+        xsrf_token: str | None = None,
+        session: requests.Session | None = None,
+    ) -> requests.Response | XHRResult:
+        """Выполняет XHR-запрос с автоматическим решением капчи."""
+        captcha_attempts = 0
+
+        while True:
+            try:
+                return self._xhr_request(
+                    method,
+                    endpoint,
+                    params=params,
+                    data=data,
+                    json=json,
+                    referer_url=referer_url,
+                    headers=headers,
+                    xsrf_token=xsrf_token,
+                    session=session,
+                )
+            except CaptchaError as ex:
+                if captcha_attempts >= MAX_CAPTCHA_ATTEMPTS:
+                    raise ex
+
+                captcha_attempts += 1
+                logger.debug(
+                    "(%d/%d) Требуется ввод капчи: %s %s",
+                    captcha_attempts,
+                    MAX_CAPTCHA_ATTEMPTS,
+                    method,
+                    endpoint,
+                )
+
+                solution = self.solve_captcha(
+                    captcha_state=ex.state,
+                    referer_url=referer_url,
+                )
+
+                captcha = {
+                    "captchaState": ex.state,
+                    "captchaText": solution.text,
+                    "captchaKey": solution.key,
+                }
+
+                if json is not None:
+                    json = {**json, **captcha}
+                else:
+                    data = {**(data or {}), **captcha}
+                continue
+
     def get_captcha_image(
         self,
         *,
@@ -823,37 +976,23 @@ class HHApplicantTool:
         referer_url: str | None = None,
         session: requests.Session | None = None,
     ) -> CaptchaImage:
-        if session is None:
-            session = self.session
-        xsrf_token = xsrf_token or session.cookies.get("_xsrf")
-
+        session = session or self.session
         lang = lang or self.captcha_lang
-        target_url = urljoin(
-            referer_url or self.base_url, "/captcha?lang=" + quote(lang)
-        )
-        logger.debug(
-            "Отправляем POST-запрос на %s для получения captcha key",
-            target_url,
-        )
-        res = session.post(
-            target_url,
-            headers={
-                k: v
-                for k, v in {
-                    "Accept": "application/json",
-                    "Referer": referer_url,
-                    "X-Xsrftoken": xsrf_token,
-                    "X-Hhtmfrom": "",
-                    "X-Hhtmsource": "account_captcha",
-                    # Я тут опустил кучу заголовков, так как их значения есть в
-                    # кукис, и сайт, если тех нет, берех их от туда
-                    # Те запрос проходит
-                    "X-Requested-With": "XMLHttpRequest",
-                }.items()
-                if v is not None
-            },
-        ).json()
 
+        target_url = urljoin(referer_url or self.base_url, "/captcha")
+        logger.debug(
+            "Отправляем POST-запрос на %s для получения captcha key", target_url
+        )
+
+        res = self._xhr_request(
+            "POST",
+            target_url,
+            params={"lang": lang},
+            referer_url=referer_url,
+            headers={"X-Hhtmfrom": "", "X-Hhtmsource": "account_captcha"},
+            xsrf_token=xsrf_token,
+            session=session,
+        )
         captcha_key = res["key"]
 
         image_url = urljoin(
@@ -861,25 +1000,19 @@ class HHApplicantTool:
         )
         logger.debug("Пробуем загрузить капчу: %s", image_url)
 
-        # Браузер когда встречает в разметке тег IMG, посылает другой Accept
+        # Это не XHR: браузер грузит картинку из тега IMG с другим Accept
+        # и без XHR-заголовков, поэтому здесь обычный session.get.
         headers = {
             "Accept": "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"
         }
-
         if referer_url:
             headers |= {"Referer": referer_url}
 
-        image_data = session.get(
-            image_url,
-            headers=headers,
-        ).content
+        image_data = session.get(image_url, headers=headers).content
 
         assert len(image_data) > 0, "Ошибка загрузки изображения"
 
-        return CaptchaImage(
-            data=image_data,
-            key=captcha_key,
-        )
+        return CaptchaImage(data=image_data, key=captcha_key)
 
     def _send_captcha(
         self,
@@ -894,12 +1027,9 @@ class HHApplicantTool:
         """Отправляет введенную капчу."""
 
         captcha_endpoint = "/account/captcha"
-        target_url: str = urljoin(
-            referer_url or self.base_url, captcha_endpoint
-        )
+        target_url = urljoin(referer_url or self.base_url, captcha_endpoint)
 
         failurl = captcha_endpoint + "?state=" + quote(state)
-
         if backurl:
             failurl += "&backurl=" + quote(backurl)
 
@@ -911,43 +1041,25 @@ class HHApplicantTool:
             "failurl": failurl,
         }
 
-        headers = {
-            "Accept": "application/json",
-            "X-Requested-With": "XMLHttpRequest",
-            "X-Xsrftoken": xsrf_token,
-            "x-hhtmfrom": "",
-            "x-hhtmsource": "account_captcha",
-        }
-
-        if referer_url:
-            headers |= {"Referer": referer_url}
-
-        logger.debug(f"POST {target_url}: {payload=}, {headers=}")
+        logger.debug(f"POST {target_url}: {payload=}")
 
         # payload уходит в query string, тело пустое (так делает браузер).
-        # allow_redirects=False: при успехе 302 ведёт на hh://..., такую
-        # схему requests не умеет, а нам сам редирект не нужен.
-        r = session.post(
-            target_url,
-            params=payload,
-            headers=headers,
-            allow_redirects=False,
-        )
-
-        logger.debug(f"{r.request.method} {r.request.url} {r.status_code}")
-
-        if r.status_code == 302:
+        # Редиректы xhr_request не выполняет: при успехе 302 ведёт на hh://...,
+        # такую схему requests не умеет, а сам редирект не нужен.
+        try:
+            res = self._xhr_request(
+                "POST",
+                target_url,
+                params=payload,
+                referer_url=referer_url,
+                headers={"X-Hhtmfrom": "", "X-Hhtmsource": "account_captcha"},
+                xsrf_token=xsrf_token,
+                session=session,
+            )
+            logger.debug("%.300s", res)
             return True
-
-        if r.status_code == 403:
+        except Error:
             return False
-
-        # Произошло что-то странное
-        logger.warning(
-            "Неожиданный код ответа на отправку капчи: %d", r.status_code
-        )
-        logger.debug(r.text[:255])
-        return False
 
     def prompt_captcha_tkinter(self, image_data: bytes) -> str:
         """Показывает капчу в окне Tk и возвращает введённый текст.

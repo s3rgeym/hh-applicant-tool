@@ -7,15 +7,14 @@ import logging
 import random
 import re
 import time
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urljoin, urlsplit
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
-from ..constants import MAX_CAPTCHA_ATTEMPTS
-from ..tool import BaseOperation, OperationError
+from ..errors import OperationError, XHRError
+from ..tool import BaseOperation
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
@@ -23,19 +22,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__.split(".")[0])
 
-
-@dataclass
-class LoginResult:
-    """Результат одной попытки входа (логин+пароль или запрос OTP-кода)."""
-
-    # Попытка прошла без ошибок и капчи
-    success: bool = False
-    # Текст ошибки, если вход невозможен и капча не поможет
-    error_message: str | None = None
-    # Состояние капчи, если ее нужно решить перед повтором
-    captcha_state: str | None = None
-    # Предыдущая капча была введена неверно
-    captcha_error: bool = False
+# Заголовки, специфичные для POST-запросов при авторизации (и по паролю, и по OTP).
+# Остальные (Accept, X-Requested-With, X-XSRFToken, Origin, Referer) ставит
+# xhr_request.
+_LOGIN_HEADERS = {
+    "X-Hhtmfrom": "",
+    "X-Hhtmsource": "account_login",
+}
 
 
 class OtpConfirmError(Exception):
@@ -111,47 +104,23 @@ class Operation(BaseOperation):
         self.pubkey = data["loginTrustFlagsSecret"]
         logger.debug("Публичный ключ для подписи запроса:\n%s", self.pubkey)
 
-        # Вход по паролю или запрос OTP-кода, с повторами при капче
-        captcha: dict[str, Any] = {}
-        captcha_attempts = 0
+        time.sleep(random.uniform(5.0, 10.0))
 
-        while True:
-            time.sleep(random.uniform(5.0, 10.0))
+        # Капчу при входе решает и повторяет запрос сам xhr_request.
+        # Любая другая ошибка запроса прерывает авторизацию.
+        try:
+            # Вход по паролю или запрос OTP-кода
+            self.login(username, password)
 
-            result = self.login(username, password, **captcha)
-
-            if result.success:
-                break
-
-            if not result.captcha_state:
-                raise OperationError(
-                    result.error_message or "Не удалось авторизоваться!"
-                )
-
-            if result.captcha_error:
-                logger.warning("Капча была введена неверно!")
-
-            if captcha_attempts >= MAX_CAPTCHA_ATTEMPTS:
-                raise OperationError("Исчерпано количество неверных попыток!")
-
-            solution = tool.solve_captcha(
-                captcha_state=result.captcha_state,
-                referer_url=self.redirect_url,
-            )
-
-            captcha_attempts += 1
-            captcha = {
-                "captcha_text": solution.text,
-                "captcha_key": solution.key,
-                "captcha_state": solution.state,
-            }
-
-        # По паролю мы уже вошли, а для OTP нужно еще ввести полученный код
-        if not password:
-            try:
+            # По паролю мы уже вошли, а для OTP нужно еще ввести полученный код
+            if not password:
                 self._confirm_otp(username)
-            except OtpConfirmError as ex:
-                raise OperationError(str(ex)) from ex
+        except XHRError as ex:
+            raise OperationError(
+                f"Ошибка запроса при авторизации: {ex}"
+            ) from ex
+        except OtpConfirmError as ex:
+            raise OperationError(str(ex)) from ex
 
         # Теперь нужно проверить заголовки
         r = session.get(
@@ -159,8 +128,6 @@ class Operation(BaseOperation):
             headers={"Referer": self.redirect_url},
             allow_redirects=False,
         )
-
-        self._log_response(r)
 
         if r.status_code != 302 or not (location := r.headers.get("location")):
             raise OperationError(
@@ -183,53 +150,27 @@ class Operation(BaseOperation):
         # Куки уже лежат в tool.session — копировать ничего не нужно.
         print("🎉 Авторизация прошла успешно!")
 
-    def login(
-        self,
-        username: str,
-        password: str | None = None,
-        *,
-        captcha_text: str = "",
-        captcha_key: str | None = None,
-        captcha_state: str | None = None,
-    ) -> LoginResult:
+    def login(self, username: str, password: str | None = None) -> None:
         """Одна попытка входа.
 
         С паролем — вход по логину и паролю, без пароля — запрос OTP-кода.
-        Ничего не бросает на ожидаемых ответах сервера: о капче и ошибках
-        сообщает через LoginResult.
+        Бросает OperationError, если вход невозможен.
         """
-        captcha = {"captchaText": captcha_text}
-        if captcha_key is not None:
-            captcha["captchaKey"] = captcha_key
-        if captcha_state is not None:
-            captcha["captchaState"] = captcha_state
-
         if password:
-            return self._login_by_password(username, password, captcha)
-        return self._request_otp(username, captcha)
+            self._login_by_password(username, password)
+        else:
+            self._request_otp(username)
 
     @staticmethod
     def _log_response(r) -> None:
         logger.debug(f"{r.request.method} {r.url} {r.status_code}")
 
-    def _login_headers(self) -> dict[str, str]:
-        # Эти заголовки у всех POST-запросов при авторизации (и по паролю, и по OTP)
-        # У них referer не отличается, но наврядли его кто проверяет
-        return {
-            "Accept": "application/json",
-            "X-Hhtmfrom": "",
-            "X-Hhtmsource": "account_login",
-            "X-Requested-With": "XMLHttpRequest",
-            "X-Xsrftoken": self.tool.xsrf_token,
-            "Referer": self.redirect_url,
-        }
+    @staticmethod
+    def _check_no_captcha(res: dict[str, Any]) -> None:
+        if (res.get("hhcaptcha") or {}).get("captchaState"):
+            raise OperationError("Сервер вернул капчу в ответе!!!")
 
-    def _login_by_password(
-        self,
-        username: str,
-        password: str,
-        captcha: dict[str, str],
-    ) -> LoginResult:
+    def _login_by_password(self, username: str, password: str) -> None:
         """Вход по паролю.
 
         После успеха в tool.session лежат авторизационные cookie, чтобы
@@ -250,44 +191,29 @@ class Operation(BaseOperation):
             ),
             "username": username,
             "password": password,
-            **captcha,
+            # Браузер всегда шлет это поле, при капче его перезапишет xhr_request
+            "captchaText": "",
         }
         logger.debug("password login params: %r", {**params, "password": "***"})
 
-        r = self.tool.session.post(
+        res = self.tool.xhr_request(
+            "POST",
             self.redirect_url,
-            files={k: (None, v) for k, v in params.items()},
-            headers=self._login_headers(),
+            data=params,
+            referer_url=self.redirect_url,
+            headers=_LOGIN_HEADERS,
         )
-        self._log_response(r)
 
-        res = r.json()
         logger.debug("response keys: %s", list(res))
 
         if login_error := res.get("loginError"):
             code = login_error.get("code", "unknown")
-            message = login_error.get("trl", "")
-            return LoginResult(
-                error_message=f"Ошибка авторизации: {code}. {message}".strip()
-            )
+            raise OperationError(f"Ошибка авторизации: {code}")
 
-        hhcaptcha = res.get("hhcaptcha") or {}
+        self._check_no_captcha(res)
+        # TODO: следующие запросы
 
-        # hhcaptcha.get("isBot") == True
-        if not hhcaptcha.get("captchaState"):
-            # TODO: следующие запросы
-            return LoginResult(success=True)
-
-        return LoginResult(
-            captcha_state=hhcaptcha["captchaState"],
-            captcha_error=bool(hhcaptcha.get("captchaError")),
-        )
-
-    def _request_otp(
-        self,
-        username: str,
-        captcha: dict[str, str],
-    ) -> LoginResult:
+    def _request_otp(self, username: str) -> None:
         """Запрос OTP-кода (SMS/Email)."""
         params = {
             "login": username,
@@ -300,38 +226,26 @@ class Operation(BaseOperation):
             "loginTrustFlags": self._login_trust_flags(
                 {"emailOrPhone": {"paste": False, "suggest": True}}
             ),
-            **captcha,
+            # Браузер всегда шлет это поле, при капче его перезапишет xhr_request
+            "captchaText": "",
         }
 
-        otp_url = urljoin(self.redirect_url, "/account/otp_generate")
-        headers = self._login_headers()
-
-        logger.debug("otp generate params: %r | headers: %r", params, headers)
-        r = self.tool.session.post(
-            otp_url,
-            # Просто как образец отправки force multipart
-            files={k: (None, v) for k, v in params.items()},
-            headers=headers,
+        logger.debug("otp generate params: %r", params)
+        res = self.tool.xhr_request(
+            "POST",
+            urljoin(self.redirect_url, "/account/otp_generate"),
+            data=params,
+            referer_url=self.redirect_url,
+            headers=_LOGIN_HEADERS,
         )
-        self._log_response(r)
-
-        res = r.json()
+        logger.debug(res)
 
         if res.get("success"):
             logger.info("Код авторизации был выслан!")
-            return LoginResult(success=True)
+            return
 
-        # logger.debug(res)
-        hhcaptcha = res.get("hhcaptcha") or {}
-
-        if "captchaState" not in hhcaptcha:
-            return LoginResult(error_message="Неправильный запрос!")
-
-        # isBot еще интересное значение
-        return LoginResult(
-            captcha_state=hhcaptcha["captchaState"],
-            captcha_error=bool(hhcaptcha.get("captchaError")),
-        )
+        self._check_no_captcha(res)
+        raise OperationError("Неправильный запрос!")
 
     def _confirm_otp(self, username) -> None:
         """Ввод кода из SMS/Email и подтверждение входа."""
@@ -356,16 +270,14 @@ class Operation(BaseOperation):
             "authScenario": "APPLICANT_AUTH",
         }
 
-        by_code_url = urljoin(self.redirect_url, "/account/login/by_code")
-        r = self.tool.session.post(
-            by_code_url,
+        res = self.tool.xhr_request(
+            "POST",
+            urljoin(self.redirect_url, "/account/login/by_code"),
             data=params,
-            headers=self._login_headers(),
+            referer_url=self.redirect_url,
+            headers=_LOGIN_HEADERS,
         )
 
-        self._log_response(r)
-
-        res = r.json()
         logger.debug(
             "by_code response: keys=%s success=%s error=%s",
             list(res),

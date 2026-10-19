@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import dataclasses
 import html
 import logging
@@ -10,7 +9,7 @@ import random
 import re
 from email.message import EmailMessage
 from itertools import chain
-from typing import TYPE_CHECKING, Any, Iterator, NamedTuple
+from typing import TYPE_CHECKING, Any, Iterator, NoReturn
 from urllib.parse import (
     urlparse,
 )
@@ -22,8 +21,8 @@ from ..ai.openai import OpenAIClient
 from ..api import BadResponse, Redirect, datatypes
 from ..api.datatypes import PaginatedItems, SearchVacancy, Vacancy
 from ..api.errors import ApiError, LimitExceeded
-from ..constants import GITHUB_PROFILE_URL, MAX_CAPTCHA_ATTEMPTS
-from ..errors import OperationError
+from ..constants import GITHUB_PROFILE_URL
+from ..errors import OperationError, XHRError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.datatypes import VacancyTestsData
 from ..utils.string import (
@@ -48,6 +47,10 @@ class _ApplyState:
     limit_reached: bool = False
     do_apply: bool = True
     site_emails: dict = dataclasses.field(default_factory=dict)
+
+
+class _ApplyError(Exception):
+    """Отклик на вакансию не отправлен. Вакансия пропускается."""
 
 
 logger = logging.getLogger(__name__.split(".")[0])
@@ -168,13 +171,6 @@ DEFAULT_TEST_TEXT_PROMPT = """\
 
 DEFAULT_APPLY_MAIL_SUBJECT = "{Отклик|Резюме} на вакансию %(vacancy_name)s"
 DEFAULT_APPLY_MAIL_BODY = "{Здравствуйте|Добрый день}, {прошу рассмотреть|пожалуйста рассмотрите} мое резюме %(resume_url)s на вакансию %(vacancy_name)s."
-
-
-class VacancyTestResponse(NamedTuple):
-    result: dict
-    status_code: int
-    payload: dict
-    referer_url: str
 
 
 class Namespace(BaseNamespace):
@@ -635,8 +631,10 @@ class Operation(BaseOperation):
         placeholders = self._build_resume_placeholders(resume, user)
 
         for vacancy in self._get_vacancies(resume_id=resume["id"]):
-            if self._max_responses_reached(state):
+            if not state.do_apply or self._max_responses_reached(state):
                 break
+            # Любая ошибка отклика (и вакансии в целом) здесь превращается
+            # в пропуск вакансии, приложение не падает
             try:
                 self._process_vacancy(
                     vacancy, resume, placeholders, seen_employers, state
@@ -645,10 +643,24 @@ class Operation(BaseOperation):
                 state.do_apply = False
                 state.limit_reached = True
                 break
-            except ApiError as ex:
-                logger.warning(ex)
-            except (BadResponse, AIError) as ex:
-                logger.error(ex)
+            except Redirect:
+                logger.warning(
+                    "Игнорирую перенаправление на форму: %s",
+                    vacancy["alternate_url"],
+                )
+            except (ApiError, XHRError, _ApplyError) as ex:
+                logger.warning(
+                    "Пропускаю вакансию %s: %s", vacancy["alternate_url"], ex
+                )
+            except (
+                BadResponse,
+                AIError,
+                ValueError,
+                requests.RequestException,
+            ) as ex:
+                logger.error(
+                    "Пропускаю вакансию %s: %s", vacancy["alternate_url"], ex
+                )
 
         logger.info(
             "Закончили рассылку откликов для резюме: %s (%s). Отправлено: %d",
@@ -726,15 +738,28 @@ class Operation(BaseOperation):
             "Пробуем откликнуться на вакансию: %s", vacancy["alternate_url"]
         )
 
-        if vacancy.get("has_test") and self._apply_with_test(
-            vacancy, resume, letter, message_placeholders, state
-        ):
+        if self.dry_run:
+            logger.info(
+                "[dry-run] Отклик не отправляется: %s", vacancy["alternate_url"]
+            )
             return
-        if not self._send_negotiation(vacancy, resume, letter, state):
-            return
-        self._send_apply_email(
-            vacancy, employer.get("id"), message_placeholders, state
-        )
+
+        # Если отклик не отправлен, функции ниже бросают исключение, и до
+        # отправки письма дело не доходит
+        if vacancy.get("has_test"):
+            self._apply_with_test(
+                vacancy, resume, letter, message_placeholders, state
+            )
+        else:
+            self._send_negotiation(vacancy, resume, letter, state)
+
+        if self.send_email:
+            self._send_apply_email(
+                vacancy,
+                employer.get("id"),
+                message_placeholders,
+                state,
+            )
 
     def _should_skip_vacancy(self, vacancy: dict) -> bool:
         """Пропускаем вакансии, на которые нельзя или не нужно откликаться."""
@@ -828,6 +853,7 @@ class Operation(BaseOperation):
             site_url = "https://" + site_url
         logger.debug("visit site: %s", site_url)
 
+        # Недоступный сайт работодателя не должен мешать отклику
         try:
             site_info = self._parse_site(site_url)
             state.site_emails[employer_id] = site_info["emails"]
@@ -871,101 +897,55 @@ class Operation(BaseOperation):
         letter: str,
         message_placeholders: dict,
         state: _ApplyState,
-    ) -> bool:
-        """Отклик на вакансию с тестом.
-
-        True — вакансия обработана (или произошла ошибка), дальше идти не надо.
-        False — тест не решался (dry_run), продолжаем обычный путь.
-        """
-        logger.debug("Решаем тест: %s", vacancy["alternate_url"])
-        try:
-            if self.dry_run:
-                return False
-            response = self._solve_vacancy_test(
-                vacancy_id=vacancy["id"],
-                resume_hash=resume["id"],
-                letter=letter,
-                placeholders=message_placeholders,
-            )
-            self._process_test_response(response, vacancy, state)
-            return True
-        except Exception as ex:
-            logger.error(f"Произошла непредвиденная ошибка: {ex}")
-            return True
-
-    def _process_test_response(
-        self, response, vacancy: dict, state: _ApplyState
     ) -> None:
-        """Разбираем ответ на тест, при необходимости решаем капчу."""
-        captcha_attempts = 0
-        while True:
-            result = response.result or {}
+        """Отклик на вакансию с тестом. При неудаче бросает исключение."""
+        logger.debug("Решаем тест: %s", vacancy["alternate_url"])
+        solved_tests, response_url = self._solve_vacancy_test(
+            vacancy_id=vacancy["id"],
+            resume_hash=resume["id"],
+            letter=letter,
+            placeholders=message_placeholders,
+        )
+        self._process_tests(solved_tests, response_url, vacancy, state)
 
-            if str(result.get("success")).lower() == "true":
-                state.applied_count += 1
-                logger.info(
-                    "Отправили отклик на вакансию с тестом: %s",
-                    vacancy["alternate_url"],
-                )
-                print(
-                    "📨 Отправили отклик на вакансию с тестом",
-                    vacancy["alternate_url"],
-                )
-                return
+    def _process_tests(
+        self,
+        solved_tests: dict,
+        vacancy_response_url: str,
+        vacancy: dict,
+        state: _ApplyState,
+    ) -> None:
+        """Отправляем решённый тест (капчу решает xhr_request).
 
-            if hh_captcha := result.get("hhcaptcha"):
-                if captcha_attempts >= MAX_CAPTCHA_ATTEMPTS:
-                    logger.error(
-                        "Не удалось решить капчу за %d попыток: %s",
-                        captcha_attempts,
-                        vacancy["alternate_url"],
-                    )
-                    return
+        Возвращает управление только если отклик отправлен.
+        """
+        result = self._send_vacancy_test(
+            solved_tests, referer_url=vacancy_response_url
+        )
 
-                logger.debug(
-                    "(%d/%d) Требуется ввод капчи: %s",
-                    captcha_attempts + 1,
-                    MAX_CAPTCHA_ATTEMPTS,
-                    vacancy["alternate_url"],
-                )
-
-                response = self._retry_test_with_captcha(
-                    response, hh_captcha, vacancy, captcha_attempts
-                )
-                captcha_attempts += 1
-                continue  # ответ проверится на следующей итерации
-
-            self._handle_test_error(result, response, vacancy, state)
+        if str(result.get("success")).lower() == "true":
+            state.applied_count += 1
+            logger.info(
+                "Отправили отклик на вакансию с тестом: %s",
+                vacancy["alternate_url"],
+            )
+            print(
+                "📨 Отправили отклик на вакансию с тестом",
+                vacancy["alternate_url"],
+            )
             return
 
-    def _retry_test_with_captcha(
-        self,
-        response,
-        hh_captcha: dict,
-        vacancy: dict,
-    ):
-        solution = self.tool.solve_captcha(hh_captcha["captchaState"])
-        payload = copy.deepcopy(response.payload)
-        payload |= {
-            "captchaText": solution.text,
-            "captchaKey": solution.key,
-            "captchaState": solution.state,
-        }
-        return self._send_vacancy_test(payload, response.referer_url)
+        self._handle_test_error(result, state)
 
-    def _handle_test_error(
-        self, result: dict, response, vacancy: dict, state: _ApplyState
-    ) -> None:
+    def _handle_test_error(self, result: dict, state: _ApplyState) -> NoReturn:
         if result.get("error") == "negotiations-limit-exceeded":
-            logger.warning("Достигнут лимит откликов")
             state.do_apply = False
             state.limit_reached = True
-        else:
-            logger.error(
-                "Произошла ошибка при отклике на вакансию с тестом: %s, result: %.300s",
-                vacancy["alternate_url"],
-                response,
-            )
+            raise _ApplyError("Достигнут лимит откликов")
+
+        raise _ApplyError(
+            f"Ошибка при отклике на вакансию с тестом: {shorten(str(result), 300)}"
+        )
 
     def _send_negotiation(
         self,
@@ -973,35 +953,30 @@ class Operation(BaseOperation):
         resume: datatypes.Resume,
         letter: str,
         state: _ApplyState,
-    ) -> bool:
-        """Обычный отклик. False — hh перенаправил на форму, письмо не шлём."""
-        params = {
-            "resume_id": resume["id"],
-            "vacancy_id": vacancy["id"],
-            "message": letter,
-        }
-        try:
-            if not self.dry_run:
-                res = self.api_client.post(
-                    "/negotiations",
-                    params,
-                    delay=random.uniform(1, 3),
-                )
-                assert res == {}
-                state.applied_count += 1
-                logger.info(
-                    "Отправили отклик на вакансию без теста: %s",
-                    vacancy["alternate_url"],
-                )
-                print(
-                    "📨 Отправили отклик на вакансию", vacancy["alternate_url"]
-                )
-        except Redirect:
-            logger.warning(
-                f"Игнорирую перенаправление на форму: {vacancy['alternate_url']}"
-            )
-            return False
-        return True
+    ) -> None:
+        """Обычный отклик.
+
+        Возвращает управление только если отклик отправлен. Redirect (hh
+        перенаправил на форму) и остальные ошибки уходят наверх.
+        """
+        res = self.api_client.post(
+            "/negotiations",
+            {
+                "resume_id": resume["id"],
+                "vacancy_id": vacancy["id"],
+                "message": letter,
+            },
+            delay=random.uniform(1, 3),
+        )
+        if res != {}:
+            raise _ApplyError(f"Неожиданный ответ на отклик: {res!r:.300}")
+
+        state.applied_count += 1
+        logger.info(
+            "Отправили отклик на вакансию без теста: %s",
+            vacancy["alternate_url"],
+        )
+        print("📨 Отправили отклик на вакансию", vacancy["alternate_url"])
 
     def _send_apply_email(
         self,
@@ -1011,9 +986,6 @@ class Operation(BaseOperation):
         state: _ApplyState,
     ) -> None:
         """Отправка письма на email работодателя."""
-        if not self.send_email:
-            return
-
         # contacts может быть null
         mail_to = (vacancy.get("contacts") or {}).get("email") or (
             state.site_emails.get(employer_id)
@@ -1036,6 +1008,7 @@ class Operation(BaseOperation):
             randomize_text=True,
             escape_html=True,
         )
+        # Отклик уже отправлен, ошибка SMTP не должна считаться его провалом
         try:
             self._send_email(mail_to, mail_subject, mail_body)
             print(
@@ -1065,8 +1038,11 @@ class Operation(BaseOperation):
         resume_hash: str,
         letter: str = "",
         placeholders: dict[str, str] | None = None,
-    ) -> VacancyTestResponse:
-        """Загружает тест, ждет паузу и отправляет отклик."""
+    ) -> tuple[dict, str]:
+        """Загружает тест и решает его.
+
+        Возвращает payload для отправки и URL страницы отклика (referer).
+        """
         placeholders = placeholders or {}
         response_url = f"{self.tool.base_url}/applicant/vacancy_response?vacancyId={vacancy_id}&startedWithQuestion=false&hhtmFrom=vacancy"
 
@@ -1164,53 +1140,24 @@ class Operation(BaseOperation):
                 payload[f"{field_name}_text"] = answer
 
         logger.debug(f"{payload = }")
-
-        return self._send_vacancy_test(payload, response_url)
+        return payload, response_url
 
     def _send_vacancy_test(
         self,
         payload: dict,
         referer_url: str,
-    ) -> VacancyTestResponse:
-        response = self.tool.session.post(
-            f"{self.tool.base_url}/applicant/vacancy_response/popup",
+    ) -> dict:
+        """Отправляет решённый тест и возвращает JSON-ответ hh."""
+        return self.tool.xhr_request(
+            "POST",
+            "/applicant/vacancy_response/popup",
             data=payload,
+            referer_url=referer_url,
             headers={
-                "Referer": referer_url,
-                # x-gib-fgsscgib-w-hh и x-gib-gsscgib-w-hh вроде в куках
-                # передаются и не нужны
                 "X-Hhtmfrom": "vacancy",
                 "X-Hhtmsource": "vacancy_response",
-                "X-Requested-With": "XMLHttpRequest",
-                "X-Xsrftoken": self.tool.xsrf_token,
             },
         )
-
-        logger.debug(
-            "%s %s %d",
-            response.request.method,
-            response.url,
-            response.status_code,
-        )
-
-        try:
-            return VacancyTestResponse(
-                result=response.json(),
-                status_code=response.status_code,
-                referer_url=referer_url,
-                payload=payload,
-            )
-        except (ValueError, requests.exceptions.JSONDecodeError) as ex:
-            logger.warning(
-                "Ответ на отклик с тестом не является JSON (status=%s, %s), result: %s",
-                response.status_code,
-                response.url,
-                shorten(response.text, 300),
-            )
-            raise ValueError(
-                "Эндпоинт отклика на тест вернул не-JSON ответ "
-                "(возможно, перенаправление на капчу или форму)."
-            ) from ex
 
     def _parse_site(self, url: str) -> dict[str, Any]:
         with self.tool.session.get(url, timeout=10) as r:
