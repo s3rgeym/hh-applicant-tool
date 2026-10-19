@@ -921,7 +921,7 @@ class HHApplicantTool:
         headers: dict | None = None,
         xsrf_token: str | None = None,
         session: requests.Session | None = None,
-    ) -> requests.Response | XHRResult:
+    ) -> XHRResult:
         """Выполняет XHR-запрос с автоматическим решением капчи."""
         captcha_attempts = 0
 
