@@ -22,9 +22,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__.split(".")[0])
 
-# Заголовки, специфичные для POST-запросов при авторизации (и по паролю, и по OTP).
-# Остальные (Accept, X-Requested-With, X-XSRFToken, Origin, Referer) ставит
-# xhr_request.
+# Заголовки, специфичные для POS
 _LOGIN_HEADERS = {
     "X-Hhtmfrom": "",
     "X-Hhtmsource": "account_login",

@@ -44,7 +44,7 @@ ANDROID_CLIENT_SECRET = (
 # Язык картинки капчи. Задаётся параметром lang у POST /captcha,
 # значение приходит от hh.ru в верхнем регистре, но понимает и в
 # нижнем
-DEFAULT_CAPTCHA_LANGUAGE = "EN"
+DEFAULT_CAPTCHA_LANGUAGE = "RU"
 
 # Android-приложение перенаправляет на данную ссылку.
 # Не знаю учитывается ли.
