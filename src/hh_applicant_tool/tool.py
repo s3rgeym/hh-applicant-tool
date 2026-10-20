@@ -962,6 +962,10 @@ class HHApplicantTool:
             allow_redirects=False,
             timeout=(10, 30),
         )
+
+        logger.debug(
+            "XMLHttpRequest: %s %s %d", r.request.method, r.url, r.status_code
+        )
         return self._parse_xhr_response(r)
 
     def xhr_request(
