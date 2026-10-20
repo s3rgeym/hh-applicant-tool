@@ -121,7 +121,7 @@ DEFAULT_BUMP_PROMPT = """\
 
 История переписки:
 
-%(history)s
+%(message_history)s
 
 Напиши короткое вежливое напоминание о себе (1-2 предложения): уточни, актуальна ли вакансия и в силе ли интерес к твоей кандидатуре. Не повторяй свои прошлые сообщения дословно. Если контактное лицо бот (да), напиши ещё короче и суше, без приветствий."""
 
@@ -670,7 +670,7 @@ class Operation(BaseOperation):
 
     def get_chats(
         self,
-        page: int,
+        cursor: str | None = None,
         refer_url: str | None = None,
         unread: bool = False,
     ) -> ChatsResponse:
@@ -679,8 +679,8 @@ class Operation(BaseOperation):
             "filterHasTextMessage": "false",
             "do_not_track_session_events": "true",
         }
-        if page > 0:
-            params["page"] = page
+        if cursor:
+            params["from"] = cursor
 
         return self._xhr(
             "GET",
@@ -873,10 +873,15 @@ class Operation(BaseOperation):
         # employer_blacklist = set(self.tool.get_blacklisted())
 
         count = 0
-        for page in range(self.max_pages):
-            data = self.get_chats(page, refer_url=self.chat_page_url)
+        cursor = None
+        for _ in range(self.max_pages):
+            data = self.get_chats(
+                cursor=cursor,
+                refer_url=self.chat_page_url,
+            )
             chats = data.get("chats") or {}
             found = chats.get("found") or 0
+            cursor = chats.get("nextFrom")
             items = chats.get("items") or []
             count += len(items)
             resources = data.get("resources") or {}
@@ -940,6 +945,9 @@ class Operation(BaseOperation):
                     continue
 
                 yield chat
+
+            if not cursor:
+                break
 
             if count >= found:
                 break
@@ -1040,12 +1048,12 @@ class Operation(BaseOperation):
             return
 
         self.start_chat_typing(chat.chat_id)
-        self.send_chat_message(
+        res = self.send_chat_message(
             chat.chat_id,
             send_message,
             refer_url=self.chat_referer(chat.chat_id),
         )
-
+        logger.debug(res)
         print(f"📨 Сообщение отправлено в чат #{chat.chat_id}")
 
     def get_ai_reply(self, chat: ProcessingChat) -> str | None:
