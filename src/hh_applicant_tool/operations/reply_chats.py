@@ -945,7 +945,7 @@ class Operation(BaseOperation):
                 # Чаты упорядочены по дате,
                 # поэтому сли чат старше N дней, то дальше не смотрим
                 if chat.is_last_message_older(days=14):
-                    break
+                    return
 
                 if (
                     not last_is_mine
