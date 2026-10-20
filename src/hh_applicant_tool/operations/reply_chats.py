@@ -21,7 +21,7 @@ from ..constants import GITHUB_PROFILE_URL
 from ..errors import XHRError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.date import parse_api_datetime
-from ..utils.string import choose_similar, render_template, split_words
+from ..utils.string import choose_similar, render_template, shorten, split_words
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
@@ -536,7 +536,7 @@ class Operation(BaseOperation):
             "--max-pages",
             "--pages",
             type=int,
-            default=10,
+            default=20,
             help="Максимальное количество страниц чатов для проверки",
         )
         parser.add_argument(
@@ -670,7 +670,7 @@ class Operation(BaseOperation):
 
     def get_chats(
         self,
-        cursor: str | None = None,
+        from_key: str | None = None,
         refer_url: str | None = None,
         unread: bool = False,
     ) -> ChatsResponse:
@@ -679,8 +679,8 @@ class Operation(BaseOperation):
             "filterHasTextMessage": "false",
             "do_not_track_session_events": "true",
         }
-        if cursor:
-            params["from"] = cursor
+        if from_key:
+            params["from"] = from_key
 
         return self._xhr(
             "GET",
@@ -868,22 +868,28 @@ class Operation(BaseOperation):
 
     # --------------------------------------------------- collecting chats
 
-    def get_processing_chats(self) -> Iterator[ProcessingChat]:
+    def get_processing_chats(self, max_pages) -> Iterator[ProcessingChat]:
         """Собирает чаты, которые ещё не были обработаны в текущем цикле."""
         # employer_blacklist = set(self.tool.get_blacklisted())
 
         count = 0
-        cursor = None
-        for page in range(1, self.max_pages + 1):
-            logger.debug(f"fetch chats from {page=} ({cursor=})")
+        from_key = None
+        for page in range(1, max_pages + 1):
+            logger.debug(f"fetch chats from={from_key} ({page=})")
             data = self.get_chats(
-                cursor=cursor,
+                from_key=from_key,
                 refer_url=self.chat_page_url,
             )
             chats = data.get("chats") or {}
             found = chats.get("found") or 0
-            cursor = chats.get("nextFrom")
+            from_key = chats.get("nextFrom")
             items = chats.get("items") or []
+            if items:
+                logger.debug(
+                    "first chat item id = %d; last chat item id = %d",
+                    items[0]["id"],
+                    items[-1]["id"],
+                )
             count += len(items)
             resources = data.get("resources") or {}
 
@@ -936,9 +942,9 @@ class Operation(BaseOperation):
                 if last_is_mine and not chat.is_last_message_older(days=1):
                     continue
 
-                # Чаты упорядочены по дате, 
+                # Чаты упорядочены по дате,
                 # поэтому сли чат старше N дней, то дальше не смотрим
-                if chat.is_last_message_older(days=7):
+                if chat.is_last_message_older(days=14):
                     break
 
                 if (
@@ -949,7 +955,7 @@ class Operation(BaseOperation):
 
                 yield chat
 
-            if not cursor:
+            if not from_key:
                 break
 
             if count >= found:
@@ -1000,7 +1006,7 @@ class Operation(BaseOperation):
             try:
                 cnt = self.get_unread_count()
                 logger.debug("Счетчик непрочитанных: %d", cnt["unreadCount"])
-                for chat in self.get_processing_chats():
+                for chat in self.get_processing_chats(self.max_pages):
                     self.process_chat(chat)
             except KeyboardInterrupt:
                 print("bye!")
@@ -1057,7 +1063,10 @@ class Operation(BaseOperation):
             refer_url=self.chat_referer(chat.chat_id),
         )
         logger.debug(res)
-        print(f"📨 Сообщение отправлено в чат #{chat.chat_id}")
+        print(
+            f"📨 Сообщение отправлено в чат #{chat.chat_id}:\n",
+            shorten(send_message, limit=255),
+        )
 
     def get_ai_reply(self, chat: ProcessingChat) -> str | None:
         """Ответ нейронки. None — отвечать в этот раз не нужно."""
@@ -1075,7 +1084,7 @@ class Operation(BaseOperation):
             if messages is None:
                 return
 
-            contact_name = "Анонимный работодатель"
+            contact_name = "не указано"
             contact_is_bot = False
             for message in reversed(messages):
                 if (
