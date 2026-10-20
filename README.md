@@ -1148,21 +1148,30 @@ services:
 Откройте редактор расписания:
 
 ```sh
-crontab -e
+sudo crontab -u user -e
 ```
 
 И добавьте строки:
 
 ```cron
-# Запуск apply каждые 24 часа (в полночь)
-0 0 * * * /путь/к/hh-applicant-tool apply
+# Запуск apply-vacancies каждые 24 часа (в полночь)
+0 0 * * * su -s /bin/sh user -c '/путь/к/hh-applicant-tool apply-vacancies'
 
 # Запуск update-resumes каждые 4 часа
-0 */4 * * * /путь/к/hh-applicant-tool update-resumes
+0 */4 * * * su -s /bin/sh user -c '/путь/к/hh-applicant-tool update-resumes'
 
-# Запуск reply-chats при старте системы
-@reboot /путь/к/hh-applicant-tool reply-chats
+# Запуск reply-employers при старте системы
+@reboot su -s /bin/sh user -c '/путь/к/hh-applicant-tool reply-employers'
 ```
+
+Путь до `hh-applicant-tool` можно узнать так:
+
+```sh
+$ which hh-applicant-tool
+/home/sergey/Projects/hh-applicant-tool/.venv/bin/hh-applicant-tool
+```
+
+Указывать надо всегда полный путь.
 
 ### KDE
 
