@@ -1019,7 +1019,7 @@ class Operation(BaseOperation):
             except KeyboardInterrupt:
                 print("bye!")
                 return
-            except (requests.HTTPError, XHRError, ApiError) as ex:
+            except (requests.RequestException, XHRError, ApiError) as ex:
                 logger.error(ex)
 
             if not self.loop:
