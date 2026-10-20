@@ -133,6 +133,12 @@ BOT_RECRUITER_ANSWER = (
     "который вы указали."
 )
 
+# Время через которое напоминаем о себе, так как нам не ответили
+BUMP_AFTER_DAYS = 3
+
+# Пропускаем все чаты старше
+STALE_AFTER_DAYS = 14
+
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -939,12 +945,14 @@ class Operation(BaseOperation):
                     == item.get("lastViewedByCurrentUserMessageId"),
                 )
 
-                if last_is_mine and not chat.is_last_message_older(days=1):
+                if last_is_mine and not chat.is_last_message_older(
+                    days=BUMP_AFTER_DAYS
+                ):
                     continue
 
                 # Чаты упорядочены по дате,
                 # поэтому сли чат старше N дней, то дальше не смотрим
-                if chat.is_last_message_older(days=14):
+                if chat.is_last_message_older(days=STALE_AFTER_DAYS):
                     return
 
                 if (
@@ -1064,8 +1072,8 @@ class Operation(BaseOperation):
         )
         logger.debug(res)
         print(
-            f"📨 Сообщение отправлено в чат #{chat.chat_id}:\n",
-            shorten(send_message, limit=255),
+            f"📨 Сообщение отправлено в чат #{chat.chat_id}:",
+            shorten(send_message, limit=1024),
         )
 
     def get_ai_reply(self, chat: ProcessingChat) -> str | None:
