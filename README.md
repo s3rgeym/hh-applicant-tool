@@ -289,7 +289,7 @@ $ hh-applicant-tool apply-vacancies --search "Python Backend" --filter-ai
 # Нужно только задать данные от SMTP в toml-конфиге.
 $ hh-applicant-tool apply-vacancies --search "Python Backend" --send-email
 
-# Поднимаем резюме
+# Поднимаем все имеющиеся резюме
 $ hh-applicant-tool update-resumes
 
 # Запускаем автоответчик в чате (если настроен openai)

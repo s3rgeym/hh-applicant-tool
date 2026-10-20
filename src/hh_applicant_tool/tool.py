@@ -35,7 +35,7 @@ from urllib.parse import parse_qs, quote, urljoin, urlsplit
 
 import requests
 
-from hh_applicant_tool.utils.package import PACKAGE_NAME
+from hh_applicant_tool.utils.package import PACKAGE_NAME, get_package_version
 
 from . import ai, api
 from .constants import (
@@ -384,7 +384,7 @@ class HHApplicantTool:
         session = requests.Session()
         session.headers.update(
             {
-                "User-Agent": f"Mozilla/5.0 (compatible; {PACKAGE_NAME}; +{GITHUB_REPO_URL})",
+                "User-Agent": f"Mozilla/5.0 (compatible; {PACKAGE_NAME}/{get_package_version()}; +{GITHUB_REPO_URL})",
             }
         )
         logger.debug("AI Default Headers: %r", session.headers)
