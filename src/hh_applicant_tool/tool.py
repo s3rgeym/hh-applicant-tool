@@ -1257,9 +1257,13 @@ class HHApplicantTool:
             i["name"] for i in resume.get("citizenship", [])
         )
         salary = resume.get("salary", {})
-        rv["resume_salary"] = (
-            f"{salary.get('amount', '')} {salary.get('currency', '').replace('RUR', 'руб.')}".strip()
+        amount = salary.get("amount", "")
+        currency = (
+            salary.get("currency", "")
+            .replace("RUR", "руб.")
+            .replace("USD", "$")
         )
+        rv["resume_salary"] = f"{amount} {currency}".strip()
         education = resume.get("education", {})
 
         try:
