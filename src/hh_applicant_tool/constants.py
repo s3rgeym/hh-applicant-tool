@@ -58,6 +58,7 @@ CAPTCHA_PROMPT = (
 # Миниммальное время которое должно пройти после решения капчи перед ее
 # отправкой на проверку
 CAPTCHA_MIN_SOLVE_DELAY = 10.0
+CAPTCHA_MAX_SOLVE_DELAY = 15.0
 
 MAX_CAPTCHA_ATTEMPTS = 5
 

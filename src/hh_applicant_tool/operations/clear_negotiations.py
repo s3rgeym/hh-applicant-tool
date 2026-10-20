@@ -5,8 +5,6 @@ import datetime as dt
 import logging
 from typing import TYPE_CHECKING
 
-import requests
-
 from ..api.errors import ApiError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.date import parse_api_datetime
@@ -29,7 +27,7 @@ class Namespace(BaseNamespace):
 class Operation(BaseOperation):
     """Удалить отказы и/или старые отклики. Опционально так же удаляет чаты и блокирует работодателей. Из-за особенностей API эту команду иногда нужно вызывать больше одного раза."""
 
-    __aliases__ = ["clear-negotiations", "delete-negotiations"]
+    __aliases__ = []
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
@@ -51,9 +49,9 @@ class Operation(BaseOperation):
             action="store_true",
             help="Удалить так же чат",
         )
-        parser.add_argument(
-            "--block-ats", action="store_true", help="Блокировать ATS"
-        )
+        # parser.add_argument(
+        #     "--block-ats", action="store_true", help="Блокировать ATS"
+        # )
         parser.add_argument(
             "-n",
             "--dry-run",
@@ -66,14 +64,12 @@ class Operation(BaseOperation):
         self.args = args
         self.clear()
 
+    # Эти все функции нужно пособрать и перенести в HHApplicantTool
     def delete_chat(self, topic: int | str) -> bool:
         """Чат можно удалить только через веб-версию"""
         headers = {
             "X-Hhtmfrom": "main",
             "X-Hhtmsource": "negotiation_list",
-            "X-Requested-With": "XMLHttpRequest",
-            "X-Xsrftoken": self.tool.xsrf_token,
-            "Refrerer": f"{self.tool.base_url}/applicant/negotiations?hhtmFrom=main&hhtmFromLabel=header",
         }
 
         payload = {
@@ -82,17 +78,15 @@ class Operation(BaseOperation):
             "substate": "HIDE",
         }
 
-        try:
-            r = self.tool.session.post(
-                f"{self.tool.base_url}/applicant/negotiations/trash",
-                payload,
-                headers=headers,
-            )
-            r.raise_for_status()
-            return True
-        except requests.RequestException as ex:
-            logger.error(ex)
-            return False
+        r = self.tool.xhr_request(
+            "POST",
+            "/applicant/negotiations/trash",
+            payload,
+            headers=headers,
+            referer_url=f"{self.tool.base_url}/applicant/negotiations?hhtmFrom=main&hhtmFromLabel=header",
+        )
+
+        logger.debug(r)
 
     def clear(self) -> None:
         blacklisted = set(self.tool.get_blacklisted())
@@ -145,11 +139,9 @@ class Operation(BaseOperation):
 
                 logger.debug("Ответ на отклик пришел через %d сек.", d.seconds)
 
-                ats_detected = d.seconds <= 16 * 60
-
-                if ats_detected:
+                if d.seconds <= 16 * 60:
                     logger.info(
-                        "Признаки использования ATS компанией: %s (%s)",
+                        "Обьнаружены признаки использования ATS компанией: %s (%s)",
                         vacancy["employer"]["name"],
                         vacancy["employer"]["alternate_url"],
                     )
@@ -158,10 +150,7 @@ class Operation(BaseOperation):
                 employer_id = employer.get("id")
 
                 if (
-                    (
-                        self.args.blacklist_discard
-                        or (self.args.block_ats and ats_detected)
-                    )
+                    self.args.blacklist_discard
                     and employer
                     and employer_id
                     and employer_id not in blacklisted

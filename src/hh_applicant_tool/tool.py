@@ -6,6 +6,7 @@ import copy
 import html
 import json
 import logging
+import random
 import signal
 import smtplib
 import sys
@@ -43,6 +44,7 @@ from .constants import (
     ANDROID_CLIENT_ID,
     ANDROID_CLIENT_SECRET,
     ANDROID_WEBVIEW_USERAGENT,
+    CAPTCHA_MAX_SOLVE_DELAY,
     CAPTCHA_MIN_SOLVE_DELAY,
     CAPTCHA_PROMPT,
     CAPTCHA_SUCCESS_BACKURL,
@@ -824,7 +826,11 @@ class HHApplicantTool:
 
         logger.debug("Время затраченное на решение капчи: %.2f сек", dt)
 
-        if (wait := CAPTCHA_MIN_SOLVE_DELAY - dt) > 0:
+        required_delay = random.uniform(
+            CAPTCHA_MIN_SOLVE_DELAY, CAPTCHA_MAX_SOLVE_DELAY
+        )
+
+        if (wait := required_delay - dt) > 0:
             logger.info(
                 f"Ждем {wait:.2f} сек перед отправкой капчи на проверку",
             )

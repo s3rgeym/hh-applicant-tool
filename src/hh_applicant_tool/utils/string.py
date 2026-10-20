@@ -3,8 +3,19 @@ from __future__ import annotations
 import html
 import random
 import re
+import string
 from difflib import SequenceMatcher
 from typing import Any
+
+
+def split_words(s: str) -> list[str]:
+    return (
+        s.lower()
+        .translate(
+            str.maketrans(string.punctuation, " " * len(string.punctuation))
+        )
+        .split()
+    )
 
 
 def choose_similar(input_text: str, options: list[str]) -> str | None:
@@ -80,29 +91,17 @@ def bool2str(v: Any) -> str:
     return str(bool(v)).lower()
 
 
-# К удалению
-def list2str(items: list[Any] | None) -> str:
-    return ",".join(f"{v}" for v in items) if items else ""
-
-
-# Не нужна
-def unescape_string(text: str) -> str:
-    if not text:
-        return ""
-    return (
-        text.replace(r"\n", "\n")
-        .replace(r"\r", "\r")
-        .replace(r"\t", "\t")
-        .replace(r"\\", "\\")
-    )
-
-
 def br2nl(s: str) -> str:
     return re.sub(r"<br\s*/?>", "\n", s, flags=re.I)
 
 
 def strip_tags(content: str) -> str:
     content = br2nl(content)
+    # убираем содержимое script/style целиком
+    content = re.sub(
+        r"<(script|style)\b[^>]*>.*?</\1\s*>", "", content, flags=re.I | re.S
+    )
     content = re.sub(r"<[^>]+>", "", content)
+    content = html.unescape(content)
     # content = re.sub(r"\s+", " ", content)
     return content.strip()

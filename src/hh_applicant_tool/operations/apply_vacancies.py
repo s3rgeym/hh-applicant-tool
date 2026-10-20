@@ -150,7 +150,7 @@ DEFAULT_AI_FILTER_PROMPT = """\
 
 DEFAULT_TEST_CHOICE_PROMPT = (
     "Вопрос: %(question)s\n"
-    "Варианты:\n%(options)s\n"
+    "Варианты:\n%(reply_options)s\n"
     "Выбери правильный вариант. Ответь только его ID."
 )
 
@@ -1088,7 +1088,7 @@ class Operation(BaseOperation):
                         {
                             **placeholders,
                             "question": question,
-                            "options": options,
+                            "reply_options": options,
                         },
                         "промпта выбора ответа в тесте",
                     )
