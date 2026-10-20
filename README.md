@@ -284,14 +284,15 @@ $ hh-applicant-tool apply-vacancies --search "Python Backend" --excluded-filter 
 # в результаты поиска, типа а вдруг заинтересует...
 $ hh-applicant-tool apply-vacancies --search "Python Backend" --filter-ai
 
-# Будет еще на почиу спамить письмами с просьбой рассмотреть резюме. Нужно только задать данные от SMTP в toml-конфиге.
+# Будет еще на почту спамить письмами с просьбой рассмотреть резюме.
+# Нужно только задать данные от SMTP в toml-конфиге.
 $ hh-applicant-tool apply-vacancies --search "Python Backend" --send-email
 
 # Поднимаем резюме
 $ hh-applicant-tool update-resumes
 
 # Запускаем автоответчик в чате (если настроен openai)
-$ hh-applicant-tool reply-chats --loop
+$ hh-applicant-tool reply-chats
 
 # Чистим отказы в откликах (не имеет особого смысла, так как автоответчик при отказе покидает чат, и тот больше не мозолит глаза)
 # Может дополнительно забанить работодателей за отказы или мог. Кандидат к переписанию
