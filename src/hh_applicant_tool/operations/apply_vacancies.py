@@ -21,7 +21,7 @@ from ..ai.openai import OpenAIClient
 from ..api import BadResponse, Redirect, datatypes
 from ..api.datatypes import PaginatedItems, SearchVacancy, Vacancy
 from ..api.errors import ApiError, LimitExceeded
-from ..constants import GITHUB_PROFILE_URL
+from ..constants import GITHUB_PROFILE_URL, GITHUB_REPO_URL
 from ..errors import OperationError, XHRError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.datatypes import VacancyTestsData
@@ -856,6 +856,7 @@ class Operation(BaseOperation):
         # Недоступный сайт работодателя не должен мешать отклику
         try:
             site_info = self._parse_site(site_url)
+            logger.debug(site_info)
             state.site_emails[employer_id] = site_info["emails"]
         except requests.RequestException as ex:
             logger.error(ex)
@@ -1160,7 +1161,11 @@ class Operation(BaseOperation):
         )
 
     def _parse_site(self, url: str) -> dict[str, Any]:
-        with self.tool.session.get(url, timeout=10) as r:
+        with self.tool.session.get(
+            url,
+            timeout=(10, 30),
+            headers={"Referer": GITHUB_REPO_URL},
+        ) as r:
             val = lambda m: html.unescape(m.group(1)) if m else ""
 
             title = val(re.search(r"<title>(.*?)</title>", r.text, re.I | re.S))

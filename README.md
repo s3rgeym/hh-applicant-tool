@@ -275,7 +275,7 @@ $ hh-applicant-tool -vv apply-vacancies --search "Python разработчик"
 # Вакансии, не прошедшие фильтр, добавляются в черный список
 # см hh.ru/applicant/blacklist/vacancy?hhtmFrom=main&hhtmFromLabel=header
 # Работает очень быстро, но пропускает всякий мусор (пояснение см далее)
-$ hh-applicant-tool apply-vacancies --search "Python Backend" --excluded-filter "fullstack|junior|php|java"
+$ hh-applicant-tool apply-vacancies --search "Python Backend" --excluded-filter "junior|php|bitrix|курьер|препод"
 
 # То же самое, но с использованием нейронки (работает очень медленно)
 # Если не переписывать шаблоны промпта, то будет сравнивать вакансию с названием резюме и ключевыми навыками,
@@ -283,6 +283,9 @@ $ hh-applicant-tool apply-vacancies --search "Python Backend" --excluded-filter 
 # На хх просто есть услуга продвижения вакансий, и когда сайту их показать некому, он начинает их вставлять
 # в результаты поиска, типа а вдруг заинтересует...
 $ hh-applicant-tool apply-vacancies --search "Python Backend" --filter-ai
+
+# Будет еще на почиу спамить письмами с просьбой рассмотреть резюме. Нужно только задать данные от SMTP в toml-конфиге.
+$ hh-applicant-tool apply-vacancies --search "Python Backend" --send-email
 
 # Поднимаем резюме
 $ hh-applicant-tool update-resumes

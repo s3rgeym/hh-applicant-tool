@@ -888,7 +888,7 @@ class Operation(BaseOperation):
                 resume_id = self.get_resume_id(item_resources, resources)
                 vacancy = self.get_vacancy(item_resources, resources)
                 if not resume_id or not vacancy:
-                    logger.debug(
+                    logger.warning(
                         "Пропускаем чат #%s без резюме или вакансии", chat_id
                     )
                     continue
@@ -1001,7 +1001,7 @@ class Operation(BaseOperation):
                 return
 
             t = random.uniform(30.0, 60.0)
-            print(f"⏳ Ждем {t:.2f} сек...")
+            logger.debug(f"Ждем {t:.2f} сек перед следующей проверкой чатов...")
             time.sleep(t)
 
     def process_chat(
