@@ -874,7 +874,8 @@ class Operation(BaseOperation):
 
         count = 0
         cursor = None
-        for _ in range(self.max_pages):
+        for page in range(1, self.max_pages + 1):
+            logger.debug(f"fetch chats from {page=} ({cursor=})")
             data = self.get_chats(
                 cursor=cursor,
                 refer_url=self.chat_page_url,
@@ -935,8 +936,10 @@ class Operation(BaseOperation):
                 if last_is_mine and not chat.is_last_message_older(days=1):
                     continue
 
+                # Чаты упорядочены по дате, 
+                # поэтому сли чат старше N дней, то дальше не смотрим
                 if chat.is_last_message_older(days=7):
-                    continue
+                    break
 
                 if (
                     not last_is_mine
