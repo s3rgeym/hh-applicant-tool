@@ -23,7 +23,7 @@ packages = [
 brotli = "^1.2.0"
 cryptography = "^50.0.2"
 pillow = "^12.3.0"
-python = "^3.14"
+python = "^3.12"
 requests = { extras = ["socks"], version = "^2.32.3" }
 tomli-w = "^1.2.0"
 
