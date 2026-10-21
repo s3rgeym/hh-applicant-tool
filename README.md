@@ -278,7 +278,7 @@ $ hh-applicant-tool apply-vacancies
 # -vv выводят все запросы и прочую отладочную информацию для диагностирования ошибок
 $ hh-applicant-tool -vv apply-vacancies --search "Python разработчик" --total-pages 1 --per-page 3 --dry-run
 
-# Фильтруем вакансии по исключаемым словам с помощью регулярки (fullstack, junior, php и т.п.)
+# Фильтруем вакансии по исключаемым словам с помощью регулярки
 # Вакансии, не прошедшие фильтр, добавляются в черный список
 # см hh.ru/applicant/blacklist/vacancy?hhtmFrom=main&hhtmFromLabel=header
 # Работает очень быстро, но пропускает всякий мусор (пояснение см далее)
