@@ -666,7 +666,7 @@ class Operation(BaseOperation):
             params=params,
             json=json,
             referer_url=referer_url,
-            headers=self._get_hhtm_headers(hhtm_from),
+            additional_headers=self._get_hhtm_headers(hhtm_from),
             xsrf_token=self.tool.xsrf_token,
         )
 

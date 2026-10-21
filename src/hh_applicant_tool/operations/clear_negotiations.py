@@ -82,7 +82,7 @@ class Operation(BaseOperation):
             "POST",
             "/applicant/negotiations/trash",
             payload,
-            headers=headers,
+            additional_headers=headers,
             referer_url=f"{self.tool.base_url}/applicant/negotiations?hhtmFrom=main&hhtmFromLabel=header",
         )
 

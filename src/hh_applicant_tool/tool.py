@@ -11,6 +11,7 @@ import signal
 import smtplib
 import sys
 import time
+import types
 from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import KW_ONLY, dataclass
@@ -90,7 +91,12 @@ logger = logging.getLogger(__name__.split(".")[0])
 
 OPERATIONS = "operations"
 
-_CAPTCHA_HEADERS = {"X-Hhtmfrom": "", "X-Hhtmsource": "account_captcha"}
+_CAPTCHA_HEADERS = types.MappingProxyType(
+    {
+        "X-Hhtmfrom": "",
+        "X-Hhtmsource": "account_captcha",
+    }
+)
 
 
 class XHRResult(TypedDict):
@@ -292,14 +298,15 @@ class HHApplicantTool:
         )
         subparsers = parser.add_subparsers(help="commands")
         package_dir = Path(__file__).resolve().parent / OPERATIONS
-        for _, module_name, _ in iter_modules([str(package_dir)]):
-            if module_name.startswith("_"):
+        for _, mod_name, _ in iter_modules([str(package_dir)]):
+            if mod_name.startswith("_"):
                 continue
-            mod = import_module(f"{__package__}.{OPERATIONS}.{module_name}")
+            mod = import_module(f"{__package__}.{OPERATIONS}.{mod_name}")
             op: BaseOperation = mod.Operation()
-            kebab_name = module_name.replace("_", "-")
+            # Кебаб Нурмагомедов
+            kebab = mod_name.replace("_", "-")
             op_parser = subparsers.add_parser(
-                kebab_name,
+                kebab,
                 aliases=getattr(op, "__aliases__", []),
                 description=op.__doc__,
                 formatter_class=ArgumentFormatter,
@@ -858,12 +865,16 @@ class HHApplicantTool:
 
         Все значения уже определены и не None -- проверки делает вызывающий код.
         """
-        return {
+        default_headers = {
             "Accept": "application/json",
             "X-Requested-With": "XMLHttpRequest",
             "X-XSRFToken": xsrf,
             "Origin": origin,
             "Referer": referer_url,
+        }
+
+        return {
+            **default_headers,
             **extra_headers,
         }
 
@@ -916,20 +927,20 @@ class HHApplicantTool:
         data: dict | None = None,
         json: dict | None = None,
         referer_url: str | None = None,
-        headers: dict | None = None,
+        additional_headers: dict | None = None,
         xsrf_token: str | None = None,
         session: requests.Session | None = None,
     ) -> XHRResult:
         """Одна попытка XHR-запроса к внутреннему API hh.ru (без решения капчи).
 
-        endpoint     -- путь ("/shards/...") или полный URL (например, chatik.hh.ru).
-        params       -- query string (и для GET, и для POST/PUT).
-        data         -- тело запроса (form-data).
-        json         -- тело запроса (JSON).
-        referer_url  -- страница, с которой "сделан" запрос. Если не передан,
-                        берётся главная того же хоста.
-        headers      -- дополнительные заголовки; перекрывают стандартные.
-        xsrf_token   -- если не передан, берётся из куки _xsrf сессии.
+        endpoint            -- путь ("/shards/...") или полный URL (например, chatik.hh.ru).
+        params              -- query string (и для GET, и для POST/PUT).
+        data                -- тело запроса (form-data).
+        json                -- тело запроса (JSON).
+        referer_url         -- страница, с которой "сделан" запрос. Если не передан,
+                               берётся главная того же хоста.
+        additional_headers  -- дополнительные заголовки; перекрывают стандартные.
+        xsrf_token          -- если не передан, берётся из куки _xsrf сессии.
 
         Статус ответа НЕ проверяется: код возвращается в поле "http_status".
         Бросает CaptchaError, если сервер потребовал капчу, и ValueError,
@@ -949,7 +960,7 @@ class HHApplicantTool:
             origin=origin,
             xsrf=xsrf,
             referer_url=referer_url or f"{origin}/",
-            extra_headers=headers or {},
+            extra_headers=additional_headers or {},
         )
 
         r = session.request(
@@ -976,7 +987,7 @@ class HHApplicantTool:
         data: dict | None = None,
         json: dict | None = None,
         referer_url: str | None = None,
-        headers: dict | None = None,
+        additional_headers: dict | None = None,
         xsrf_token: str | None = None,
         session: requests.Session | None = None,
     ) -> XHRResult:
@@ -994,7 +1005,7 @@ class HHApplicantTool:
                     data=data,
                     json=json,
                     referer_url=referer_url,
-                    headers=headers,
+                    additional_headers=additional_headers,
                     xsrf_token=xsrf_token,
                     session=session,
                 )
@@ -1047,7 +1058,7 @@ class HHApplicantTool:
             target_url,
             params={"lang": lang},
             referer_url=referer_url,
-            headers=_CAPTCHA_HEADERS,
+            additional_headers=_CAPTCHA_HEADERS,
             xsrf_token=xsrf_token,
             session=session,
         )
@@ -1110,7 +1121,7 @@ class HHApplicantTool:
                 target_url,
                 params=payload,
                 referer_url=referer_url,
-                headers=_CAPTCHA_HEADERS,
+                additional_headers=_CAPTCHA_HEADERS,
                 xsrf_token=xsrf_token,
                 session=session,
             )

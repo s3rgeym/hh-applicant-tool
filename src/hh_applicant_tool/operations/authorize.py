@@ -199,7 +199,7 @@ class Operation(BaseOperation):
             self.redirect_url,
             data=params,
             referer_url=self.redirect_url,
-            headers=_LOGIN_HEADERS,
+            additional_headers=_LOGIN_HEADERS,
         )
 
         logger.debug("response keys: %s", list(res))
@@ -234,7 +234,7 @@ class Operation(BaseOperation):
             urljoin(self.redirect_url, "/account/otp_generate"),
             data=params,
             referer_url=self.redirect_url,
-            headers=_LOGIN_HEADERS,
+            additional_headers=_LOGIN_HEADERS,
         )
         logger.debug(res)
 
@@ -273,7 +273,7 @@ class Operation(BaseOperation):
             urljoin(self.redirect_url, "/account/login/by_code"),
             data=params,
             referer_url=self.redirect_url,
-            headers=_LOGIN_HEADERS,
+            additional_headers=_LOGIN_HEADERS,
         )
 
         logger.debug(

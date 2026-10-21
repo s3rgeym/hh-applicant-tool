@@ -1154,7 +1154,7 @@ class Operation(BaseOperation):
             "/applicant/vacancy_response/popup",
             data=payload,
             referer_url=referer_url,
-            headers={
+            additional_headers={
                 "X-Hhtmfrom": "vacancy",
                 "X-Hhtmsource": "vacancy_response",
             },

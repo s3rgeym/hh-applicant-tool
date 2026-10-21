@@ -14,18 +14,16 @@ readme = "README.md"
 packages = [
   { include = "hh_applicant_tool", from = "src" },
 ]
-include = [
-  # Содержит схему и миграции
-  { path = "src/hh_applicant_tool/**/*.sql", format = ["sdist", "wheel"] },
-  # HTML/CSS/JS шаблоны UI
-  { path = "src/hh_applicant_tool/ui/templates/**/*", format = ["sdist", "wheel"] },
-]
+# include = [
+#   { path = "src/hh_applicant_tool/**/*.sql", format = ["sdist", "wheel"] },
+#   { path = "src/hh_applicant_tool/ui/templates/**/*", format = ["sdist", "wheel"] },
+# ]
 
 [tool.poetry.dependencies]
 brotli = "^1.2.0"
 cryptography = "^50.0.2"
 pillow = "^12.3.0"
-python = "^3.11"
+python = "^3.14"
 requests = { extras = ["socks"], version = "^2.32.3" }
 tomli-w = "^1.2.0"
 
