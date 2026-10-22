@@ -1086,7 +1086,7 @@ class Operation(BaseOperation):
             # Симулируем поведение на сайте:
             # 1) открыли чат с отправкой уведомления
             # 2) пометили чужое сообщение прочитанным
-            self.notify_chat_opened(chat_id)
+            self.notify_chat_opened(chat.chat_id)
             if not chat.viewed_by_me:
                 logger.debug(
                     f"Помечаем сообщение #{chat.last_message_id} прочитанным"
