@@ -15,7 +15,7 @@ from urllib.parse import urljoin
 
 import requests
 
-from hh_applicant_tool.ai.openai import OpenAIChat
+from hh_applicant_tool.ai.openai import OpenAIChat, OpenAIError
 from hh_applicant_tool.api.errors import ApiError
 
 from ..constants import GITHUB_PROFILE_URL
@@ -132,10 +132,14 @@ BOT_RECRUITER_ANSWER = (
 )
 
 # Время через которое напоминаем о себе, так как нам не ответили
-BUMP_AFTER_DAYS = 3
+BUMP_AFTER_DAYS = 2
 
 # Пропускаем все чаты старше
-STALE_AFTER_DAYS = 14
+STALE_AFTER_DAYS = 30
+
+# Не отвечаем, если оппонент написал менее N минут назад: даём возможность
+# вести диалог вручную
+OPPONENT_REPLY_COOLDOWN_MINUTES = 15
 
 
 logger = logging.getLogger(__name__.split(".")[0])
@@ -493,12 +497,15 @@ class ProcessingChat:
     def is_last_message_older(
         self,
         *,
+        minutes: float = 0,
         hours: float = 0,
         days: float = 0,
     ) -> bool:
         return datetime.now(
             tz=self.last_message_at.tzinfo
-        ) - self.last_message_at > timedelta(hours=hours, days=days)
+        ) - self.last_message_at > timedelta(
+            minutes=minutes, hours=hours, days=days
+        )
 
 
 class Namespace(BaseNamespace):
@@ -530,7 +537,9 @@ class Operation(BaseOperation):
     loop: bool
     reply_chat_ai: OpenAIChat
     reply_chat_options_ai: OpenAIChat
-    _ignored_chats: set[int]
+    # id сообщений, которые уже разобрали: чаты, где последнее сообщение
+    # уже просмотрено, повторно не разбираем
+    _viewed_messages: set[int]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
@@ -629,7 +638,7 @@ class Operation(BaseOperation):
             ),
         }
 
-        self._ignored_chats = set()
+        self._viewed_messages = set()
 
         return self.reply_chats()
 
@@ -891,6 +900,49 @@ class Operation(BaseOperation):
 
     # --------------------------------------------------- collecting chats
 
+    def is_processable(self, chat: ProcessingChat) -> bool:
+        """Единое место для всех проверок: нужно ли разбирать чат."""
+        # Это сообщение мы уже разбирали
+        if chat.last_message_id in self._viewed_messages:
+            # logger.debug(
+            #     "Пропускаю чат #%d: последнее сообщение уже просмотрено",
+            #     chat.chat_id,
+            # )
+            return False
+
+        # Фильтр по резюме
+        if self.resume_id and chat.resume_id != self.resume_id:
+            return False
+
+        # Отказ: выходим из чата
+        if chat.applicant_state == "DISCARD":
+            logger.info("Покидаем чат #%d с отказом", chat.chat_id)
+            print("Покидаем чат с отказом", chat.chat_id)
+            if not self.dry_run:
+                self.leave_chat(chat.chat_id)
+            return False
+
+        if chat.last_is_mine:
+            # Последнее сообщение моё: напоминаем о себе только спустя время
+            return chat.is_last_message_older(days=BUMP_AFTER_DAYS)
+
+        # Автоответ hh после анкеты
+        if chat.last_message_text == BOT_RECRUITER_ANSWER:
+            return False
+
+        # Оппонент написал только что: даём возможность ответить вручную
+        if not chat.is_last_message_older(
+            minutes=OPPONENT_REPLY_COOLDOWN_MINUTES
+        ):
+            logger.debug(
+                "Пропускаю чат #%d: оппонент написал менее %d мин назад",
+                chat.chat_id,
+                OPPONENT_REPLY_COOLDOWN_MINUTES,
+            )
+            return False
+
+        return True
+
     def get_processing_chats(self, max_pages) -> Iterator[ProcessingChat]:
         """Собирает чаты, которые ещё не были обработаны в текущем цикле."""
         # employer_blacklist = set(self.tool.get_blacklisted())
@@ -917,76 +969,47 @@ class Operation(BaseOperation):
             resources = data.get("resources") or {}
 
             for item in items:
-                # Все эти проверки вынести в process_chat?
-                # Лучше чтобы они были в одном месте, а не размазаны по коду, 
-                # хотя узнать можно ли писать в чат нельзя, не загрузив сообщения из него
-                # им нормально, а я понимаю, что сайт хх.сру делали ебучие ступиденты, а не настоящие программисты 
-                chat_id = int(item["id"])
-                if chat_id in self._ignored_chats:
-                    logger.debug("Пропускаю игнорируемый чат #%d", chat_id)
-                    continue
-
                 last_message = item.get("lastMessage")
                 item_resources = item.get("resources") or {}
                 resume_id = self.get_resume_id(item_resources, resources)
                 vacancy = self.get_vacancy(item_resources, resources)
-                if not resume_id or not vacancy:
+                if not last_message or not resume_id or not vacancy:
                     logger.warning(
-                        "Пропускаем чат #%s без резюме или вакансии", chat_id
+                        "Пропускаем чат #%s без сообщений, резюме или вакансии",
+                        item["id"],
                     )
-                    continue
-
-                if self.resume_id and resume_id != self.resume_id:
                     continue
 
                 topic_refs = item_resources.get("NEGOTIATION_TOPIC") or []
                 topics = resources.get("negotiation_topics") or {}
                 topic = topics.get(topic_refs[0]) if topic_refs else None
-                applicant_state = (topic or {}).get("currentApplicantState", "")
-
-                if applicant_state == "DISCARD":
-                    logger.info(f"Покидаем чат #{chat_id} с отказом")
-                    print("Покидаем чат с отказом", chat_id)
-                    self.leave_chat(chat_id)
-                    continue
 
                 current_participant_id = str(
                     item.get("currentParticipantId") or ""
                 )
-                last_is_mine = (
-                    str(last_message.get("participantId") or "")
-                    == current_participant_id
-                )
 
                 chat = ProcessingChat(
-                    chat_id=chat_id,
+                    chat_id=int(item["id"]),
                     resume_id=resume_id,
                     current_participant_id=current_participant_id,
                     vacancy=vacancy,
-                    applicant_state=applicant_state,
+                    applicant_state=(topic or {}).get(
+                        "currentApplicantState", ""
+                    ),
                     last_message=last_message,
-                    last_is_mine=last_is_mine,
+                    last_is_mine=str(last_message.get("participantId") or "")
+                    == current_participant_id,
                     viewed_by_me=last_message.get("id")
                     == item.get("lastViewedByCurrentUserMessageId"),
                 )
 
-                if last_is_mine and not chat.is_last_message_older(
-                    days=BUMP_AFTER_DAYS
-                ):
-                    continue
-
                 # Чаты упорядочены по дате,
-                # поэтому сли чат старше N дней, то дальше не смотрим
+                # поэтому если чат старше N дней, то дальше не смотрим
                 if chat.is_last_message_older(days=STALE_AFTER_DAYS):
                     return
 
-                if (
-                    not last_is_mine
-                    and chat.last_message_text == BOT_RECRUITER_ANSWER
-                ):
-                    continue
-
-                yield chat
+                if self.is_processable(chat):
+                    yield chat
 
             if not from_key:
                 break
@@ -1044,7 +1067,12 @@ class Operation(BaseOperation):
             except KeyboardInterrupt:
                 print("bye!")
                 return
-            except (requests.RequestException, XHRError, ApiError) as ex:
+            except (
+                requests.RequestException,
+                OpenAIError,
+                XHRError,
+                ApiError,
+            ) as ex:
                 logger.error(ex)
 
             if not self.loop:
@@ -1055,7 +1083,12 @@ class Operation(BaseOperation):
             time.sleep(t)
             self.tool.save_cookies()
 
-    def process_chat(
+    def process_chat(self, chat: ProcessingChat) -> None:
+        assert chat.last_message_id
+        self._process_chat(chat)
+        self._viewed_messages.add(chat.last_message_id)
+
+    def _process_chat(
         self,
         chat: ProcessingChat,
     ) -> None:
@@ -1064,10 +1097,10 @@ class Operation(BaseOperation):
                 send_message = self.get_ai_reply(chat)
             else:
                 send_message = self.get_quick_reply(chat)
-    
+
             if not send_message:
                 return
-    
+
             if self.is_farewell(send_message):
                 print(
                     "❌ Выходим из чата с отказом без выставления статуса (через CRM):",
@@ -1076,7 +1109,7 @@ class Operation(BaseOperation):
                 if not self.dry_run:
                     self.leave_chat(chat.chat_id)
                 return
-    
+
             if self.dry_run:
                 logger.debug(
                     "dry-run: ответ в чат #%s: %s", chat.chat_id, send_message
@@ -1128,19 +1161,17 @@ class Operation(BaseOperation):
                     "В чате #%s нельзя писать, игнорируем",
                     chat.chat_id,
                 )
-                self._ignored_chats.add(chat.chat_id)
                 return
 
-            if (n := len(messages)) >= MAX_CHAT_MESSAGES:
-                logger.warning(
-                    "Количество сообщений в чате #%s превысило максимально допустимое: %d => %d. Игнорируем",
-                    chat.chat_id,
-                    n,
-                    MAX_CHAT_MESSAGES,
-                )
-                self._ignored_chats.add(chat.chat_id)
-                return
-
+            # if (n := len(messages)) >= MAX_CHAT_MESSAGES:
+            #     logger.warning(
+            #         "Количество сообщений в чате #%s превысило максимально допустимое: %d => %d. Игнорируем",
+            #         chat.chat_id,
+            #         n,
+            #         MAX_CHAT_MESSAGES,
+            #     )
+            #     return
+            #
             contact_name = "не указано"
             contact_is_bot = False
             for message in reversed(messages):
