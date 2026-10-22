@@ -13,6 +13,7 @@ import sys
 import time
 import types
 from collections.abc import Sequence
+from contextlib import contextmanager
 from dataclasses import KW_ONLY, dataclass
 from functools import cached_property
 from http.cookiejar import MozillaCookieJar
@@ -45,9 +46,9 @@ from .constants import (
     ANDROID_CLIENT_ID,
     ANDROID_CLIENT_SECRET,
     ANDROID_WEBVIEW_USERAGENT,
-    CAPTCHA_MAX_SOLVE_DELAY,
-    CAPTCHA_MIN_SOLVE_DELAY,
     CAPTCHA_PROMPT,
+    CAPTCHA_SOLVE_MAX_DELAY,
+    CAPTCHA_SOLVE_MIN_DELAY,
     CAPTCHA_SUCCESS_BACKURL,
     CONFIG_DIR,
     CONFIG_FILENAME,
@@ -158,13 +159,6 @@ class BaseNamespace(argparse.Namespace):
 
 @dataclass
 class HHApplicantTool:
-    """Утилита для автоматизации действий соискателя на сайте hh.ru.
-
-    Исходники и предложения: <{repo_url}>
-
-    Группа поддержки: <{tg_url}>
-    """.format(repo_url=GITHUB_REPO_URL, tg_url=TELEGRAM_CHAT_URL)
-
     _: KW_ONLY
     api_delay: float | None = None
     base_url: str | None = None
@@ -338,7 +332,7 @@ class HHApplicantTool:
 
     def _create_session(
         self,
-        label: str = "New session",
+        label: str,
         *,
         user_agent: str | None = None,
         proxies: dict[str, str] | None = None,
@@ -348,7 +342,7 @@ class HHApplicantTool:
             proxies = get_proxies_dict(self.proxy_url)
 
         if proxies:
-            logger.debug("%s proxies: %r", label, proxies)
+            logger.debug("%s session proxies: %r", label, proxies)
             session.proxies = proxies
 
         # В заголовки не лезь, если не понимаешь зачем они
@@ -360,13 +354,13 @@ class HHApplicantTool:
             }
         )
 
-        logger.debug("%s headers: %r", label, session.headers)
+        logger.debug("%s session headers: %r", label, session.headers)
 
         return session
 
     @cached_property
     def session(self) -> requests.Session:
-        session = self._create_session("Fake Browser")
+        session = self._create_session("Desktop")
 
         if self.cookies_file.exists():
             jar = MozillaCookieJar(str(self.cookies_file))
@@ -447,41 +441,38 @@ class HHApplicantTool:
 
         return client
 
-    def _get_ai_client(
-        self,
-        system_prompt: str | None = None,
-        **kwargs,
-    ) -> ai.OpenAIClient:
-        """Низкоуровневая фабрика: каждый вызов создаёт нового клиента."""
-        kwargs.setdefault("session", self.ai_session)
-        return ai.OpenAIClient(system_prompt=system_prompt, **kwargs)
-
     @cached_property
     def _ai_clients(self) -> WeakValueDictionary[str, ai.OpenAIClient]:
         return WeakValueDictionary()
 
-    def ai_client_for(
+    def _get_ai_client(self, base_url: str) -> ai.OpenAIClient:
+        """Возвращает общий AI-клиент для указанного base_url."""
+        key = base_url.rstrip("/")
+        client = self._ai_clients.get(key)
+
+        if client is None:
+            client = ai.OpenAIClient(base_url)
+            logger.debug("client created: %r", client)
+            self._ai_clients[key] = client
+
+        return client
+
+    def ai_chat_for(
         self,
         section: str | None = None,
         **defaults: Any,
-    ) -> ai.OpenAIClient:
-        """Клиент AI для секции конфига (openai.<section>).
+    ) -> ai.OpenAIChat:
+        """Создаёт AI-чат с настройками секции openai.<section>.
 
-        Клиенты с одинаковыми настройками переиспользуются, пока на них
-        кто-то держит сильную ссылку. Когда ссылок не остаётся, клиент
-        удаляется из кеша сам.
+        Клиент общий для всех чатов с одинаковым base_url. В клиент
+        передаётся только base_url, остальные настройки передаются чату.
+        Значения из конфига перекрывают defaults.
         """
-        settings = {**defaults, **self.get_openai_settings(section)}
-
-        key = json.dumps(
-            settings, ensure_ascii=False, sort_keys=True, separators=(":", ",")
-        )
-        client = self._ai_clients.get(key)
-        if client is None:
-            client = self._get_ai_client(**settings)
-            logger.debug("client created: %r", client)
-            self._ai_clients[key] = client
-        return client
+        settings = {**defaults, **self.get_openai_config(section)}
+        base_url = settings.pop("base_url")
+        system_prompt = settings.pop("system_prompt")
+        client = self._get_ai_client(base_url)
+        return client.create_chat(system_prompt, **settings)
 
     def get_openai_config(self, section: str | None = None) -> dict:
         """Возвращает копию конфига openai с учетом наследования от главной"""
@@ -495,9 +486,6 @@ class HHApplicantTool:
                 raise ValueError(
                     f"Base section must be {base_section!r}: got: {base!r}"
                 )
-
-        # if not re.fullmatch(r"[a-z]+", section):
-        #     raise ValueError(f"Bad {base_section!r} section name: {section!r}")
 
         # Поздние секции перекрывают ранние, результат — глубокая копия
         c = self.config.get_merged(
@@ -519,29 +507,6 @@ class HHApplicantTool:
             c.setdefault("connect_timeout", self.openai_connect_timeout)
 
         return c
-
-    def get_openai_settings(self, config_section: str | None = None) -> dict:
-        c = self.get_openai_config(section=config_section)
-        return {
-            k: v
-            for k, v in c.items()
-            if k
-            in [
-                "api_key",
-                "base_url",
-                "chat_completions_endpoint",
-                "connect_timeout",
-                "delay",
-                "history",
-                "max_completion_tokens",
-                "max_retries",
-                "model",
-                "proxy_url",
-                "system_prompt",
-                "temperature",
-                "timeout",
-            ]
-        }
 
     def get_me(self) -> api.datatypes.User:
         return self.api_client.get("/me")
@@ -745,7 +710,7 @@ class HHApplicantTool:
     @cached_property
     def webview_session(self) -> requests.Session:
         return self._create_session(
-            "Fake Android WebView", user_agent=ANDROID_WEBVIEW_USERAGENT
+            "Android WebView", user_agent=ANDROID_WEBVIEW_USERAGENT
         )
 
     def handle_captcha(
@@ -803,29 +768,14 @@ class HHApplicantTool:
         if not xsrf_token:
             raise ValueError("xsrf token отсутствует в Cookies!")
 
-        dt = -time.monotonic()
-
-        solution = self.solve_captcha(
-            captcha_state=state,
-            lang=lang,
-            referer_url=redirect_url,
-            xsrf_token=xsrf_token,
-            session=session,
-        )
-
-        dt += time.monotonic()
-
-        logger.debug("Время затраченное на решение капчи: %.2f сек", dt)
-
-        required_delay = random.uniform(
-            CAPTCHA_MIN_SOLVE_DELAY, CAPTCHA_MAX_SOLVE_DELAY
-        )
-
-        if (wait := required_delay - dt) > 0:
-            logger.info(
-                f"Ждем {wait:.2f} сек перед отправкой капчи на проверку",
+        with self.captcha_retry_delay():
+            solution = self.solve_captcha(
+                captcha_state=state,
+                lang=lang,
+                referer_url=redirect_url,
+                xsrf_token=xsrf_token,
+                session=session,
             )
-            time.sleep(wait)
 
         return self._send_captcha(
             text=solution.text,
@@ -1008,10 +958,11 @@ class HHApplicantTool:
                     endpoint,
                 )
 
-                solution = self.solve_captcha(
-                    captcha_state=ex.state,
-                    referer_url=referer_url,
-                )
+                with self.captcha_retry_delay():
+                    solution = self.solve_captcha(
+                        captcha_state=ex.state,
+                        referer_url=referer_url,
+                    )
                 json, data = self._with_captcha(
                     json,
                     data,
@@ -1023,6 +974,22 @@ class HHApplicantTool:
                 )
 
         raise AssertionError("unreachable")
+
+    @contextmanager
+    def captcha_retry_delay(self):
+        """Время задержки после решения капчи будет расти в прогрессии"""
+        start = time.monotonic()
+        try:
+            yield
+        finally:
+            elapsed = time.monotonic() - start
+            delay = random.uniform(
+                CAPTCHA_SOLVE_MIN_DELAY, CAPTCHA_SOLVE_MAX_DELAY
+            )
+            remaining = delay - elapsed
+            if remaining > 0:
+                logger.debug("Wait before retry after captcha: %.2f", remaining)
+                time.sleep(remaining)
 
     def get_captcha_image(
         self,
@@ -1197,8 +1164,8 @@ class HHApplicantTool:
             self.api_client.reset_tokens()
 
     @cached_property
-    def captcha_ai(self) -> ai.OpenAIClient:
-        return self.ai_client_for(
+    def captcha_ai(self) -> ai.OpenAIChat:
+        return self.ai_chat_for(
             "openai.captcha",
             system_prompt=(
                 "You read CAPTCHA images. Return ONLY the text from the "
@@ -1371,3 +1338,13 @@ class HHApplicantTool:
                 logger.error(f"Не удалось сохранить cookies: {ex}")
 
         return 1
+
+
+HHApplicantTool.__doc__ = """Утилита для автоматизации действий соискателя на сайте hh.ru.
+
+Исходники и предложения: <{repo_url}>
+
+Группа поддержки: <{tg_url}>""".format(
+    repo_url=GITHUB_REPO_URL,
+    tg_url=TELEGRAM_CHAT_URL,
+)

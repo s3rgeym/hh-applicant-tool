@@ -15,7 +15,7 @@ from urllib.parse import urljoin
 
 import requests
 
-from hh_applicant_tool.ai.openai import OpenAIClient
+from hh_applicant_tool.ai.openai import OpenAIChat
 from hh_applicant_tool.api.errors import ApiError
 
 from ..constants import GITHUB_PROFILE_URL
@@ -528,8 +528,8 @@ class Operation(BaseOperation):
     current_user: dict[str, Any]
     base_placeholders: dict[str, str]
     loop: bool
-    ai_client: OpenAIClient
-    options_ai_client: OpenAIClient
+    reply_chat_ai: OpenAIChat
+    reply_chat_options_ai: OpenAIChat
     _ignored_chats: set[int]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
@@ -590,8 +590,8 @@ class Operation(BaseOperation):
             or FAREWELL_MESSAGE
         )
 
-        self.ai_client = (
-            tool.ai_client_for(
+        self.reply_chat_ai = (
+            tool.ai_chat_for(
                 "openai.reply_chat",
                 system_prompt=DEFAULT_SYSTEM_PROMPT,
                 temperature=0.5,
@@ -600,8 +600,8 @@ class Operation(BaseOperation):
             else None
         )
 
-        self.options_ai_client = (
-            tool.ai_client_for(
+        self.reply_chat_options_ai = (
+            tool.ai_chat_for(
                 "openai.reply_chat_options",
                 system_prompt=DEFAULT_OPTIONS_SYSTEM_PROMPT,
                 temperature=0.0,
@@ -921,8 +921,9 @@ class Operation(BaseOperation):
             resources = data.get("resources") or {}
 
             for item in items:
-                chat_id = item["id"]
+                chat_id = int(item["id"])
                 if chat_id in self._ignored_chats:
+                    logger.debug("Пропускаю игнорируемый чат #%d", chat_id)
                     continue
 
                 last_message = item.get("lastMessage")
@@ -1049,9 +1050,10 @@ class Operation(BaseOperation):
             if not self.loop:
                 return
 
-            t = random.uniform(30.0, 60.0)
+            t = random.uniform(60.0, 90.0)
             logger.debug(f"Ждем {t:.2f} сек перед следующей проверкой чатов...")
             time.sleep(t)
+            self.tool.save_cookies()
 
     def process_chat(
         self,
@@ -1088,13 +1090,13 @@ class Operation(BaseOperation):
             )
             return
 
+        logger.debug("Отвечаем в чат: %d", chat.chat_id)
         self.start_chat_typing(chat.chat_id)
-        res = self.send_chat_message(
+        self.send_chat_message(
             chat.chat_id,
             send_message,
             refer_url=self.chat_referer(chat.chat_id),
         )
-        logger.debug(res)
         print(
             f"📨 Сообщение отправлено в чат #{chat.chat_id}:",
             shorten(send_message, limit=1024),
@@ -1104,16 +1106,17 @@ class Operation(BaseOperation):
         """Ответ нейронки. None — отвечать в этот раз не нужно."""
         reply_options = self.get_reply_options(chat.last_message)
         placeholders = self.get_chat_placeholders(chat)
+        assert type(chat.chat_id) is int
 
         messages: list[ChatMessage] = []
         if reply_options:
             template = self.options_prompt
-            ai_client = self.options_ai_client
+            ai_client = self.reply_chat_options_ai
         else:
             template = (
                 self.bump_prompt if chat.last_is_mine else self.user_prompt
             )
-            ai_client = self.ai_client
+            ai_client = self.reply_chat_ai
 
             messages = self.get_open_chat_messages(chat.chat_id)
             if not messages:

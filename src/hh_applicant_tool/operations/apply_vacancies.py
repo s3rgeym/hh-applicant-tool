@@ -17,7 +17,7 @@ from urllib.parse import (
 import requests
 
 from ..ai.base import AIError
-from ..ai.openai import OpenAIClient
+from ..ai.openai import OpenAIChat
 from ..api import BadResponse, Redirect, datatypes
 from ..api.datatypes import PaginatedItems, SearchVacancy, Vacancy
 from ..api.errors import ApiError, LimitExceeded
@@ -247,9 +247,9 @@ class Operation(BaseOperation):
 
     # AI
     ai_filter: bool
-    cover_letter_ai: OpenAIClient | None
-    vacancy_filter_ai: OpenAIClient | None
-    test_ai: OpenAIClient | None
+    cover_letter_ai: OpenAIChat | None
+    vacancy_filter_ai: OpenAIChat | None
+    test_ai: OpenAIChat | None
 
     # Параметры поиска (проставляются через setattr из SEARCH_PARAM_NAMES)
     text: str | None
@@ -516,20 +516,21 @@ class Operation(BaseOperation):
         # из конфига имеют приоритет над дефолтами
         self.cover_letter_ai = self.vacancy_filter_ai = self.test_ai = None
         if tool.ai_enabled:
-            self.cover_letter_ai = tool.ai_client_for(
+            self.cover_letter_ai = tool.ai_chat_for(
                 "openai.cover_letter",
                 system_prompt=DEFAULT_COVER_LETTER_SYSTEM_PROMPT,
                 temperature=0.3,
             )
-            self.test_ai = tool.ai_client_for(
+            self.test_ai = tool.ai_chat_for(
                 "openai.test_solver",
                 system_prompt=DEFAULT_TEST_SYSTEM_PROMPT,
                 temperature=0.2,
             )
             if self.ai_filter:
-                self.vacancy_filter_ai = tool.ai_client_for(
+                self.vacancy_filter_ai = tool.ai_chat_for(
                     "openai.vacancy_filter",
                     system_prompt=DEFAULT_AI_FILTER_SYSTEM_PROMPT,
+                    temperature=0.0,
                 )
 
         self.apply_mail_subject = config.get(

@@ -88,3 +88,4 @@ jadx_out/
 *.har
 models/
 docker-compose.yml
+/Session.vim
