@@ -1,6 +1,9 @@
 # Блять, если класс работает с OpenAI API, то он не должен знать ничего про
 # API HH и ваши проблемы с капчей. Прекратите добавлять методы, которые выходят
 # за его зону ответственности.
+# OpenAIClient работает с каким-то определенным ресурсом, у которого ограничения на количество запросов в период времени, 
+# а OpenAIChat — это доп сущность что-то типа отдельного чата в окне браузера. system_prompt - это просто первое сообщение
+# чата, с которого начинается диалог... 
 from __future__ import annotations
 
 import base64
@@ -199,6 +202,7 @@ class OpenAIClient(AIClient):
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
 
+        # Я не знаю, что будет, если будет встречено дополнительное системное сообщение
         if history:
             messages.extend(history)
 
@@ -403,6 +407,8 @@ class OpenAIClient(AIClient):
         )
 
 
+# TODO: добавить опциональное добавление переписки в историю
+# Тут история приделана сбоку...
 @dataclass
 class OpenAIChat(AIChat):
     """Чат поверх OpenAIClient с фиксированными system_prompt, history
