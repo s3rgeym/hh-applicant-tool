@@ -145,7 +145,7 @@ class Config(dict, ABC):
 
     def get_section(self, path: str) -> dict[str, Any]:
         """Глубокая копия секции; пустой словарь, если её нет."""
-        value = self.get_value(path, _MISSING)
+        value = self.get_value(path, _MISSING) # нейробред
         return deepcopy(value) if isinstance(value, dict) else {}
 
     def get_merged(self, *paths: str) -> dict[str, Any]:
