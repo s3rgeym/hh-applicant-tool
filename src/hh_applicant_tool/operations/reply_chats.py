@@ -752,10 +752,6 @@ class Operation(BaseOperation):
             if not messages:
                 # Копируем все сообщения.
                 messages = items[:]
-                # Надо послать уведомление об открытии чата, чтобы он у херки
-                # выскочил в всплывающем окне
-                if not self.dry_run:
-                    self.notify_chat_opened(chat_id)
             else:
                 # Пропускаем последнее, так как оно уже имеется
                 assert items[-1]["id"] == messages[0]["id"]
@@ -921,6 +917,10 @@ class Operation(BaseOperation):
             resources = data.get("resources") or {}
 
             for item in items:
+                # Все эти проверки вынести в process_chat?
+                # Лучше чтобы они были в одном месте, а не размазаны по коду, 
+                # хотя узнать можно ли писать в чат нельзя, не загрузив сообщения из него
+                # им нормально, а я понимаю, что сайт хх.сру делали ебучие ступиденты, а не настоящие программисты 
                 chat_id = int(item["id"])
                 if chat_id in self._ignored_chats:
                     logger.debug("Пропускаю игнорируемый чат #%d", chat_id)
@@ -1059,38 +1059,42 @@ class Operation(BaseOperation):
         self,
         chat: ProcessingChat,
     ) -> None:
-        # Открываем чат, а чужое непрочитанное сообщение помечаем прочитанным
-        if not chat.viewed_by_me:
-            logger.debug(
-                f"Помечаем сообщение #{chat.last_message_id} прочитанным"
-            )
-            if not self.dry_run:
+        try:
+            if self.ai_enabled:
+                send_message = self.get_ai_reply(chat)
+            else:
+                send_message = self.get_quick_reply(chat)
+    
+            if not send_message:
+                return
+    
+            if self.is_farewell(send_message):
+                print(
+                    "❌ Выходим из чата с отказом без выставления статуса (через CRM):",
+                    chat.chat_id,
+                )
+                if not self.dry_run:
+                    self.leave_chat(chat.chat_id)
+                return
+    
+            if self.dry_run:
+                logger.debug(
+                    "dry-run: ответ в чат #%s: %s", chat.chat_id, send_message
+                )
+                return
+        finally:
+            # Симулируем поведение на сайте:
+            # 1) открыли чат с отправкой уведомления
+            # 2) пометили чужое сообщение прочитанным
+            self.notify_chat_opened(chat_id)
+            if not chat.viewed_by_me:
+                logger.debug(
+                    f"Помечаем сообщение #{chat.last_message_id} прочитанным"
+                )
                 self.mark_chat_read(chat.chat_id, chat.last_message_id)
 
-        if self.ai_enabled:
-            send_message = self.get_ai_reply(chat)
-        else:
-            send_message = self.get_quick_reply(chat)
-
-        if not send_message:
-            return
-
-        if self.is_farewell(send_message):
-            print(
-                "❌ Выходим из чата с отказом без выставления статуса (через CRM):",
-                chat.chat_id,
-            )
-            if not self.dry_run:
-                self.leave_chat(chat.chat_id)
-            return
-
-        if self.dry_run:
-            logger.debug(
-                "dry-run: ответ в чат #%s: %s", chat.chat_id, send_message
-            )
-            return
-
         logger.debug("Отвечаем в чат: %d", chat.chat_id)
+        # Показываем что начали печатать
         self.start_chat_typing(chat.chat_id)
         self.send_chat_message(
             chat.chat_id,
