@@ -511,24 +511,26 @@ class Operation(BaseOperation):
         )
         self.ai_filter = bool(args.ai_filter)
 
+        # ai_enabled учитывает и --use-ai, и наличие секции [openai] в
+        # конфиге. Клиенты берутся через кеш tool.ai_client_for: значения
+        # из конфига имеют приоритет над дефолтами
         self.cover_letter_ai = self.vacancy_filter_ai = self.test_ai = None
-        if args.use_ai:
-            c = tool.get_openai_settings("openai.cover_letter")
-            c.setdefault("system_prompt", DEFAULT_COVER_LETTER_SYSTEM_PROMPT)
-            c.setdefault("temperature", 0.3)
-            logger.debug("cover letter config: %r", c)
-            self.cover_letter_ai = tool.get_ai_client(**c)
-
-            c = tool.get_openai_settings("openai.test_solver")
-            c.setdefault("system_prompt", DEFAULT_TEST_SYSTEM_PROMPT)
-            c.setdefault("temperature", 0.2)
-            logger.debug("test solver config: %r", c)
-            self.test_ai = tool.get_ai_client(**c)
-
+        if tool.ai_enabled:
+            self.cover_letter_ai = tool.ai_client_for(
+                "openai.cover_letter",
+                system_prompt=DEFAULT_COVER_LETTER_SYSTEM_PROMPT,
+                temperature=0.3,
+            )
+            self.test_ai = tool.ai_client_for(
+                "openai.test_solver",
+                system_prompt=DEFAULT_TEST_SYSTEM_PROMPT,
+                temperature=0.2,
+            )
             if self.ai_filter:
-                c = tool.get_openai_settings("openai.vacancy_filter")
-                c.setdefault("system_prompt", DEFAULT_AI_FILTER_SYSTEM_PROMPT)
-                self.vacancy_filter_ai = tool.get_ai_client(**c)
+                self.vacancy_filter_ai = tool.ai_client_for(
+                    "openai.vacancy_filter",
+                    system_prompt=DEFAULT_AI_FILTER_SYSTEM_PROMPT,
+                )
 
         self.apply_mail_subject = config.get(
             "apply_mail_subject", DEFAULT_APPLY_MAIL_SUBJECT

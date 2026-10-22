@@ -13,7 +13,6 @@ import sys
 import time
 import types
 from collections.abc import Sequence
-from copy import deepcopy
 from dataclasses import KW_ONLY, dataclass
 from functools import cached_property
 from http.cookiejar import MozillaCookieJar
@@ -33,6 +32,7 @@ from typing import (
     TypedDict,
 )
 from urllib.parse import parse_qs, quote, urljoin, urlsplit
+from weakref import WeakValueDictionary
 
 import requests
 
@@ -284,7 +284,7 @@ class HHApplicantTool:
         parser.add_argument(
             "--handle-captcha",
             dest="captcha_handling",
-            help="Добавлять перехватчик ошибок капчи при вызове API",
+            help="Перехватывать ошибки капчи",
             action=argparse.BooleanOptionalAction,
             default=True,
         )
@@ -338,6 +338,8 @@ class HHApplicantTool:
 
     def _create_session(
         self,
+        label: str = "New session",
+        *,
         user_agent: str | None = None,
         proxies: dict[str, str] | None = None,
     ) -> requests.Session:
@@ -346,7 +348,7 @@ class HHApplicantTool:
             proxies = get_proxies_dict(self.proxy_url)
 
         if proxies:
-            logger.debug("Session proxies: %r", proxies)
+            logger.debug("%s proxies: %r", label, proxies)
             session.proxies = proxies
 
         # В заголовки не лезь, если не понимаешь зачем они
@@ -358,13 +360,13 @@ class HHApplicantTool:
             }
         )
 
-        logger.debug("Session headers: %r", session.headers)
+        logger.debug("%s headers: %r", label, session.headers)
 
         return session
 
     @cached_property
     def session(self) -> requests.Session:
-        session = self._create_session()
+        session = self._create_session("Fake Browser")
 
         if self.cookies_file.exists():
             jar = MozillaCookieJar(str(self.cookies_file))
@@ -420,31 +422,6 @@ class HHApplicantTool:
     def cookies_file(self) -> Path:
         return self.config_dir_path / COOKIES_FILENAME
 
-    # def get_section_config(self, section: str) -> dict:
-    #     keys = section.split(".")
-    #     current = self.config
-    #     parents = []
-    #
-    #     for key in keys:
-    #         if not isinstance(current, dict) or key not in current:
-    #             break
-    #
-    #         current = current[key]
-    #
-    #         if isinstance(current, dict):
-    #             parents.append(current)
-    #
-    #     if not parents:
-    #         return {}
-    #
-    #     result = deepcopy(parents[-1])
-    #
-    #     for parent in reversed(parents[:-1]):
-    #         for key, value in parent.items():
-    #             result.setdefault(key, deepcopy(value))
-    #
-    #     return result
-
     @cached_property
     def api_client(self) -> api.client.ApiClient:
         token = self.token_config.get("token") or {}
@@ -470,13 +447,41 @@ class HHApplicantTool:
 
         return client
 
-    def get_ai_client(
+    def _get_ai_client(
         self,
         system_prompt: str | None = None,
         **kwargs,
     ) -> ai.OpenAIClient:
+        """Низкоуровневая фабрика: каждый вызов создаёт нового клиента."""
         kwargs.setdefault("session", self.ai_session)
         return ai.OpenAIClient(system_prompt=system_prompt, **kwargs)
+
+    @cached_property
+    def _ai_clients(self) -> WeakValueDictionary[str, ai.OpenAIClient]:
+        return WeakValueDictionary()
+
+    def ai_client_for(
+        self,
+        section: str | None = None,
+        **defaults: Any,
+    ) -> ai.OpenAIClient:
+        """Клиент AI для секции конфига (openai.<section>).
+
+        Клиенты с одинаковыми настройками переиспользуются, пока на них
+        кто-то держит сильную ссылку. Когда ссылок не остаётся, клиент
+        удаляется из кеша сам.
+        """
+        settings = {**defaults, **self.get_openai_settings(section)}
+
+        key = json.dumps(
+            settings, ensure_ascii=False, sort_keys=True, separators=(":", ",")
+        )
+        client = self._ai_clients.get(key)
+        if client is None:
+            client = self._get_ai_client(**settings)
+            logger.debug("client created: %r", client)
+            self._ai_clients[key] = client
+        return client
 
     def get_openai_config(self, section: str | None = None) -> dict:
         """Возвращает копию конфига openai с учетом наследования от главной"""
@@ -485,7 +490,7 @@ class HHApplicantTool:
         if section is None:
             section = default_section
         elif "." in section:
-            base, section = section.split(".")
+            base, section = section.split(".", 1)
             if base != base_section:
                 raise ValueError(
                     f"Base section must be {base_section!r}: got: {base!r}"
@@ -494,29 +499,17 @@ class HHApplicantTool:
         # if not re.fullmatch(r"[a-z]+", section):
         #     raise ValueError(f"Bad {base_section!r} section name: {section!r}")
 
-        def required(name: str) -> None:
-            if name not in c:
-                raise ValueError(
-                    f"Значение {name!r} не задано в [{base_section}.{section}]"
-                    + (
-                        f" или [{base_section}.{default_section}]"
-                        if section != default_section
-                        else ""
-                    )
-                )
-
-        c = self.config.get(base_section) or {}
-        c = deepcopy(
-            {
-                **(c.get("default") or {}),
-                **(c.get(section) or {}),
-            }
+        # Поздние секции перекрывают ранние, результат — глубокая копия
+        c = self.config.get_merged(
+            f"{base_section}.{default_section}",
+            f"{base_section}.{section}",
         )
 
-        required("base_url")
-        # required("api_key")
-        # Для llama.cpp это поле не является обязательным
-        # required("model")
+        if "base_url" not in c:
+            where = f"[{base_section}.{section}]"
+            if section != default_section:
+                where += f" или [{base_section}.{default_section}]"
+            raise ValueError(f"Значение 'base_url' не задано в {where}")
 
         if self.openai_delay:
             c.setdefault("delay", self.openai_delay)
@@ -527,7 +520,7 @@ class HHApplicantTool:
 
         return c
 
-    def get_openai_settings(self, config_section: str = None) -> dict:
+    def get_openai_settings(self, config_section: str | None = None) -> dict:
         c = self.get_openai_config(section=config_section)
         return {
             k: v
@@ -549,17 +542,6 @@ class HHApplicantTool:
                 "timeout",
             ]
         }
-
-    def _get_captcha_ai(self) -> ai.OpenAIClient:
-        c = self.get_openai_settings("openai.captcha")
-        c.setdefault(
-            "system_prompt",
-            (
-                "You read CAPTCHA images. Return ONLY the text from the "
-                "image, exactly as it is written."
-            ),
-        )
-        return self.get_ai_client(**c)
 
     def get_me(self) -> api.datatypes.User:
         return self.api_client.get("/me")
@@ -762,7 +744,9 @@ class HHApplicantTool:
 
     @cached_property
     def webview_session(self) -> requests.Session:
-        return self._create_session(user_agent=ANDROID_WEBVIEW_USERAGENT)
+        return self._create_session(
+            "Fake Android WebView", user_agent=ANDROID_WEBVIEW_USERAGENT
+        )
 
     def handle_captcha(
         self,
@@ -1010,6 +994,9 @@ class HHApplicantTool:
                     session=session,
                 )
             except CaptchaError as ex:
+                if not self.handle_captcha:
+                    raise
+
                 if attempt >= MAX_CAPTCHA_ATTEMPTS:
                     raise
 
@@ -1211,7 +1198,13 @@ class HHApplicantTool:
 
     @cached_property
     def captcha_ai(self) -> ai.OpenAIClient:
-        return self._get_captcha_ai()
+        return self.ai_client_for(
+            "openai.captcha",
+            system_prompt=(
+                "You read CAPTCHA images. Return ONLY the text from the "
+                "image, exactly as it is written."
+            ),
+        )
 
     @staticmethod
     def _format_experience(
@@ -1265,17 +1258,17 @@ class HHApplicantTool:
             i["name"] for i in (resume.get("work_format") or [])
         )
         rv["resume_citizenship"] = ", ".join(
-            i["name"] for i in resume.get("citizenship", [])
+            i["name"] for i in resume.get("citizenship") or []
         )
-        salary = resume.get("salary", {})
-        amount = salary.get("amount", "")
+        salary = resume.get("salary") or {}
+        amount = salary.get("amount") or 0
         currency = (
-            salary.get("currency", "")
+            (salary.get("currency") or "")
             .replace("RUR", "руб.")
             .replace("USD", "$")
         )
         rv["resume_salary"] = f"{amount} {currency}".strip()
-        education = resume.get("education", {})
+        education = resume.get("education") or {}
 
         try:
             primary_education = education["primary"][0]

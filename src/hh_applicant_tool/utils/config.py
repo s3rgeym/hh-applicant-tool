@@ -4,6 +4,7 @@ import json
 import tomllib
 import warnings
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from functools import cache
 from pathlib import Path
 from threading import Lock
@@ -26,6 +27,9 @@ def remove_none(data: Any) -> Any:
     if isinstance(data, list):
         return [remove_none(v) for v in data if v is not None]
     return data
+
+
+_MISSING = object()
 
 
 class Config(dict, ABC):
@@ -76,6 +80,86 @@ class Config(dict, ABC):
 
     def unlink(self) -> None:
         self._path.unlink(missing_ok=True)
+
+    def get_value(self, path: str, default: Any = None) -> Any:
+        """Значение по пути вида "openai.captcha.model"."""
+        data: Any = self
+        for key in path.split("."):
+            if not isinstance(data, dict) or key not in data:
+                return default
+            data = data[key]
+        return data
+
+    def set_value(self, path: str, value: Any, *, create: bool = False) -> bool:
+        """Устанавливает значение по пути.
+
+        По умолчанию меняет только уже существующий ключ и возвращает
+        False, если пути нет. С create=True создаёт недостающие секции.
+        """
+        *keys, last = path.split(".")
+        data: Any = self
+        for key in keys:
+            if not isinstance(data, dict):
+                return False
+            if key not in data:
+                if not create:
+                    return False
+                data[key] = {}
+            data = data[key]
+        if not isinstance(data, dict) or (last not in data and not create):
+            return False
+        data[last] = value
+        return True
+
+    def delete_value(self, path: str, *, prune: bool = False) -> bool:
+        """Удаляет ключ по пути вида "openai.captcha.model".
+
+        Возвращает False, если пути нет. С prune=True секции, которые
+        после удаления остались пустыми, тоже удаляются (вверх по цепочке).
+        Изменение только в памяти: чтобы записать на диск, вызови save().
+        """
+        *keys, last = path.split(".")
+        with self._lock:
+            chain: list[dict[str, Any]] = [self]
+            data: Any = self
+            for key in keys:
+                if not isinstance(data, dict) or key not in data:
+                    return False
+                data = data[key]
+                chain.append(data)
+
+            if not isinstance(data, dict) or last not in data:
+                return False
+
+            del data[last]
+
+            if prune:
+                # chain[i] — словарь, в котором лежит keys[i]
+                for container, key in zip(
+                    reversed(chain[:-1]), reversed(keys), strict=True
+                ):
+                    if container[key]:
+                        break
+                    del container[key]
+            return True
+
+    def get_section(self, path: str) -> dict[str, Any]:
+        """Глубокая копия секции; пустой словарь, если её нет."""
+        value = self.get_value(path, _MISSING)
+        return deepcopy(value) if isinstance(value, dict) else {}
+
+    def get_merged(self, *paths: str) -> dict[str, Any]:
+        """Сливает секции по порядку: поздние перекрывают ранние.
+
+        Слияние поверхностное (по ключам верхнего уровня), результат
+        независим от конфига. Отсутствующие секции пропускаются.
+
+        >>> config.get_merged("openai.default", "openai.captcha")
+        """
+        result: dict[str, Any] = {}
+        for path in paths:
+            result.update(self.get_section(path))
+        return result
 
     # def __str__(self) -> str:
     #     return str(self._path)

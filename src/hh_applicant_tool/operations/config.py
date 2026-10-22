@@ -6,7 +6,7 @@ import os
 import platform
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ..tool import BaseNamespace, BaseOperation
 
@@ -23,38 +23,6 @@ class Namespace(BaseNamespace):
     edit: bool
     delete: str | None
     show_path: bool
-
-
-def get_value(data: dict[str, Any], path: str) -> Any:
-    for key in path.split("."):
-        try:
-            data = data.get(key)
-        except AttributeError:
-            return None
-    return data
-
-
-def set_value(data: dict[str, Any], path: str, value: Any) -> None:
-    """Устанавливает значение во вложенном словаре по ключу в виде строки."""
-    keys = path.split(".")
-    for key in keys[:-1]:
-        data = data.setdefault(key, {})
-    data[keys[-1]] = value
-
-
-def del_value(data: dict[str, Any], path: str) -> bool:
-    """Удаляет значение из вложенного словаря по ключу в виде строки."""
-    keys = path.split(".")
-    for key in keys[:-1]:
-        if not isinstance(data, dict) or key not in data:
-            return False
-        data = data[key]
-
-    try:
-        del data[keys[-1]]
-        return True
-    except (KeyError, TypeError):
-        return False
 
 
 def parse_scalar(value: str) -> bool | int | float | str | None:
@@ -124,11 +92,13 @@ class Operation(BaseOperation):
 
         if args.key:
             if args.value is None:
-                value = get_value(config, args.key)
+                value = config.get_value(args.key)
                 if value is not None:
                     print(value)
             else:
-                set_value(config, args.key, parse_scalar(args.value))
+                config.set_value(
+                    args.key, parse_scalar(args.value), create=True
+                )
                 config.save()
                 logger.info(
                     "Значение '%s' для ключа '%s' сохранено.",
@@ -138,7 +108,7 @@ class Operation(BaseOperation):
             return
 
         if args.delete:
-            if del_value(config, args.delete):
+            if config.delete_value(args.delete, prune=True):
                 config.save()
                 logger.info("Ключ '%s' удален из конфига.", args.delete)
             else:

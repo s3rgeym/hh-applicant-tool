@@ -37,7 +37,7 @@ class OpenAIClient(AIClient):
     system_prompt: str | None = None
     # Базовая история диалога, которая подставляется в каждый запрос
     # перед history из вызова complete()/recognize_text()
-    history: list[dict] = field(default_factory=list)
+    history: list[dict] = field(default_factory=list, repr=False)
     # Общий таймаут на весь запрос
     timeout: float | None = None
     # Отдельный таймаут только на установку соединения
@@ -57,10 +57,12 @@ class OpenAIClient(AIClient):
 
     proxy_url: str | None = None
 
-    session: requests.Session = field(default_factory=requests.Session)
+    session: requests.Session = field(
+        default_factory=requests.Session, repr=False
+    )
 
     # Внутренние поля
-    _previous_request_time: float = field(default=0.0, init=False)
+    _previous_request_time: float = field(default=0.0, init=False, repr=False)
     _lock: Lock = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
