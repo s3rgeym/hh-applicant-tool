@@ -8,7 +8,7 @@
 [![Total Downloads](https://static.pepy.tech/badge/hh-applicant-tool)](<>)
 
 <p align="center">
-<img height="33%" src="https://github.com/user-attachments/assets/1981ddca-e6e8-4437-af81-55d336e6907d" />
+<img height="25%" src="https://github.com/user-attachments/assets/1981ddca-e6e8-4437-af81-55d336e6907d" />
 </p>
 
 Скорее всего, вы перешли сюда из гугла по запросу `скрипт для рассылки откликов на hh`, и вы нашли не скрипт, а целый автономный программно-вычислительный комплекс для полной автоматизации действий на самом популярном раб_отном сайте России...
