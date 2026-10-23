@@ -11,6 +11,10 @@
   <img height="20%" alt="hh-applicant-tool-logo" src="https://github.com/user-attachments/assets/009018f4-d4b1-4a93-a1c7-f4e5fc8bef45" />
 </div>
 
+[![Donate BTC](https://img.shields.io/badge/Donate-BTC-orange?style=for-the-badge&logo=bitcoin&logoColor=white)](bitcoin:BC1QWQXZX6D5Q0J5QVGH2VYXTFXX9Y6EPPGCW3REHS?label=%D0%94%D0%BB%D1%8F%20%D0%BF%D0%BE%D0%B6%D0%B5%D1%80%D1%82%D0%B2%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D0%B9)
+
+**BTC Address:** `BC1QWQXZX6D5Q0J5QVGH2VYXTFXX9Y6EPPGCW3REHS` (спасибо за донаты — это единственное, что двигает разработку, так что не стесняйтесь и шлите их чаще).
+
 
 Скорее всего, вы перешли сюда из гугла по запросу `скрипт для рассылки откликов на hh`, и вы нашли не скрипт, а целый автономный программно-вычислительный комплекс для полной автоматизации действий на самом популярном раб_отном сайте России...
 
@@ -35,12 +39,6 @@
 > Проект запрещено использовать в коммерческих проектах, а так же любых проектах
 > с закрытым исходным кодом.
 > Остерегайтесь мошенников! Существует сайт HH Applicant Tool, который незаконно использует название проекта в надежде, что кто-то подумает, что это браузерная версия утилиты!!!
-
-## ☕ Поддержать проект
-
-[![Donate BTC](https://img.shields.io/badge/Donate-BTC-orange?style=for-the-badge&logo=bitcoin&logoColor=white)](bitcoin:BC1QWQXZX6D5Q0J5QVGH2VYXTFXX9Y6EPPGCW3REHS?label=%D0%94%D0%BB%D1%8F%20%D0%BF%D0%BE%D0%B6%D0%B5%D1%80%D1%82%D0%B2%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D0%B9)
-
-**BTC Address:** `BC1QWQXZX6D5Q0J5QVGH2VYXTFXX9Y6EPPGCW3REHS` (спасибо за донаты — это единственное, что двигает разработку, так что не стесняйтесь и шлите их чаще, вы ЭКОНОМИТЕ КУЧУ ДЕНЕГ с учетом жадности владельцев сервисов для откликов). Ну или хотя бы поставьте звезду, если тоже ненавидите ичаров.
 
 ---
 
@@ -79,7 +77,6 @@
 ## Содержание
 
 - [HH Applicant Tool](#hh-applicant-tool)
-  - [☕ Поддержать проект](#-поддержать-проект)
   - [Описание](#описание)
   - [Содержание](#содержание)
   - [Установка](#установка)
