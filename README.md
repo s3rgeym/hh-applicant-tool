@@ -8,7 +8,7 @@
 [![Total Downloads](https://static.pepy.tech/badge/hh-applicant-tool)](<>)
 
 <div align="center">
-  <img width="50%" alt="hh-applicant-tool-logo" src="https://github.com/user-attachments/assets/009018f4-d4b1-4a93-a1c7-f4e5fc8bef45" />
+  <img width="75%" alt="hh-applicant-tool-logo" src="https://github.com/user-attachments/assets/009018f4-d4b1-4a93-a1c7-f4e5fc8bef45" />
   <p>*A gear on a red background with the letters “HH” is not a registered trademark of hh.ru, either in Russia or anywhere else in the world.</p>
 </div>
 
