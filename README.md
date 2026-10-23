@@ -9,7 +9,7 @@
 
 <div align="center">
   <img width="75%" alt="hh-applicant-tool-logo" src="https://github.com/user-attachments/assets/009018f4-d4b1-4a93-a1c7-f4e5fc8bef45" />
-  <p>*A gear on a red background with the letters “HH” is not a registered trademark of hh.ru, either in Russia or anywhere else in the world.</p>
+  <p>*The hh-applicant-tool logo, a white eight-toothed gear on a red rounded-square background, with a red circle outlined by a thin white ring at its center containing the two white capital letters “HH” set in the Noto Sans typeface, is not a registered trademark of hh.ru, either in Russia or anywhere else in the world. HeadHunter is known for its absurd demands that others stop using the letters “HH” and the word “Headhunter” in their names, while its own logo looks like the flag of Japan with two small letters “h” on it.</p>
 </div>
 
 [![Donate BTC](https://img.shields.io/badge/Donate-BTC-orange?style=for-the-badge&logo=bitcoin&logoColor=white)](bitcoin:BC1QWQXZX6D5Q0J5QVGH2VYXTFXX9Y6EPPGCW3REHS?label=%D0%94%D0%BB%D1%8F%20%D0%BF%D0%BE%D0%B6%D0%B5%D1%80%D1%82%D0%B2%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D0%B9)
