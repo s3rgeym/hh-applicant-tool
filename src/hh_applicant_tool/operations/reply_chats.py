@@ -507,6 +507,11 @@ class ProcessingChat:
             minutes=minutes, hours=hours, days=days
         )
 
+    @property
+    def last_is_bot(self) -> bool:
+        display = self.last_message.get("participantDisplay") or {}
+        return bool(display.get("isBot"))
+
 
 class Namespace(BaseNamespace):
     resume_id: str | None
@@ -926,12 +931,12 @@ class Operation(BaseOperation):
             # Последнее сообщение моё: напоминаем о себе только спустя время
             return chat.is_last_message_older(days=BUMP_AFTER_DAYS)
 
-        # Автоответ hh после анкеты
+        # Автоответ hh после ответов на вопросы
         if chat.last_message_text == BOT_RECRUITER_ANSWER:
             return False
 
         # Оппонент написал только что: даём возможность ответить вручную
-        if not chat.is_last_message_older(
+        if not chat.last_is_bot and not chat.is_last_message_older(
             minutes=OPPONENT_REPLY_COOLDOWN_MINUTES
         ):
             logger.debug(
