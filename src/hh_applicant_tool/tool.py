@@ -79,6 +79,21 @@ from .utils.system import has_gui_support, is_docker
 from .utils.term import print_kitty_image, print_sixel_image, setup_terminal
 from .utils.user_agent import generate_android_useragent
 
+_ACCEPT_IMAGE_HEADERS = types.MappingProxyType(
+    {
+        "Accept": "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"
+    }
+)
+
+_CAPTCHA_HEADERS = types.MappingProxyType(
+    {
+        "X-Hhtmfrom": "",
+        "X-Hhtmsource": "account_captcha",
+    }
+)
+
+OPERATIONS = "operations"
+
 try:
     import tkinter as tk
     from tkinter import ttk
@@ -89,15 +104,6 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__.split(".")[0])
-
-OPERATIONS = "operations"
-
-_CAPTCHA_HEADERS = types.MappingProxyType(
-    {
-        "X-Hhtmfrom": "",
-        "X-Hhtmsource": "account_captcha",
-    }
-)
 
 
 class XHRResult(TypedDict):
@@ -1025,9 +1031,7 @@ class HHApplicantTool:
 
         # Это не XHR: браузер грузит картинку из тега IMG с другим Accept
         # и без XHR-заголовков, поэтому здесь обычный session.get.
-        headers = {
-            "Accept": "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"
-        }
+        headers = _ACCEPT_IMAGE_HEADERS.copy()
         if referer_url:
             headers |= {"Referer": referer_url}
 
