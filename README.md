@@ -8,7 +8,7 @@
 [![Total Downloads](https://static.pepy.tech/badge/hh-applicant-tool)](<>)
 
 <div align="center">
-  <img width="75%" alt="hh-applicant-tool-logo" src="https://github.com/user-attachments/assets/009018f4-d4b1-4a93-a1c7-f4e5fc8bef45" />
+  <img width="583" height="154" alt="hh-applicant-tool-logo" src="https://github.com/user-attachments/assets/54607edd-5e5a-4f05-91e2-7bf0f38e8ada" />
   <p>*The hh-applicant-tool logo, a white eight-toothed gear on a red rounded-square background, with a red circle outlined by a thin white ring at its center containing the two white capital letters “HH” set in the Noto Sans typeface, is not a registered trademark of hh.ru, either in Russia or anywhere else in the world. HeadHunter is known for its absurd demands that others stop using the letters “HH” and the word “Headhunter” in their names, while its own logo looks like the flag of Japan with two small letters “h” on it.</p>
 </div>
 
