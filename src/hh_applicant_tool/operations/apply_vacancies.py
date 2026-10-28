@@ -1106,17 +1106,19 @@ class Operation(BaseOperation):
                         answer, [str(s["id"]) for s in solutions]
                     )
                 else:
-                    yes_solution = choose_similar(
-                        "да", [s["text"] for s in solutions]
-                    )
+                    texts = [strip_tags(s["text"]) for s in solutions]
+                    best = choose_similar("да", texts)
 
-                    payload[field_name] = (
-                        yes_solution["id"]
-                        if yes_solution
+                    # choose_similar возвращает строку (текст варианта) или None.
+                    # Находим соответствующее решение по индексу.
+                    if best is not None and best in texts:
+                        chosen = solutions[texts.index(best)]
+                    else:
                         # По статистике правильный ответ в большинстве случаев
                         # находится посередине
-                        else solutions[len(solutions) // 2]["id"]
-                    )
+                        chosen = solutions[len(solutions) // 2]
+
+                    payload[field_name] = chosen["id"]
             else:
                 # Рандомные эмоджи
                 # payload[f"{field_name}_text"] = "".join(
@@ -1161,7 +1163,7 @@ class Operation(BaseOperation):
                 "X-Hhtmfrom": "vacancy",
                 "X-Hhtmsource": "vacancy_response",
             },
-        )
+        )  # ty: ignore[invalid-return-type]
 
     def _parse_site(self, url: str) -> dict[str, Any]:
         with self.tool.session.get(

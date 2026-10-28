@@ -1344,7 +1344,8 @@ class HHApplicantTool:
         return 1
 
 
-HHApplicantTool.__doc__ = """Утилита для автоматизации действий соискателя на сайте hh.ru.
+HHApplicantTool.__doc__ = """\
+Утилита для автоматизации действий соискателя на сайте hh.ru.
 
 Исходники и предложения: <{repo_url}>
 
