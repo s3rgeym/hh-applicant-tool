@@ -758,14 +758,22 @@ class HHApplicantTool:
 
         redirect_url = r.url
         logger.debug("Страница капчи, пойдёт в referer: %s", redirect_url)
-
+        
         query = parse_qs(urlsplit(redirect_url).query)
+        back_url = query.get("backUrl", [""])[0]
+        back_url_query = parse_qs(urlsplit(back_url).query)
 
-        if "state" not in query:
-            raise ValueError(f"В ссылке на капчу нет state: {redirect_url}")
-        state = query["state"][0]
 
-        assert CAPTCHA_SUCCESS_BACKURL in query.get("backurl", [])
+        if "state" in query:
+            state = query["state"][0]
+        else:
+            if "state" in back_url_query:
+                state = back_url_query["state"][0]
+            else:
+                raise ValueError(f"В ссылке на капчу нет state: {redirect_url}")
+        
+        if CAPTCHA_SUCCESS_BACKURL not in query.get("backurl", []):
+            assert CAPTCHA_SUCCESS_BACKURL in back_url_query.get("backurl",[])
 
         # Страница выставила куки в чистую сессию, токен берём из них,
         # а если куки нет - из initial state страницы
