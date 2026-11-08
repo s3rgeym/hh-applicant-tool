@@ -18,7 +18,7 @@ HH_BASE_URL = "https://hh.ru"
 # Та же страница капчи возвращает 404-ую, если юзер-агент не похож на
 # десктопный
 # Хотя если к API со скрепного браузера запрос сделать, выскочит капча
-DEFAULT_DESKTOP_USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
+DEFAULT_DESKTOP_USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
 
 ACCEPT_HEADER = (
     "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
