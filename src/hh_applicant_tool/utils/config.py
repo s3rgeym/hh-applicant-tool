@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import tomllib
 import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
@@ -11,6 +10,7 @@ from threading import Lock
 from typing import Any
 
 import tomli_w
+import tomllib
 
 from . import system
 from .package import PACKAGE_NAME
@@ -50,7 +50,7 @@ class Config(dict, ABC):
         return self._path
 
     @property
-    def file_name(self) -> Path:
+    def file_name(self) -> str:
         return str(self._path)
 
     @abstractmethod
@@ -145,7 +145,7 @@ class Config(dict, ABC):
 
     def get_section(self, path: str) -> dict[str, Any]:
         """Глубокая копия секции; пустой словарь, если её нет."""
-        value = self.get_value(path, _MISSING) # нейробред
+        value = self.get_value(path, _MISSING)  # нейробред
         return deepcopy(value) if isinstance(value, dict) else {}
 
     def get_merged(self, *paths: str) -> dict[str, Any]:
