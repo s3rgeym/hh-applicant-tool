@@ -434,9 +434,11 @@ class HHApplicantTool:
             access_token=token.get("access_token"),
             refresh_token=token.get("refresh_token"),
             access_expires_at=token.get("access_expires_at"),
-            client_id=client_config.pop('client_id', 0) or ANDROID_CLIENT_ID,
-            client_secret=client_config.pop('client_secret', 0) or ANDROID_CLIENT_SECRET,
-            user_agent=client_config.pop('user_agent', 0) or generate_android_useragent(),
+            client_id=client_config.pop("client_id", 0) or ANDROID_CLIENT_ID,
+            client_secret=client_config.pop("client_secret", 0)
+            or ANDROID_CLIENT_SECRET,
+            user_agent=client_config.pop("user_agent", 0)
+            or generate_android_useragent(),
             captcha_handler=self.handle_captcha
             if self.captcha_handling
             else None,
