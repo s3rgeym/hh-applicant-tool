@@ -319,17 +319,15 @@ class HHApplicantTool:
     def __post_init__(self) -> None:
         self._parser = self._create_parser()
 
-        config = self.general_config
+        # FIXME: из-за этого кешируется путь до конфига из-за чего его нельзя
+        # переопределить
+        # config = self.general_config
 
         # Эти значения, если они не установлены, берутся из конфига и могут быть
         # изменены флагами
-        self.user_agent = self.user_agent or config.get(
-            "user_agent", DEFAULT_DESKTOP_USERAGENT
-        )
-        self.base_url = self.base_url or config.get("base_url", HH_BASE_URL)
-        self.captcha_lang = self.captcha_lang or config.get(
-            "captcha_lang", DEFAULT_CAPTCHA_LANGUAGE
-        )
+        self.user_agent = self.user_agent or DEFAULT_DESKTOP_USERAGENT
+        self.base_url = self.base_url or HH_BASE_URL
+        self.captcha_lang = self.captcha_lang or DEFAULT_CAPTCHA_LANGUAGE
 
     @property
     def general_config(self) -> dict[str, Any]:
