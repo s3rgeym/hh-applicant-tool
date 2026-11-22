@@ -46,6 +46,9 @@ from .constants import (
     ANDROID_CLIENT_ID,
     ANDROID_CLIENT_SECRET,
     ANDROID_WEBVIEW_USERAGENT,
+    IOS_CLIENT_ID,
+    IOS_CLIENT_SECRET,
+    IOS_WEBVIEW_USERAGENT,
     CAPTCHA_PROMPT,
     CAPTCHA_SOLVE_MAX_DELAY,
     CAPTCHA_SOLVE_MIN_DELAY,
@@ -77,7 +80,7 @@ from .utils.log import setup_logger
 from .utils.string import shorten
 from .utils.system import has_gui_support, is_docker
 from .utils.term import print_kitty_image, print_sixel_image, setup_terminal
-from .utils.user_agent import generate_android_useragent
+from .utils.user_agent import generate_android_useragent, generate_ios_useragent
 
 _ACCEPT_IMAGE_HEADERS = types.MappingProxyType(
     {
@@ -161,6 +164,7 @@ class BaseNamespace(argparse.Namespace):
     use_sixel: bool
     captcha_lang: Literal["RU", "EN"]
     captcha_handling: bool
+    client: Literal["android", "ios"]
 
 
 @dataclass
@@ -171,6 +175,7 @@ class HHApplicantTool:
     captcha_manual: bool = False
     captcha_handling: bool = True
     captcha_lang: str | None = None
+    client: Literal["android", "ios"] | None = None
     config_dir: Path | None = None
     openai_connect_timeout: float | None = None
     openai_delay: float | None = None
@@ -280,6 +285,12 @@ class HHApplicantTool:
             "--captcha-lang",
             choices=["RU", "EN", "ru", "en"],
             help="Язык капчи. Некоторые модели распознают лучше текст на английском",
+        )
+        parser.add_argument(
+            "--client",
+            choices=["android", "ios"],
+            help="Клиент для эмуляции: android или ios. По умолчанию android",
+            default="android",
         )
         parser.add_argument(
             "--handle-captcha",
@@ -420,6 +431,12 @@ class HHApplicantTool:
     def cookies_file(self) -> Path:
         return self.config_dir_path / COOKIES_FILENAME
 
+    @property
+    def _active_client(self) -> Literal["android", "ios"]:
+        if self.client:
+            return self.client
+        return self.general_config.get("client", "android")
+
     @cached_property
     def api_client(self) -> api.client.ApiClient:
         token = self.token_config.get("token") or {}
@@ -432,11 +449,9 @@ class HHApplicantTool:
             access_token=token.get("access_token"),
             refresh_token=token.get("refresh_token"),
             access_expires_at=token.get("access_expires_at"),
-            client_id=client_config.pop("client_id", 0) or ANDROID_CLIENT_ID,
-            client_secret=client_config.pop("client_secret", 0)
-            or ANDROID_CLIENT_SECRET,
-            user_agent=client_config.pop("user_agent", 0)
-            or generate_android_useragent(),
+            client_id=IOS_CLIENT_ID if self._active_client == "ios" else (client_config.pop("client_id", 0) or ANDROID_CLIENT_ID),
+            client_secret=IOS_CLIENT_SECRET if self._active_client == "ios" else (client_config.pop("client_secret", 0) or ANDROID_CLIENT_SECRET),
+            user_agent=client_config.pop("user_agent", 0) or (generate_ios_useragent() if self._active_client == "ios" else generate_android_useragent()),
             captcha_handler=self.handle_captcha
             if self.captcha_handling
             else None,
@@ -715,8 +730,10 @@ class HHApplicantTool:
 
     @cached_property
     def webview_session(self) -> requests.Session:
+        ua = IOS_WEBVIEW_USERAGENT if self._active_client == "ios" else ANDROID_WEBVIEW_USERAGENT
+        label = "iOS WebView" if self._active_client == "ios" else "Android WebView"
         return self._create_session(
-            "Android WebView", user_agent=ANDROID_WEBVIEW_USERAGENT
+            label, user_agent=ua
         )
 
     def handle_captcha(

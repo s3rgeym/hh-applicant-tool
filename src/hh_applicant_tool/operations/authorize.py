@@ -135,7 +135,9 @@ class Operation(BaseOperation):
         sp = urlsplit(location)
         logger.debug(sp)
 
-        if sp.scheme != "hhandroid" or sp.netloc != "oauthresponse":
+        expected_scheme = "hhios" if self.tool._active_client == "ios" else "hhandroid"
+        expected_netloc = "auth" if self.tool._active_client == "ios" else "oauthresponse"
+        if sp.scheme != expected_scheme or sp.netloc != expected_netloc:
             raise OperationError(
                 f"Неправильный формат URI для получения кода авторизации: {location}"
             )

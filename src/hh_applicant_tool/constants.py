@@ -31,6 +31,7 @@ ACCEPT_LANGUAGE_HEADER = "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
 
 # Юзер-агент для эмуляции открытия страницы капчи в мобильном виде приложения
 ANDROID_WEBVIEW_USERAGENT = "Mozilla/5.0 (Linux; Android 13; Pixel 7 Build/TQ3A.230901.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/118.0.0.0 Mobile Safari/537.36"
+IOS_WEBVIEW_USERAGENT = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
 
 # Используются в мобильном приложении для авторизации
 ANDROID_CLIENT_ID = (
@@ -40,6 +41,14 @@ ANDROID_CLIENT_ID = (
 ANDROID_CLIENT_SECRET = (
     "V9M870DE342BGHFRUJ5FTCGCUA1482AN0DI8C5TFI9ULMA89H10N60NOP8I4JMVS"
 )
+
+IOS_CLIENT_ID = (
+    "L41G2HHQQD5JT8Q3QOR3B3MHHD2876TMGKQFA2VQ8USJC1RLR7094USQ57JL32O8"
+)
+IOS_CLIENT_SECRET = (
+    "KMVP77JPKV64D1CIEHV579A5BQ4P6V7NQ0TQHBDR6DK6SA8SSBQDKHPR54K48DGS"
+)
+
 
 # Язык картинки капчи. Задаётся параметром lang у POST /captcha,
 # значение приходит от hh.ru в верхнем регистре, но понимает и в
