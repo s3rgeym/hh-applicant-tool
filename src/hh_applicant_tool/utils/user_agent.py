@@ -42,3 +42,17 @@ def generate_android_useragent() -> str:
         f"ru.hh.android/7.{minor}.{patch}, Device: {model}, "
         f"Android OS: {android} (UUID: {uuid.uuid4()})"
     )
+
+
+def generate_ios_useragent() -> str:
+    """Generates iOS App User-Agent"""
+    model = "".join(
+        random.choice(string.ascii_uppercase + string.digits) for _ in range(10)
+    )
+    minor = random.randint(100, 150)
+    patch = random.randint(10000, 15000)
+    version = random.randint(15, 17)
+    return (
+        f"ru.hh.iphone/7.{minor}.{patch}, Device: {model}, "
+        f"IOS: {version} (UUID: {uuid.uuid4()})"
+    )
