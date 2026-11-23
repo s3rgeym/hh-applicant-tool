@@ -1229,7 +1229,7 @@ class HHApplicantTool:
         }
 
         rv["resume_title"] = resume.get("title") or ""
-        rv["resume_city"] = resume.get("area", {}).get("name") or ""
+        rv["resume_city"] = (resume.get("area") or {}).get("name") or ""
         # Почему тут ебаут?
         rv["resume_about"] = resume.get("skills") or ""
         rv["resume_skills"] = ", ".join(resume.get("skill_set") or [])
@@ -1262,7 +1262,7 @@ class HHApplicantTool:
                 None,
                 [
                     # высшее/среднее
-                    education.get("level", {}).get("name"),
+                    (education.get("level") or {}).get("name"),
                     # Шарага
                     primary_education.get("name"),
                     # Факультет
@@ -1279,7 +1279,7 @@ class HHApplicantTool:
             resume.get("experience") or []
         )
         rv["resume_total_experience"] = self._format_total_expirience(
-            resume.get("total_experience", {}).get("months") or 0
+            (resume.get("total_experience") or {}).get("months") or 0
         )
         return rv
 
