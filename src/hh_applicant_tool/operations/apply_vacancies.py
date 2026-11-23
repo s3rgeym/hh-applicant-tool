@@ -1048,7 +1048,7 @@ class Operation(BaseOperation):
         Возвращает payload для отправки и URL страницы отклика (referer).
         """
         placeholders = placeholders or {}
-        response_url = f"{self.tool.base_url}/applicant/vacancy_response?vacancyId={vacancy_id}&startedWithQuestion=false&hhtmFrom=vacancy"
+        response_url = f"{self.tool.hh_base_url}/applicant/vacancy_response?vacancyId={vacancy_id}&startedWithQuestion=false&hhtmFrom=vacancy"
 
         if not (tests_data := self._get_vacancy_tests(response_url)):
             raise ValueError(f"Данные тестов не найдены на {response_url}.")

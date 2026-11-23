@@ -1,11 +1,11 @@
 # HH Applicant Tool
 
 ![Publish to PyPI](https://github.com/s3rgeym/hh-applicant-tool/actions/workflows/publish.yml/badge.svg)
-[![PyPi Version](https://img.shields.io/pypi/v/hh-applicant-tool)](<>)
-[![Python Versions](https://img.shields.io/pypi/pyversions/hh-applicant-tool.svg)](<>)
-[![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/s3rgeym/hh-applicant-tool)](<>)
-[![PyPI - Downloads](https://img.shields.io/pypi/dm/hh-applicant-tool)](<>)
-[![Total Downloads](https://static.pepy.tech/badge/hh-applicant-tool)](<>)
+[![PyPi Version](https://img.shields.io/pypi/v/hh-applicant-tool)]()
+[![Python Versions](https://img.shields.io/pypi/pyversions/hh-applicant-tool.svg)]()
+[![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/s3rgeym/hh-applicant-tool)]()
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/hh-applicant-tool)]()
+[![Total Downloads](https://static.pepy.tech/badge/hh-applicant-tool)]()
 
 <div align="center">
   <img width="580" height="138" alt="hh-applicant-tool-logo" src="https://github.com/user-attachments/assets/cc80888f-c594-48b1-89a3-1487085cd85c" />
@@ -15,7 +15,6 @@
 [![Donate BTC](https://img.shields.io/badge/Donate-BTC-orange?style=for-the-badge&logo=bitcoin&logoColor=white)](bitcoin:BC1QWQXZX6D5Q0J5QVGH2VYXTFXX9Y6EPPGCW3REHS?label=%D0%94%D0%BB%D1%8F%20%D0%BF%D0%BE%D0%B6%D0%B5%D1%80%D1%82%D0%B2%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D0%B9)
 
 **BTC Address:** `BC1QWQXZX6D5Q0J5QVGH2VYXTFXX9Y6EPPGCW3REHS` (спасибо за донаты — это единственное, что двигает разработку, так что не стесняйтесь и шлите их чаще).
-
 
 Скорее всего, вы перешли сюда из гугла по запросу `скрипт для рассылки откликов на hh`, и вы нашли не скрипт, а целый автономный программно-вычислительный комплекс для полной автоматизации действий на самом популярном раб_отном сайте России...
 
@@ -514,7 +513,10 @@ proxy_url = "http://user:pass@127.0.0.1:8080"
 base_url = "https://rabota.by"
 # FireFox
 user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:157.0) Gecko/20100101 Firefox/157.0"
-captcha_lang = "RU"
+captcha_lang = "EN"
+
+# Юзер-агент, используемый приложением
+webview_user_agent = "..."
 
 # Ссылка на профиль GitHub, доступна как %(github_profile_url)s
 # (если не указать, берется GITHUB_PROFILE_URL из кода)
@@ -1192,7 +1194,7 @@ services:
 Меня заинтересовала ваша вакансия %(vacancy_name)s. Прошу рассмотреть мою кандидатуру. С уважением, %(first_name)s %(last_name)s.
 ```
 
-Плейсхолдеры можно использовать в промптах кроме системных (в системных задаются какие-то общие установки типа пиши на русском). 
+Плейсхолдеры можно использовать в промптах кроме системных (в системных задаются какие-то общие установки типа пиши на русском).
 
 И эти плейсхолдеры не универсальны...
 
@@ -1599,6 +1601,7 @@ print(tool.api_client.get('/me'))
 - теперь утилита хуИИ-first. без оного невозможно отвечать в чатах, а вот рассылка откликов может работать и без него, но в сопроводительных будет однотипный текст, где только подставляются ваше имя и названия компании, вакансии...
 - настройки всех промптов вынесены в конфиг
 - конфиг сменил формат с json на toml, так как в последнем есть комментарии и строки типа таких:
+
   ```toml
   # Я комментарий
   setting_name = """
@@ -1607,6 +1610,7 @@ print(tool.api_client.get('/me'))
   Это все считается одной строкой...
   """
   ```
+
 - все промпты вынесены в конфиг, а флаги для их задания удалены. передавать километровые строки во флагах — это идиотская идея
 - токены вынесены из конфига, так как когда мы грузим конфиг, то комментариев в нем нет, и, следовательно, когда сохраняем, их там не будет, те сохранение токенов там затрет комменты, а они часто нужны
 - токены хранятся все так же в json, но теперь в `token.json`

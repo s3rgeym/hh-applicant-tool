@@ -652,7 +652,7 @@ class Operation(BaseOperation):
     @cached_property
     def chat_url(self) -> str:
         r = self.tool.get_initial_state(
-            urljoin(self.tool.base_url, "/applicant/my_resumes")
+            urljoin(self.tool.hh_base_url, "/applicant/my_resumes")
         )
         return r["config"]["externalMicroFrontendHosts"]["chatik"]
 

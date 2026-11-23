@@ -83,7 +83,7 @@ class Operation(BaseOperation):
             "/applicant/negotiations/trash",
             payload,
             additional_headers=headers,
-            referer_url=f"{self.tool.base_url}/applicant/negotiations?hhtmFrom=main&hhtmFromLabel=header",
+            referer_url=f"{self.tool.hh_base_url}/applicant/negotiations?hhtmFrom=main&hhtmFromLabel=header",
         )
 
         logger.debug(r)
