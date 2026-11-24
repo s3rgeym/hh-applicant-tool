@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from functools import cache
 from pathlib import Path
-from threading import Lock
+from threading import RLock
 from typing import Any
 
 import tomli_w
@@ -29,20 +29,26 @@ def remove_none(data: Any) -> Any:
     return data
 
 
-_MISSING = object()
-
-
 class Config(dict, ABC):
     """Базовый словарь, который может сохраняться на диск и загружаться с него.
 
     Путь к файлу задаётся явно. Наследники задают формат файла
     через методы чтения/записи (`_read` / `_write`).
+
+    Потокобезопасность: все публичные методы (load/save/get_value/set_value/
+    delete_value/get_section/get_merged) выполняются под одной реентерабельной
+    блокировкой. Для составных операций над самим словарём (например,
+    «прочитать, изменить, записать») используй `with config.lock:`.
+    Прямые операции `config[...]` защищены только GIL (каждая по отдельности
+    атомарна, но последовательность из нескольких — нет).
     """
 
     def __init__(self, config_path: str | Path):
         super().__init__()
         self._path = Path(config_path)
-        self._lock = Lock()
+        # RLock: публичные методы вызывают друг друга (get_merged -> get_section
+        # -> get_value), а наружу можно взять lock и вызывать методы внутри него.
+        self._lock = RLock()
         self.load()
 
     @property
@@ -53,6 +59,11 @@ class Config(dict, ABC):
     def file_name(self) -> str:
         return str(self._path)
 
+    @property
+    def lock(self) -> RLock:
+        """Блокировка конфига для составных операций: `with config.lock: ...`."""
+        return self._lock
+
     @abstractmethod
     def _read(self) -> dict[str, Any]:
         """Прочитать данные с диска. Вызывается под блокировкой."""
@@ -62,33 +73,43 @@ class Config(dict, ABC):
         """Записать данные на диск. Вызывается под блокировкой."""
 
     def _after_save(self) -> None:
-        """Хук, вызываемый после успешного сохранения."""
+        """Хук, вызываемый после успешного сохранения (уже без блокировки)."""
 
     def load(self) -> None:
         with self._lock:
             self.update(self._read())
 
     def save(self, *args: Any, **kwargs: Any) -> None:
-        self.update(*args, **kwargs)
-        self._path.parent.mkdir(exist_ok=True, parents=True)
+        # update и запись — один критический участок: иначе другой поток
+        # может изменить словарь между ними, а два save() — писать в файл
+        # одновременно и испортить его.
         with self._lock:
+            self.update(*args, **kwargs)
+            self._path.parent.mkdir(exist_ok=True, parents=True)
             self._write(dict(self))
+        # Хук вызываем вне блокировки, чтобы чужой код в нём не держал её.
         self._after_save()
 
     def exists(self) -> bool:
         return self._path.exists()
 
     def unlink(self) -> None:
-        self._path.unlink(missing_ok=True)
+        with self._lock:
+            self._path.unlink(missing_ok=True)
 
     def get_value(self, path: str, default: Any = None) -> Any:
-        """Значение по пути вида "openai.captcha.model"."""
-        data: Any = self
-        for key in path.split("."):
-            if not isinstance(data, dict) or key not in data:
-                return default
-            data = data[key]
-        return data
+        """Значение по пути вида "openai.captcha.model".
+
+        Для изменяемых значений (dict/list) возвращается ссылка на внутренний
+        объект; для безопасной работы с секцией используй get_section().
+        """
+        with self._lock:
+            data: Any = self
+            for key in path.split("."):
+                if not isinstance(data, dict) or key not in data:
+                    return default
+                data = data[key]
+            return data
 
     def set_value(self, path: str, value: Any, *, create: bool = False) -> bool:
         """Устанавливает значение по пути.
@@ -97,19 +118,20 @@ class Config(dict, ABC):
         False, если пути нет. С create=True создаёт недостающие секции.
         """
         *keys, last = path.split(".")
-        data: Any = self
-        for key in keys:
-            if not isinstance(data, dict):
-                return False
-            if key not in data:
-                if not create:
+        with self._lock:
+            data: Any = self
+            for key in keys:
+                if not isinstance(data, dict):
                     return False
-                data[key] = {}
-            data = data[key]
-        if not isinstance(data, dict) or (last not in data and not create):
-            return False
-        data[last] = value
-        return True
+                if key not in data:
+                    if not create:
+                        return False
+                    data[key] = {}
+                data = data[key]
+            if not isinstance(data, dict) or (last not in data and not create):
+                return False
+            data[last] = value
+            return True
 
     def delete_value(self, path: str, *, prune: bool = False) -> bool:
         """Удаляет ключ по пути вида "openai.captcha.model".
@@ -145,20 +167,23 @@ class Config(dict, ABC):
 
     def get_section(self, path: str) -> dict[str, Any]:
         """Глубокая копия секции; пустой словарь, если её нет."""
-        value = self.get_value(path, _MISSING)  # нейробред
-        return deepcopy(value) if isinstance(value, dict) else {}
+        with self._lock:
+            value = self.get_value(path)
+            return deepcopy(value) if isinstance(value, dict) else {}
 
     def get_merged(self, *paths: str) -> dict[str, Any]:
         """Сливает секции по порядку: поздние перекрывают ранние.
 
         Слияние поверхностное (по ключам верхнего уровня), результат
         независим от конфига. Отсутствующие секции пропускаются.
+        Все секции читаются под одной блокировкой — снимок согласован.
 
         >>> config.get_merged("openai.default", "openai.captcha")
         """
         result: dict[str, Any] = {}
-        for path in paths:
-            result.update(self.get_section(path))
+        with self._lock:
+            for path in paths:
+                result.update(self.get_section(path))
         return result
 
     # def __str__(self) -> str:
