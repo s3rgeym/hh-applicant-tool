@@ -1107,8 +1107,8 @@ TypeError: ApiClient.__init__() got an unexpected keyword argument 'timeoutt'
 ## Капча
 
 <p align="center">
-<img width="628" height="167" alt="image" src="https://github.com/user-attachments/assets/c62d3ec2-deaa-4938-a59a-da8fb8add66d" />
-<br><em>Вывод капчи прямо в Konsole</em>
+<img width="704" height="280" alt="image" src="https://github.com/user-attachments/assets/0c808b46-247b-4e0b-93f8-6098c58bfdc6" />
+<br><em>Вывод капчи прямо в терминале через kitty-протокол</em>
 <br><br>
 <img width="380" height="282" alt="image" src="https://github.com/user-attachments/assets/725a341b-c59a-4083-9c1e-78ff3e8d1e91" />
 <br><em>Капча в винде</em>
