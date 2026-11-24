@@ -7,13 +7,12 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from hh_applicant_tool.utils.log import logger
+
 from ..tool import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
-
-
-from hh_applicant_tool.utils.log import logger
 
 
 class Namespace(BaseNamespace):

@@ -4,14 +4,13 @@ from __future__ import annotations
 import argparse
 from typing import TYPE_CHECKING
 
+from hh_applicant_tool.utils.log import logger
+
 from ..api import datatypes
 from ..tool import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
-
-
-from hh_applicant_tool.utils.log import logger
 
 
 class Namespace(BaseNamespace):

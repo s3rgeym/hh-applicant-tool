@@ -4,14 +4,14 @@ import argparse
 import datetime as dt
 from typing import TYPE_CHECKING
 
+from hh_applicant_tool.utils.log import logger
+
 from ..api.errors import ApiError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.date import parse_api_datetime
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
-
-from hh_applicant_tool.utils.log import logger
 
 
 class Namespace(BaseNamespace):

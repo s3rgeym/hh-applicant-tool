@@ -16,6 +16,8 @@ from threading import Lock
 import requests
 from urllib3.util import Timeout
 
+from hh_applicant_tool.utils.log import logger
+
 from ..utils.helpers import get_proxies_dict
 from .base import AIChat, AIClient, AIError
 
@@ -32,9 +34,6 @@ DEFAULT_RECOGNIZE_PROMPT = (
     "Распознай текст на изображении. "
     "Верни только распознанный текст без пояснений."
 )
-
-
-from hh_applicant_tool.utils.log import logger
 
 
 class OpenAIError(AIError):

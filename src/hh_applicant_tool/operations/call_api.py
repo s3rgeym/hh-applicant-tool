@@ -5,15 +5,14 @@ import json
 import sys
 from typing import TYPE_CHECKING, Any
 
+from hh_applicant_tool.utils.log import logger
+
 from ..api import ApiError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils import json as jsonutils
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
-
-
-from hh_applicant_tool.utils.log import logger
 
 
 class Namespace(BaseNamespace):

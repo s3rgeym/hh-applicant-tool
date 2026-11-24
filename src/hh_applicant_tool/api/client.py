@@ -10,6 +10,8 @@ from urllib.parse import urlencode, urljoin
 
 import requests
 
+from hh_applicant_tool.utils.log import logger
+
 from ..utils.helpers import get_proxies_dict
 from . import errors
 from .datatypes import AccessToken
@@ -40,8 +42,6 @@ AllowedMethods = Literal[
 ]
 
 T = TypeVar("T")
-
-from hh_applicant_tool.utils.log import logger
 
 
 # Thread-safe

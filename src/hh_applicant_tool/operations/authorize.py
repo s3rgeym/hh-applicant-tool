@@ -12,14 +12,14 @@ from urllib.parse import parse_qs, urljoin, urlsplit
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
+from hh_applicant_tool.utils.log import logger
+
 from ..errors import OperationError, XHRError
 from ..tool import BaseOperation
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
-
-from hh_applicant_tool.utils.log import logger
 
 # Заголовки, специфичные для POS
 _LOGIN_HEADERS = {

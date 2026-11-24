@@ -11,7 +11,7 @@ from typing import Callable, TextIO
 # 10MB
 MAX_LOG_SIZE = 10 << 20
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.split(".", maxsplit=1)[0])
 
 
 class Color(enum.Enum):

@@ -15,6 +15,8 @@ from urllib.parse import (
 
 import requests
 
+from hh_applicant_tool.utils.log import logger
+
 from ..ai.base import AIError
 from ..ai.openai import OpenAIChat
 from ..api import BadResponse, Redirect, datatypes
@@ -51,8 +53,6 @@ class _ApplyState:
 class _ApplyError(Exception):
     """Отклик на вакансию не отправлен. Вакансия пропускается."""
 
-
-from hh_applicant_tool.utils.log import logger
 
 # Параметры поиска вакансий, задаваемые флагами
 SEARCH_PARAM_NAMES = (
