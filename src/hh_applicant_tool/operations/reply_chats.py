@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import random
 import time
 import uuid
@@ -142,7 +141,7 @@ STALE_AFTER_DAYS = 30
 OPPONENT_REPLY_COOLDOWN_MINUTES = 15
 
 
-logger = logging.getLogger(__name__.split(".")[0])
+from hh_applicant_tool.utils.log import logger
 
 
 # ------------------------------------------------------------ типы ответов

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import logging
 from typing import TYPE_CHECKING
 
 from ..api.errors import ApiError
@@ -12,7 +11,7 @@ from ..utils.date import parse_api_datetime
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
-logger = logging.getLogger(__name__.split(".")[0])
+from hh_applicant_tool.utils.log import logger
 
 
 class Namespace(BaseNamespace):

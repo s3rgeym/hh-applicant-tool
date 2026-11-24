@@ -2,16 +2,12 @@
 from __future__ import annotations
 
 import argparse
-import logging
 from typing import TYPE_CHECKING
 
 from ..tool import BaseNamespace, BaseOperation
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
-
-
-logger = logging.getLogger(__name__.split(".")[0])
 
 
 class Namespace(BaseNamespace):

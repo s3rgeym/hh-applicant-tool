@@ -11,6 +11,8 @@ from typing import Callable, TextIO
 # 10MB
 MAX_LOG_SIZE = 10 << 20
 
+logger = logging.getLogger(__name__)
+
 
 class Color(enum.Enum):
     BLACK = 30
@@ -76,8 +78,7 @@ class RedactingFilter(logging.Filter):
         return True
 
 
-def setup_logger(
-    logger: logging.Logger,
+def configure_logger(
     verbosity_level: int,
     log_file: PathLike,
 ) -> None:

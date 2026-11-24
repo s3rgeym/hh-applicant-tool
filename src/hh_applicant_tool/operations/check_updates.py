@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 from typing import TYPE_CHECKING
 
 import requests
@@ -12,8 +11,6 @@ from ..utils.package import PACKAGE_NAME, get_package_version, parse_version
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
-
-logger = logging.getLogger(__name__.split(".")[0])
 
 PYPI_URL = "https://pypi.org/pypi/hh-applicant-tool/json"
 

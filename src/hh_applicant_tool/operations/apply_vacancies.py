@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import html
-import logging
 import random
 import re
 from email.message import EmailMessage
@@ -53,7 +52,7 @@ class _ApplyError(Exception):
     """Отклик на вакансию не отправлен. Вакансия пропускается."""
 
 
-logger = logging.getLogger(__name__.split(".")[0])
+from hh_applicant_tool.utils.log import logger
 
 # Параметры поиска вакансий, задаваемые флагами
 SEARCH_PARAM_NAMES = (

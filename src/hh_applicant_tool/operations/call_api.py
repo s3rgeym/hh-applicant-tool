@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
 import sys
 from typing import TYPE_CHECKING, Any
 
@@ -14,7 +13,7 @@ if TYPE_CHECKING:
     from ..tool import HHApplicantTool
 
 
-logger = logging.getLogger(__name__.split(".")[0])
+from hh_applicant_tool.utils.log import logger
 
 
 class Namespace(BaseNamespace):

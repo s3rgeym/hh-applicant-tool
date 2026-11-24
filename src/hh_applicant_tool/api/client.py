@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import dataclasses
-import logging
 import time
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -42,7 +41,7 @@ AllowedMethods = Literal[
 
 T = TypeVar("T")
 
-logger = logging.getLogger(__name__.split(".")[0])
+from hh_applicant_tool.utils.log import logger
 
 
 # Thread-safe

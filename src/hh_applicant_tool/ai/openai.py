@@ -2,13 +2,12 @@
 # Блять, если класс работает с OpenAI API, то он не должен знать ничего про
 # API HH и ваши проблемы с капчей. Прекратите добавлять методы, которые выходят
 # за его зону ответственности.
-# OpenAIClient работает с каким-то определенным ресурсом, у которого ограничения на количество запросов в период времени, 
+# OpenAIClient работает с каким-то определенным ресурсом, у которого ограничения на количество запросов в период времени,
 # а OpenAIChat — это доп сущность что-то типа отдельного чата в окне браузера. system_prompt - это просто первое сообщение
-# чата, с которого начинается диалог... 
+# чата, с которого начинается диалог...
 from __future__ import annotations
 
 import base64
-import logging
 import time
 from dataclasses import KW_ONLY, dataclass, field
 from email.utils import parsedate_to_datetime
@@ -35,7 +34,7 @@ DEFAULT_RECOGNIZE_PROMPT = (
 )
 
 
-logger = logging.getLogger(__name__.split(".")[0])
+from hh_applicant_tool.utils.log import logger
 
 
 class OpenAIError(AIError):

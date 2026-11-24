@@ -37,6 +37,7 @@ from weakref import WeakValueDictionary
 
 import requests
 
+from hh_applicant_tool.utils.log import configure_logger, logger
 from hh_applicant_tool.utils.package import PACKAGE_NAME, get_package_version
 
 from . import ai, api
@@ -73,7 +74,6 @@ from .utils.argparse import ArgumentFormatter
 from .utils.config import ConfigJSON, ConfigTOML
 from .utils.datatypes import ResumePlaceholders
 from .utils.helpers import get_proxies_dict
-from .utils.log import setup_logger
 from .utils.string import shorten
 from .utils.system import has_gui_support, is_docker
 from .utils.term import print_kitty_image, print_sixel_image, setup_terminal
@@ -101,9 +101,6 @@ try:
     TKINTER_IMPORTED = True
 except ImportError:
     TKINTER_IMPORTED = False
-
-
-logger = logging.getLogger(__name__.split(".")[0])
 
 
 class XHRResult(TypedDict):
@@ -1301,7 +1298,7 @@ class HHApplicantTool:
             exist_ok=True,
         )
 
-    def setup_logging(
+    def configure_logger(
         self,
         verbosity: int | None = None,
     ):
@@ -1311,7 +1308,7 @@ class HHApplicantTool:
         verbosity_level = max(
             logging.DEBUG, logging.WARNING - self.verbosity * 10
         )
-        setup_logger(logger, verbosity_level, self.log_file)
+        configure_logger(verbosity_level, self.log_file)
         setup_terminal()
 
     def _assign_args(self, args: BaseNamespace) -> None:
@@ -1323,7 +1320,7 @@ class HHApplicantTool:
         args = parser.parse_args(argv, namespace=BaseNamespace())
         self._assign_args(args)
         self.create_config_dir()
-        self.setup_logging()
+        self.configure_logger()
         if is_docker():
             logger.info("Запущено через Docker")
         logger.debug("Путь до профиля: %s", self.config_dir_path)
