@@ -516,7 +516,7 @@ user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:157.0) Gecko/20100101
 captcha_lang = "EN"
 
 # Юзер-агент, используемый приложением
-webview_user_agent = "..."
+webview_user_agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
 
 # Ссылка на профиль GitHub, доступна как %(github_profile_url)s
 # (если не указать, берется GITHUB_PROFILE_URL из кода)
@@ -879,6 +879,10 @@ reply_chat_bump_prompt = """
 base_url = "https://api.hh.ru/"  # адрес API
 delay = 0.345                    # макс задержка между запросами, сек
 max_retries = 3                  # число попыток при ошибках соединения
+
+# Для авторизации можно использовать данные от приложения для iPhone
+client_id = "L41G2HHQQD5JT8Q3QOR3B3MHHD2876TMGKQFA2VQ8USJC1RLR7094USQ57JL32O8"
+client_secret = "KMVP77JPKV64D1CIEHV579A5BQ4P6V7NQ0TQHBDR6DK6SA8SSBQDKHPR54K48DGS"
 
 # ---------------------------------------------------------------------------
 # Отправка писем на email при откликах (--send-email)
