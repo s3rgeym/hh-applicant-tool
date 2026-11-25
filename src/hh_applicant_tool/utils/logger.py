@@ -122,4 +122,5 @@ debug, info, warning, error, critical = (
     _logger.error,
     _logger.critical,
 )
+
 warn = warning
