@@ -12,10 +12,9 @@ from urllib.parse import parse_qs, urljoin, urlsplit
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
-from hh_applicant_tool.utils.log import logger
-
 from ..errors import OperationError, XHRError
 from ..tool import BaseOperation
+from ..utils.log import logger
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool

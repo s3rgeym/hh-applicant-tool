@@ -5,11 +5,10 @@ import json
 import sys
 from typing import TYPE_CHECKING, Any
 
-from hh_applicant_tool.utils.log import logger
-
 from ..api import ApiError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils import json as jsonutils
+from ..utils.log import logger
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool

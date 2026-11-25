@@ -500,8 +500,10 @@ ai_filter_prompt = """
 reply_chat_farewell_message = "Мне все равно. Пока."
 ```
 
+Настроить можно все промпты, для этого изучите полный пример конфига.
+
 <details>
-<summary>Полный пример конфига</summary>
+<summary><b>Полный пример конфига</b></summary>
 
 ```toml
 [general]
@@ -510,7 +512,7 @@ reply_chat_farewell_message = "Мне все равно. Пока."
 proxy_url = "http://user:pass@127.0.0.1:8080"
 
 # Вместо дефолтного https://hh.ru впишите свой
-base_url = "https://rabota.by"
+base_url = "https://hh.kz"
 # FireFox
 user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:157.0) Gecko/20100101 Firefox/157.0"
 captcha_lang = "EN"

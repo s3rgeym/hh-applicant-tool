@@ -7,9 +7,8 @@ import subprocess
 import sys
 from typing import TYPE_CHECKING
 
-from hh_applicant_tool.utils.log import logger
-
 from ..tool import BaseNamespace, BaseOperation
+from ..utils.log import logger
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool

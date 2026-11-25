@@ -15,8 +15,6 @@ from urllib.parse import (
 
 import requests
 
-from hh_applicant_tool.utils.log import logger
-
 from ..ai.base import AIError
 from ..ai.openai import OpenAIChat
 from ..api import BadResponse, Redirect, datatypes
@@ -26,6 +24,7 @@ from ..constants import GITHUB_PROFILE_URL, GITHUB_REPO_URL
 from ..errors import OperationError, XHRError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.datatypes import VacancyTestsData
+from ..utils.log import logger
 from ..utils.string import (
     bool2str,
     choose_similar,

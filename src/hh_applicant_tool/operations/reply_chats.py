@@ -16,12 +16,12 @@ import requests
 
 from hh_applicant_tool.ai.openai import OpenAIChat, OpenAIError
 from hh_applicant_tool.api.errors import ApiError
-from hh_applicant_tool.utils.log import logger
 
 from ..constants import GITHUB_PROFILE_URL
 from ..errors import XHRError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils.date import parse_api_datetime
+from ..utils.log import logger
 from ..utils.string import choose_similar, render_template, shorten, split_words
 
 if TYPE_CHECKING:

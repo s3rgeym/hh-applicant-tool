@@ -4,10 +4,9 @@ from __future__ import annotations
 import argparse
 from typing import TYPE_CHECKING
 
-from hh_applicant_tool.utils.log import logger
-
 from ..api import ApiError, datatypes
 from ..tool import BaseNamespace, BaseOperation
+from ..utils.log import logger
 from ..utils.string import shorten
 
 if TYPE_CHECKING:
