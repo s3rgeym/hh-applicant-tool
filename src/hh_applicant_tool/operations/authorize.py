@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 from ..errors import OperationError, XHRError
 from ..tool import BaseOperation
-from ..utils.log import logger
+from ..utils import logger
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool

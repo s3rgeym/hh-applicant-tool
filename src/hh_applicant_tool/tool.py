@@ -37,9 +37,6 @@ from weakref import WeakValueDictionary
 
 import requests
 
-from hh_applicant_tool.utils.log import configure_logger, logger
-from hh_applicant_tool.utils.package import PACKAGE_NAME, get_package_version
-
 from . import ai, api
 from .constants import (
     ACCEPT_HEADER,
@@ -70,10 +67,12 @@ from .errors import (
     OperationCanceled,
     OperationError,
 )
+from .utils import logger
 from .utils.argparse import ArgumentFormatter
 from .utils.config import ConfigJSON, ConfigTOML
 from .utils.datatypes import ResumePlaceholders
 from .utils.helpers import get_proxies_dict
+from .utils.package import PACKAGE_NAME, get_package_version
 from .utils.string import shorten
 from .utils.system import has_gui_support, is_docker
 from .utils.term import print_kitty_image, print_sixel_image, setup_terminal
@@ -1308,7 +1307,7 @@ class HHApplicantTool:
         verbosity_level = max(
             logging.DEBUG, logging.WARNING - self.verbosity * 10
         )
-        configure_logger(verbosity_level, self.log_file)
+        logger.configure(verbosity_level, self.log_file)
         setup_terminal()
 
     def _assign_args(self, args: BaseNamespace) -> None:

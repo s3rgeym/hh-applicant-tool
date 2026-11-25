@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from ..api.datatypes import PaginatedItems
 from ..tool import BaseNamespace, BaseOperation
-from ..utils.log import logger
+from ..utils import logger
 from ..utils.table import print_table
 
 if TYPE_CHECKING:

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from ..api import datatypes
 from ..tool import BaseNamespace, BaseOperation
-from ..utils.log import logger
+from ..utils import logger
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool

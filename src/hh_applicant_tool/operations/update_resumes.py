@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from ..api import ApiError, datatypes
 from ..tool import BaseNamespace, BaseOperation
-from ..utils.log import logger
+from ..utils import logger
 from ..utils.string import shorten
 
 if TYPE_CHECKING:

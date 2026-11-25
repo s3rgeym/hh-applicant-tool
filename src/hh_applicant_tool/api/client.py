@@ -10,8 +10,8 @@ from urllib.parse import urlencode, urljoin
 
 import requests
 
+from ..utils import logger
 from ..utils.helpers import get_proxies_dict
-from ..utils.log import logger
 from . import errors
 from .datatypes import AccessToken
 

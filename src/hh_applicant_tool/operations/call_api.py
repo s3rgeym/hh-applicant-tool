@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from ..api import ApiError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils import json as jsonutils
-from ..utils.log import logger
+from ..utils import logger
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool
@@ -60,7 +60,7 @@ class Operation(BaseOperation):
                 )
             as_json = True
             payload = json.loads(params[0])
-        elif self._args:
+        elif self._args.json:
             as_json = True
             payload = {}
             for param in params:
@@ -81,7 +81,7 @@ class Operation(BaseOperation):
 
         return payload, as_json
 
-    def run(self, tool: HHApplicantTool, args: Namespace) -> None:
+    def run(self, tool: HHApplicantTool, args: Namespace) -> int | None:
         self._args = args
         api_client = tool.api_client
 
