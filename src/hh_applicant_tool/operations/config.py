@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..tool import BaseNamespace, BaseOperation
-from ..utils import logger
+from ..utils.logging import logger
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool

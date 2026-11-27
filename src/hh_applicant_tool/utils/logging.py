@@ -6,7 +6,9 @@ from typing import Callable
 
 MAX_LOG_SIZE = 10 << 20
 
-_logger = logging.getLogger(__name__)
+__all__ = ("logger", "configure_logger")
+
+logger = logging.getLogger(__name__)
 
 
 class ColorHandler(logging.StreamHandler):
@@ -53,11 +55,11 @@ class RedactingFilter(logging.Filter):
         return True
 
 
-def configure(
+def configure_logger(
     verbosity_level: int,
     log_file: PathLike,
 ) -> None:
-    _logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
 
     color_handler = ColorHandler()
     color_handler.setFormatter(
@@ -85,16 +87,4 @@ def configure(
     file_handler.addFilter(redactor)
 
     for handler in (color_handler, file_handler):
-        _logger.addHandler(handler)
-
-
-debug, info, warning, error, exception, critical = (
-    _logger.debug,
-    _logger.info,
-    _logger.warning,
-    _logger.error,
-    _logger.exception,
-    _logger.critical,
-)
-
-warn = warning
+        logger.addHandler(handler)

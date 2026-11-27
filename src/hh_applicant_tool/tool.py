@@ -67,11 +67,11 @@ from .errors import (
     OperationCanceled,
     OperationError,
 )
-from .utils import logger
 from .utils.argparse import ArgumentFormatter
 from .utils.config import ConfigJSON, ConfigTOML
 from .utils.datatypes import ResumePlaceholders
 from .utils.helpers import get_proxies_dict
+from .utils.logging import configure_logger, logger
 from .utils.package import PACKAGE_NAME, get_package_version
 from .utils.string import shorten
 from .utils.system import has_gui_support, is_docker
@@ -1307,7 +1307,7 @@ class HHApplicantTool:
         verbosity_level = max(
             logging.DEBUG, logging.WARNING - self.verbosity * 10
         )
-        logger.configure(verbosity_level, self.log_file)
+        configure_logger(verbosity_level, self.log_file)
         setup_terminal()
 
     def _assign_args(self, args: BaseNamespace) -> None:

@@ -16,8 +16,8 @@ from threading import Lock
 import requests
 from urllib3.util import Timeout
 
-from ..utils import logger
 from ..utils.helpers import get_proxies_dict
+from ..utils.logging import logger
 from .base import AIChat, AIClient, AIError
 
 DEFAULT_DELAY = 0.5

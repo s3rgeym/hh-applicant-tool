@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from ..api import ApiError
 from ..tool import BaseNamespace, BaseOperation
 from ..utils import json as jsonutils
-from ..utils import logger
+from ..utils.logging import logger
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool

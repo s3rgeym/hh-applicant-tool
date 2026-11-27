@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 from ..api.errors import ApiError
 from ..tool import BaseNamespace, BaseOperation
-from ..utils import logger
 from ..utils.date import parse_api_datetime
+from ..utils.logging import logger
 
 if TYPE_CHECKING:
     from ..tool import HHApplicantTool

@@ -23,8 +23,8 @@ from ..api.errors import ApiError, LimitExceeded
 from ..constants import GITHUB_PROFILE_URL, GITHUB_REPO_URL
 from ..errors import OperationError, XHRError
 from ..tool import BaseNamespace, BaseOperation
-from ..utils import logger
 from ..utils.datatypes import VacancyTestsData
+from ..utils.logging import logger
 from ..utils.string import (
     bool2str,
     choose_similar,

@@ -20,8 +20,8 @@ from hh_applicant_tool.api.errors import ApiError
 from ..constants import GITHUB_PROFILE_URL
 from ..errors import XHRError
 from ..tool import BaseNamespace, BaseOperation
-from ..utils import logger
 from ..utils.date import parse_api_datetime
+from ..utils.logging import logger
 from ..utils.string import choose_similar, render_template, shorten, split_words
 
 if TYPE_CHECKING:
