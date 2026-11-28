@@ -573,6 +573,20 @@ class Operation(BaseOperation):
 
     # ---------------------------------------------------------------- run
     @property
+    def ai_reply_chat_enabled(self) -> bool:
+        return (
+            self.ai_enabled
+            and self.tool.config.get_value("openai.reply_chat.enabled", True)
+        )
+    
+    @property
+    def ai_reply_chat_options_enabled(self) -> bool:
+        return (
+            self.ai_enabled
+            and self.tool.config.get_value("openai.reply_chat_options.enabled", True)
+        )
+    
+    @property
     def ai_enabled(self) -> bool:
         return self.tool.ai_enabled
 
@@ -607,7 +621,7 @@ class Operation(BaseOperation):
                 system_prompt=DEFAULT_SYSTEM_PROMPT,
                 temperature=0.5,
             )
-            if self.ai_enabled
+            if self.ai_reply_chat_enabled
             else None
         )
 
@@ -617,7 +631,7 @@ class Operation(BaseOperation):
                 system_prompt=DEFAULT_OPTIONS_SYSTEM_PROMPT,
                 temperature=0.0,
             )
-            if self.ai_enabled
+            if self.ai_reply_chat_options_enabled
             else None
         )
 
@@ -1200,6 +1214,9 @@ class Operation(BaseOperation):
                     "contact_is_bot": "да" if contact_is_bot else "нет",
                 }
             )
+
+        if ai_client is None:
+            return self.get_quick_reply(chat)
 
         send_message = ai_client.complete(
             render_template(template, placeholders, randomize_text=False)

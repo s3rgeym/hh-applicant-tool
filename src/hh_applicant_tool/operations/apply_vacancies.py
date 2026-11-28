@@ -176,6 +176,8 @@ class Namespace(BaseNamespace):
     cover_letter: str | None
     force_cover_letter: bool
     ai_filter: bool | None
+    ai_letter: bool | None
+    ai_solver: bool | None
     ai_filter_system_prompt: str
     ai_filter_prompt: str
     cover_letter_system_prompt: str
@@ -245,6 +247,8 @@ class Operation(BaseOperation):
 
     # AI
     ai_filter: bool
+    ai_letter: bool
+    ai_solver: bool
     cover_letter_ai: OpenAIChat | None
     vacancy_filter_ai: OpenAIChat | None
     test_ai: OpenAIChat | None
@@ -292,6 +296,16 @@ class Operation(BaseOperation):
         parser.add_argument(
             "--ai-filter",
             help="Использовать дополнительную фильтрацию вакансий через AI (вакансии непрошедшие фильтр попадают в черный список)",
+            action=argparse.BooleanOptionalAction,
+        )
+        parser.add_argument(
+            "--ai-letter",
+            help="Использовать AI для генерации сопроводительных писем",
+            action=argparse.BooleanOptionalAction,
+        )
+        parser.add_argument(
+            "--ai-solver",
+            help="Использовать AI для решения тестов при откликах",
             action=argparse.BooleanOptionalAction,
         )
         parser.add_argument(
@@ -507,23 +521,42 @@ class Operation(BaseOperation):
         self.test_text_prompt = config.get(
             "test_text_prompt", DEFAULT_TEST_TEXT_PROMPT
         )
-        self.ai_filter = bool(args.ai_filter)
+        
+        self.ai_filter = (
+            args.ai_filter
+            if args.ai_filter is not None
+            else tool.config.get_value("openai.vacancy_filter.enabled", True)
+        )
+
+        self.ai_letter = (
+            args.ai_letter
+            if args.ai_letter is not None
+            else tool.config.get_value("openai.cover_letter.enabled", True)
+        )
+
+        self.ai_solver = (
+            args.ai_solver
+            if args.ai_solver is not None
+            else tool.config.get_value("openai.test_solver.enabled", True)
+        )
 
         # ai_enabled учитывает и --use-ai, и наличие секции [openai] в
         # конфиге. Клиенты берутся через кеш tool.ai_client_for: значения
         # из конфига имеют приоритет над дефолтами
         self.cover_letter_ai = self.vacancy_filter_ai = self.test_ai = None
         if tool.ai_enabled:
-            self.cover_letter_ai = tool.ai_chat_for(
-                "openai.cover_letter",
-                system_prompt=DEFAULT_COVER_LETTER_SYSTEM_PROMPT,
-                temperature=0.3,
-            )
-            self.test_ai = tool.ai_chat_for(
-                "openai.test_solver",
-                system_prompt=DEFAULT_TEST_SYSTEM_PROMPT,
-                temperature=0.2,
-            )
+            if self.ai_letter:    
+                self.cover_letter_ai = tool.ai_chat_for(
+                    "openai.cover_letter",
+                    system_prompt=DEFAULT_COVER_LETTER_SYSTEM_PROMPT,
+                    temperature=0.3,
+                )
+            if self.ai_solver:
+                self.test_ai = tool.ai_chat_for(
+                    "openai.test_solver",
+                    system_prompt=DEFAULT_TEST_SYSTEM_PROMPT,
+                    temperature=0.2,
+                )
             if self.ai_filter:
                 self.vacancy_filter_ai = tool.ai_chat_for(
                     "openai.vacancy_filter",

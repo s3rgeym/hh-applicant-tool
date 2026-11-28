@@ -461,14 +461,18 @@ class HHApplicantTool:
     def ai_chat_for(
         self,
         section: str | None = None,
+        feature_enabled: bool = True,
         **defaults: Any,
-    ) -> ai.OpenAIChat:
+    ) -> ai.OpenAIChat | None:
         """Создаёт AI-чат с настройками секции openai.<section>.
 
         Клиент общий для всех чатов с одинаковым base_url. В клиент
         передаётся только base_url, остальные настройки передаются чату.
         Значения из конфига перекрывают defaults.
         """
+        if not self.ai_enabled or not feature_enabled:
+            return None
+
         settings = {**defaults, **self.get_openai_config(section)}
         base_url = settings.pop("base_url")
         system_prompt = settings.pop("system_prompt")
@@ -667,7 +671,7 @@ class HHApplicantTool:
         return server
 
     def _solve_captcha(self, image_data: bytes) -> str:
-        if self.ai_enabled and not self.captcha_manual:
+        if self.ai_enabled and not self.captcha_manual and self.captcha_ai:
             logger.debug("Try recognize CAPTCHA text via AI")
             return self.captcha_ai.recognize_text(image_data)
 
@@ -1175,7 +1179,10 @@ class HHApplicantTool:
             self.api_client.reset_tokens()
 
     @cached_property
-    def captcha_ai(self) -> ai.OpenAIChat:
+    def captcha_ai(self) -> ai.OpenAIChat | None:
+        if not self.config.get_value("openai.captcha.enabled", True):
+            return None
+
         return self.ai_chat_for(
             "openai.captcha",
             system_prompt=(
